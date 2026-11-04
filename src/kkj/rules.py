@@ -63,6 +63,16 @@ RULES = [
     # ── discounts ──
     Rule("fast_group_days", "Discounts", "A group is fast-selling below", 90, "days of stock",
          "Discount given on fast-selling groups is counted as avoidable.", "int", min=7, max=365),
+    # ── insights ──
+    Rule("insight_months", "Insights", "Insights look back over", 12, "months",
+         "The period the insight analyses use (sell rate by age, suppliers, assortment).", "int", min=3, max=60),
+    Rule("min_supplier_pcs", "Insights", "Score suppliers holding at least", 40, "pieces on average",
+         "Suppliers with less stock than this are not scored (too few pieces to judge).", "int", min=5, max=500),
+    Rule("liquidation_age_days", "Insights", "A piece is a liquidation candidate after", 1095, "days since labelling",
+         "Past this age pieces almost never sell (the sell-rate-by-age curve shows where).", "int", min=365, max=3650),
+    Rule("diamond_recovery_pct", "Insights", "Share of diamond value recovered if a piece is broken up", 70.0, "%",
+         "Used for the recovery value of liquidation candidates: metal at the piece's rate + this share of its "
+         "diamond value. An estimate to tune, not a valuation.", min=0, max=100),
     # ── money ──
     Rule("capital_cost_pct", "Money", "Annual cost of money tied up in stock", 12.0, "%",
          "Used to show what slow and aged stock costs to hold, in ₹ a month.", min=0, max=40),

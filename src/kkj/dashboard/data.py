@@ -23,7 +23,7 @@ def _read(sql, **params):
 
 
 STOCK_COLUMNS = """snapshot_date, barcode, label_no, branch, location, item_class_group, item_name,
-    category, supplier, pcs, gross_wt, dia_wt, item_amt, taxable_amount, age_days,
+    category, supplier, pcs, gross_wt, net_wt, dia_wt, dia_amt, rate, item_amt, taxable_amount, age_days,
     days_from_branch_in, branch_in_date, coalesce(label_dt, labeling_date) AS label_date"""
 
 
@@ -95,3 +95,42 @@ def snapshot_status():
     return _read("""
         SELECT snapshot_date, source, status, reason, labels, file
         FROM stock_hist.snapshot_status ORDER BY snapshot_date DESC, source""")
+
+
+@st.cache_data(ttl=TTL)
+def stock_history(date_from):
+    """Piece-level company stock on every snapshot date since date_from, best source per date.
+
+    Sources by preference: ERP daily > ERP as-on > verified legacy file. value is on the
+    common basis (taxable, else item_amt); age is recomputed as snapshot date - label date.
+    """
+    df = _read("""
+        WITH all_rows AS (
+            SELECT snapshot_date, 1 AS rank, barcode, branch, location, item_class_group, item_name, supplier, pcs,
+                   coalesce(taxable_amount, item_amt) AS value, coalesce(label_dt, labeling_date) AS label_date
+            FROM erp.stock_snapshot WHERE snapshot_date >= :d
+            UNION ALL
+            SELECT snapshot_date, CASE source WHEN 'erp_asof' THEN 2 ELSE 3 END, barcode, branch, location,
+                   item_class_group, item_name, supplier, pcs, coalesce(taxable_amount, item_amt),
+                   coalesce(label_dt, labeling_date)
+            FROM stock_hist.snapshot WHERE snapshot_date >= :d),
+        best AS (SELECT snapshot_date, min(rank) AS rank FROM all_rows GROUP BY 1)
+        SELECT a.* FROM all_rows a JOIN best USING (snapshot_date, rank)
+        WHERE a.item_class_group <> 'Customer Diamond'""", d=date_from)
+    df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
+    df["age"] = (df["snapshot_date"] - pd.to_datetime(df["label_date"])).dt.days
+    df["source"] = df.pop("rank").map({1: "ERP daily", 2: "ERP as-on", 3: "Legacy file"})
+    return df
+
+
+@st.cache_data(ttl=60)
+def rules_now():
+    """Current business rules (config.setting over the defaults in kkj.rules)."""
+    from kkj import rules
+    with _engine().connect() as conn:
+        return rules.load(conn)
+
+
+@st.cache_data(ttl=60)
+def branches():
+    return _read("SELECT erp_branch, short_name, kind, active FROM config.branch")

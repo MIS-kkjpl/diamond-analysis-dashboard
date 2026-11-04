@@ -163,6 +163,13 @@ Read-only: the app connects as `powerbi_reader`. Pages:
   approval, in transit or in repair.
 - **Sales:** net sales by month and group, branch, items, days to sell,
   salespeople, returns.
+- **Insights** (`kkj/metrics/insights.py`), over the period set in Settings:
+  - sell rate by age, which also suggests where "aged" should start;
+  - suppliers scored against the company's sell rate in the same price bands;
+  - share of stock vs share of sales by price band and by item;
+  - exhibitions vs showrooms;
+  - liquidation candidates, with their recovery value;
+  - the cost of holding aged stock.
 - **Data checks:** freshness, every pipeline run and load, and the past-date
   snapshot verdicts.
 
