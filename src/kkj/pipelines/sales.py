@@ -84,7 +84,7 @@ def process(saved, raw_path, no_load):
                                   report_id=report_id, record_count=totals.get("recordCount") or 0)
     try:
         rows = db.replace_sales(df, SOURCE, date_from, date_to, load_id)
-        stored = db.sales_totals(SOURCE, date_from, date_to)
+        stored = db.load_totals(load_id)
         pcs, amt = float(df["pcs"].sum()) if rows else 0.0, float(df["item_amt"].sum()) if rows else 0.0
         db_checks = [
             check("DB count == rows", stored["count"] == len(df), f"{stored['count']} vs {len(df)}"),

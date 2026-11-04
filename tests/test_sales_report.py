@@ -17,11 +17,13 @@ def saved(rows, totals):
 SALE = {"date": "02/11/2026", "billno": "MK2SB-1", "docno": "MK2SB-1", "lblno": 15180, "barcode": "DTP15180",
         "itemname": "D TOPS", "groupname": "Diamond Jewellery", "pcs": 1.0, "netwt": 2.5, "diawt": 0.4,
         "itemamt": 100000.0, "taxableamount": 93000.0, "diapcs": "29", "orglbldate": "02/05/2025",
-        "lbldt": "02/05/2025", "daysfromlabeling": 549, "itemInvOwnCode": 42718264, "salesReturnDoneFlag": False}
+        "lbldt": "02/05/2025", "daysfromlabeling": 549, "itemInvOwnCode": 42718264,
+        "inventoryRefenceCode": 43139079, "salesReturnDoneFlag": False}
 RETURN = {"date": "04/11/2026", "billno": "MK2SR-236", "docno": "MK2SR-236", "lblno": 0,
           "itemname": "D NOSE PIN", "groupname": "Diamond Jewellery", "pcs": -1.0, "netwt": -0.32,
           "diawt": -0.1, "itemamt": -12119.0, "diapcs": "-1", "lbldt": "24/06/2026",
-          "daysfromlabeling": 197, "itemInvOwnCode": 38402964, "salesReturnDoneFlag": True}
+          "daysfromlabeling": 197, "itemInvOwnCode": 38402964,
+          "inventoryRefenceCode": 43139079, "salesReturnDoneFlag": True}   # reverses SALE
 
 
 def test_clean_sale_and_return_rows():
@@ -33,7 +35,11 @@ def test_clean_sale_and_return_rows():
     assert pd.isna(df.loc[1, "labeling_date"])          # absent in the JSON -> missing, not "nan"
     assert df["sales_return_done"].tolist() == [False, True]
     dq = data_quality(df)
+    # the return (dated after the range) is linked to the sale it reverses
+    assert df.loc[1, "orig_bill_no"] == "MK2SB-1" and df.loc[1, "orig_sale_date"] == dt.date(2026, 11, 2)
+    assert df.loc[0, "orig_sale_date"] == df.loc[0, "sale_date"]
     assert dq["return_lines"] == 1 and dq["returns_without_taxable_amount"] == 1
+    assert dq["returns_not_linked_to_sale"] == 0
     assert dq["bill_types"] == {"SB": 1, "SR": 1}
 
 
@@ -48,6 +54,12 @@ def test_sale_without_barcode_fails():
     df, checks, _ = clean(saved([{**SALE, "barcode": None}], {"recordCount": 1, "pcs": 1.0, "itemamt": 100000.0,
                                                               "netwt": 2.5, "diawt": 0.4}))
     assert not next(c for c in checks if "barcode" in c["check"])["passed"]
+
+
+def test_sale_line_outside_range_fails():
+    df, checks, _ = clean(saved([{**SALE, "date": "05/11/2026"}], {"recordCount": 1, "pcs": 1.0, "itemamt": 100000.0,
+                                                                    "netwt": 2.5, "diawt": 0.4}))
+    assert not next(c for c in checks if "inside the range" in c["check"])["passed"]
 
 
 def test_month_chunks():

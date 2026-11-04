@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS sales.sales_line (
     item_code             int,             -- ERP only: internal ids, stable across relabels
     batch_code            bigint,
     item_inv_own_code     bigint,
+    inventory_ref_code    bigint,          -- ERP only: the sale line's id; a return carries its sale's id
+    orig_sale_date        date,            -- ERP only: date of the sale (for a return: of the sale it reverses).
+                                           -- The ERP report selects lines by this date, so loads replace by it
+    orig_bill_no          text,            -- ERP only: bill of that sale
     sales_return_done     boolean,         -- ERP only
     raw                   jsonb,           -- ERP only: the full original row
     load_id               int REFERENCES sales.load_log (load_id),
@@ -84,6 +88,13 @@ CREATE TABLE IF NOT EXISTS sales.sales_line (
 
 -- For tables created before barcode_rebuilt existed
 ALTER TABLE sales.sales_line ADD COLUMN IF NOT EXISTS barcode_rebuilt boolean NOT NULL DEFAULT false;
+
+ALTER TABLE sales.sales_line ADD COLUMN IF NOT EXISTS inventory_ref_code bigint;
+ALTER TABLE sales.sales_line ADD COLUMN IF NOT EXISTS orig_sale_date date;
+ALTER TABLE sales.sales_line ADD COLUMN IF NOT EXISTS orig_bill_no text;
+-- One row per ERP sale/return line
+CREATE UNIQUE INDEX IF NOT EXISTS ux_sales_line_erp_line
+    ON sales.sales_line (source, bill_no, inventory_ref_code) WHERE inventory_ref_code IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS ix_sales_line_source_date ON sales.sales_line (source, sale_date);
 CREATE INDEX IF NOT EXISTS ix_sales_line_barcode     ON sales.sales_line (barcode);

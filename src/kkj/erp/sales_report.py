@@ -13,8 +13,11 @@ date range never has to be pulled twice.
 
 Returns (items brought back to the store) need considerSalesReturn "2" (0 and 1 leave them
 out; verified 2026-11-04). They come as bill type SR with negative pcs/weights/item_amt, the
-ERP's salesReturnDoneFlag set, and NO barcode, label no or taxable amount; itemInvOwnCode
-links them to the item. A return's date can fall outside the requested range.
+ERP's salesReturnDoneFlag set, and NO barcode, label no or taxable amount. A return carries
+the same inventoryRefenceCode as the sale it reverses (itemInvOwnCode does NOT link them).
+The report selects lines by the ORIGINAL sale's date: a return appears in the pull covering
+its sale, dated on the day it came back (so possibly after the range). orig_sale_date and
+orig_bill_no record that sale; loads replace rows by orig_sale_date.
 No database code here (see kkj.db.history); the pipeline is kkj.pipelines.sales.
 """
 import gzip
@@ -63,10 +66,11 @@ FIELDS = {
     "orglbldate": "labeling_date", "lbldt": "label_dt", "branchindate": "branch_in_date",
     "latesttransactiondate": "latest_txn_date", "orderno": "order_no",
     "labourtype": "labour_type", "itemCode": "item_code", "batchCode": "batch_code",
-    "itemInvOwnCode": "item_inv_own_code", "salesReturnDoneFlag": "sales_return_done",
+    "itemInvOwnCode": "item_inv_own_code", "inventoryRefenceCode": "inventory_ref_code",
+    "salesReturnDoneFlag": "sales_return_done",
 }
 INT_COLUMNS = ["label_no", "dia_pcs", "age_days_at_sale", "days_from_branch_in", "item_code",
-               "batch_code", "item_inv_own_code"]
+               "batch_code", "item_inv_own_code", "inventory_ref_code"]
 DECIMAL_COLUMNS = ["purity", "pcs", "gross_wt", "net_wt", "fine_wt", "dia_wt", "cst_wt",
                    "stone_wt", "dia_amt", "stone_amt", "cst_amt", "labour_rate", "labour_charges",
                    "wastage_per", "wastage_amount", "rate", "item_amt", "taxable_amount",
@@ -190,9 +194,28 @@ def clean(saved):
     df["raw"] = [json.dumps(r, ensure_ascii=False) for r in rows]
     df["barcode_rebuilt"] = False
 
+    # Link each return to the sale it reverses (same inventory_ref_code, in this same pull)
+    p = saved["params"]
+    range_from = pd.to_datetime(p["fromDate"], format=DATE_FORMAT).date()
+    range_to = pd.to_datetime(p["toDate"], format=DATE_FORMAT).date()
+    is_return = df["pcs"] < 0
+    sale_lines = df[~is_return].dropna(subset=["inventory_ref_code"]).drop_duplicates("inventory_ref_code")
+    by_ref = sale_lines.set_index("inventory_ref_code")
+    ref = df["inventory_ref_code"]
+    df["orig_sale_date"] = df["sale_date"].where(~is_return, ref.map(by_ref["sale_date"]))
+    df["orig_bill_no"] = df["bill_no"].where(~is_return, ref.map(by_ref["bill_no"]))
+    unlinked = is_return & df["orig_sale_date"].isna()
+    df.loc[unlinked, "orig_sale_date"] = range_from          # still inside this pull's scope
+
     n = len(df)
+    outside = int((~df.loc[~is_return, "sale_date"].between(range_from, range_to)).sum())
+    dup = int(df.duplicated(["bill_no", "inventory_ref_code"]).sum())
     checks = [check("Rows == step A recordCount", n == (totals.get("recordCount") or 0),
-                    f"{n} vs {totals.get('recordCount')}")]
+                    f"{n} vs {totals.get('recordCount')}"),
+              check("Sale lines dated inside the range", outside == 0, f"{outside} outside"),
+              check("One row per bill + inventory_ref_code",
+                    dup == 0 and df["inventory_ref_code"].notna().all(),
+                    f"{dup} duplicated, {int(df['inventory_ref_code'].isna().sum())} null")]
     for field, col in TOTALS.items():
         ours, theirs = float(df[col].sum()) if n else 0.0, totals.get(field)
         ok = (theirs is None and n == 0) or (theirs is not None and abs(ours - float(theirs)) <= SUM_TOLERANCE)
@@ -215,6 +238,8 @@ def data_quality(df):
         "return_lines": int(returns.sum()),
         "return_item_amt": float(df.loc[returns, "item_amt"].sum()),
         "returns_without_taxable_amount": int(df.loc[returns, "taxable_amount"].isna().sum()),
+        "returns_not_linked_to_sale": int((returns & df["orig_bill_no"].isna()).sum()),
+        "returns_on_a_later_day": int((returns & (df["sale_date"] != df["orig_sale_date"])).sum()),
         "sales_return_done_flag": int(df["sales_return_done"].fillna(False).sum()),
         "bill_types": df["bill_no"].str.extract(r"(SSB|SOS|SR|SB)-\d+$")[0].value_counts().to_dict(),
         "by_group": df["item_class_group"].value_counts().to_dict(),

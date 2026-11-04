@@ -100,11 +100,17 @@ like. Legacy files only have `item_amt`, which is within about 0.4% of it.
 - **Returns:**
   - `considerSalesReturn` defaults to `2`, the only value that includes them
     (`0` and `1` leave them out).
-  - They come as bill type `SR`, with negative pcs, weights and item_amt.
-  - They have no barcode, label number or taxable amount. `item_inv_own_code`
-    links them to the item.
-  - A return can be dated outside the range it was pulled with, so loads also
-    replace rows with the same bill number and inventory id.
+  - They come as bill type `SR`, with negative pcs, weights and item_amt, and no
+    barcode, label number or taxable amount.
+  - A return carries the same `inventory_ref_code` as the sale it reverses.
+    That is how `orig_bill_no` / `orig_sale_date` are filled; `item_inv_own_code`
+    does not link them.
+- **Report scope = the original sale date.** A return appears in the pull
+  covering its sale, dated the day it came back, which can be after the range. A
+  load replaces the rows whose `orig_sale_date` falls in its range. The line key
+  is (`bill_no`, `inventory_ref_code`), with a unique index.
+- **Verified:** April–June 2026 match the legacy CSV on all 1,637 sale lines
+  (date, pieces; values to within whole-rupee rounding, ₹4 in total).
 - `salesType`: `1` and `2` returned the same rows and `3` returned none, so it
   stays `1`.
 

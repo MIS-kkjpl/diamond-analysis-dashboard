@@ -88,27 +88,42 @@ def finish_sales_load(load_id, status, rows_loaded, validation, error=None, dq_w
 
 
 def replace_sales(df, source, date_from, date_to, load_id):
-    """Replace one source's rows for sale_date in [date_from, date_to]; return rows loaded.
+    """Replace one source's rows for the ERP's report scope [date_from, date_to]; return rows loaded.
 
-    Rows already stored under the same (bill_no, item_inv_own_code) are replaced too:
-    a return can be dated outside the range it was pulled with, so the next range
-    would otherwise load it a second time.
+    The scope is the ORIGINAL sale date (orig_sale_date; legacy rows: sale_date), so a
+    return dated after the range is replaced by the pull it came in, and never deleted by
+    the pull of the month it is dated in. Rows with the same (bill_no, inventory_ref_code)
+    are replaced too, wherever they were loaded from.
     """
     df = df.assign(source=source, load_id=load_id)
-    keys = df.loc[df["item_inv_own_code"].notna(), ["bill_no", "item_inv_own_code"]]         if "item_inv_own_code" in df else df.iloc[0:0]
+    if "inventory_ref_code" in df:
+        keys = df.loc[df["inventory_ref_code"].notna(), ["bill_no", "inventory_ref_code"]]
+    else:
+        keys = df.iloc[0:0]
 
     def work(cur):
-        cur.execute("DELETE FROM sales.sales_line WHERE source = %s AND sale_date BETWEEN %s AND %s",
-                    (source, date_from, date_to))
+        cur.execute("""
+            DELETE FROM sales.sales_line
+            WHERE source = %s AND coalesce(orig_sale_date, sale_date) BETWEEN %s AND %s
+        """, (source, date_from, date_to))
         if len(keys):
             cur.execute("""
                 DELETE FROM sales.sales_line s
-                USING unnest(%s::text[], %s::bigint[]) AS k(bill_no, inv)
-                WHERE s.source = %s AND s.bill_no = k.bill_no AND s.item_inv_own_code = k.inv
-            """, (keys["bill_no"].tolist(), [int(v) for v in keys["item_inv_own_code"]], source))
+                USING unnest(%s::text[], %s::bigint[]) AS k(bill_no, ref)
+                WHERE s.source = %s AND s.bill_no = k.bill_no AND s.inventory_ref_code = k.ref
+            """, (keys["bill_no"].tolist(), [int(v) for v in keys["inventory_ref_code"]], source))
         _copy(cur, "sales.sales_line", df)
         return len(df)
     return _transaction(work)
+
+
+def load_totals(load_id):
+    """Read back {count, pcs, item_amt} of the rows one load wrote."""
+    with get_engine().connect() as conn:
+        n, pcs, amt = conn.execute(text("""
+            SELECT count(*), sum(pcs), sum(item_amt) FROM sales.sales_line WHERE load_id = :l
+        """), {"l": load_id}).one()
+    return {"count": n, "pcs": float(pcs or 0), "item_amt": float(amt or 0)}
 
 
 def sales_totals(source, date_from, date_to):
