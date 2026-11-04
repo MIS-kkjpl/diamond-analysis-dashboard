@@ -1,4 +1,16 @@
 /* Small additions to Tabler for the decision feed. */
+/* Sidebar brand: left-aligned, wraps inside the sidebar instead of overflowing it */
+.navbar-vertical .brand { justify-content: flex-start; white-space: normal; padding: .9rem 1rem; margin: 0; min-width: 0; }
+.brand-link { display: flex; align-items: center; gap: .6rem; min-width: 0; color: inherit; text-decoration: none; }
+.brand-link:hover { text-decoration: none; }
+.brand-icon { font-size: 1.6rem; flex: 0 0 auto; color: #5598e7; }
+.brand-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.brand-name { font-size: 1.1rem; font-weight: 700; letter-spacing: .01em; }
+.brand-tag { font-size: .7rem; font-weight: 400; color: rgba(255, 255, 255, .55); white-space: normal; }
+@media (max-width: 991.98px) {     /* collapsed (top) navbar on small screens: keep the brand on one line */
+  .navbar-vertical .brand { padding: .5rem 0; }
+  .brand-tag { display: none; }
+}
 .topbar { background: var(--tblr-bg-surface); border-bottom: 1px solid var(--tblr-border-color); }
 .nav-section { padding: 1rem 1rem .25rem; font-size: .68rem; letter-spacing: .06em; text-transform: uppercase;
                color: rgba(255, 255, 255, .45); }
@@ -11,6 +23,16 @@
 .decision-title:hover { text-decoration: underline; }
 .impact { font-size: 1.35rem; font-weight: 650; line-height: 1.2; }
 .impact-col { min-width: 11rem; }
+.page-wrapper { min-width: 0; }
 .note-box summary { list-style: none; }
 .note-box summary::-webkit-details-marker { display: none; }
 .htmx-request.btn { opacity: .6; }
+
+/* Phones: nothing may be wider than the screen */
+@media (max-width: 575.98px) {
+  .impact-col { min-width: 0; }
+  .impact-col .impact { font-size: 1.15rem; }
+  .page-header .btn { flex: 1 1 auto; }
+  .topbar .container-xl { row-gap: .4rem; }
+  .decision-title { font-size: .95rem; }
+}

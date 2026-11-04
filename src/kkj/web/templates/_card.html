@@ -22,7 +22,7 @@
           {%- if a.decision_note %} · “{{ a.decision_note }}”{% endif %}</div>
         {% endif %}
       </div>
-      <div class="col-auto text-end impact-col">
+      <div class="col-12 col-sm-auto text-sm-end impact-col">
         <div class="impact">{{ a.impact_value | money }}</div>
         <div class="small text-secondary">{{ a.impact_label }}</div>
         {% if a.change and (a.change > 1 or a.change < -1) %}
