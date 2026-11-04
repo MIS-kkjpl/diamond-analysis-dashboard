@@ -5,10 +5,13 @@ Uses the DIIS admin account (DIIS_DB_USER / DIIS_DB_PASSWORD) to:
   1. create database ERP_DB_NAME (kkj_erp_stock) if it doesn't exist
   2. create roles erp_etl and powerbi_reader (LOGIN) if missing; if they exist,
      reset their passwords to the ones in .env so .env stays the source of truth
-  3. run sql/schema.sql inside the database (schema, tables, indexes, views, grants)
+  3. run the sql/ files in settings.SQL_FILES inside the database (schemas, tables,
+     indexes, views, grants); every file is safe to re-run
 
-Run:  python -m kkj.db.setup
-Passwords are never printed. Ported unchanged from archive/inventory_project/db_setup.py.
+Run:  python -m kkj.db.setup                       # roles + every sql/ file
+      python -m kkj.db.setup sales.sql stock_hist.sql   # only these files
+Passwords are never printed. Ported from archive/inventory_project/db_setup.py,
+which ran only sql/schema.sql.
 """
 import sys
 
@@ -18,7 +21,7 @@ from psycopg import sql
 
 from kkj import settings
 
-# sql/schema.sql grants to these role names, so .env must use the same ones
+# The sql/ files grant to these role names, so .env must use the same ones
 SCHEMA_ROLES = ("erp_etl", "powerbi_reader")
 
 
@@ -61,22 +64,26 @@ def ensure_database_and_roles(db_name, roles):
         raw.close()
 
 
-def run_schema(db_name):
-    schema_sql = settings.SCHEMA_FILE.read_text(encoding="utf-8")
+def run_sql_file(db_name, name):
+    path = settings.SQL_DIR / name
     raw, conn = psycopg_conn(settings.admin_engine(db_name), autocommit=False)
     try:
         with conn.cursor() as cur:
-            cur.execute(schema_sql)      # no parameters, so several statements are allowed
+            cur.execute(path.read_text(encoding="utf-8"))   # no parameters, so several statements are allowed
         conn.commit()
-        print(f"Ran {settings.SCHEMA_FILE.relative_to(settings.PROJECT_DIR)} in {db_name}")
+        print(f"Ran sql/{name} in {db_name}")
     except psycopg.Error as e:
         conn.rollback()
-        raise SystemExit(f"ERROR: schema.sql failed: {e.diag.message_primary}")
+        raise SystemExit(f"ERROR: sql/{name} failed: {e.diag.message_primary}")
     finally:
         raw.close()
 
 
-def main():
+def main(argv=None):
+    files = list(argv if argv is not None else sys.argv[1:]) or settings.SQL_FILES
+    unknown = [f for f in files if f not in settings.SQL_FILES]
+    if unknown:
+        sys.exit(f"ERROR: unknown sql file(s) {unknown}; choose from {settings.SQL_FILES}")
     try:
         db_name = settings.erp_db_name()
         roles = [(settings.require("ERP_DB_USER"), settings.require("ERP_DB_PASSWORD")),
@@ -84,11 +91,12 @@ def main():
     except settings.ConfigError as e:
         sys.exit(f"ERROR: {e}")
     if tuple(u for u, _ in roles) != SCHEMA_ROLES:
-        sys.exit(f"ERROR: ERP_DB_USER / PBI_DB_USER must be {SCHEMA_ROLES} to match sql/schema.sql")
+        sys.exit(f"ERROR: ERP_DB_USER / PBI_DB_USER must be {SCHEMA_ROLES} to match the sql/ files")
 
     try:
         ensure_database_and_roles(db_name, roles)
-        run_schema(db_name)
+        for name in files:
+            run_sql_file(db_name, name)
     except settings.ConfigError as e:
         sys.exit(f"ERROR: {e}")
     except (psycopg.OperationalError, sqlalchemy.exc.OperationalError) as e:

@@ -18,7 +18,9 @@ load_dotenv(PROJECT_DIR / ".env")
 # ── Paths ────────────────────────────────────────────────────────────────────
 CONFIG_DIR = PROJECT_DIR / "config"
 STOCK_PAYLOAD_FILE = CONFIG_DIR / "stock_payload.json"   # stock report filters (from the browser)
-SCHEMA_FILE = PROJECT_DIR / "sql" / "schema.sql"
+SQL_DIR = PROJECT_DIR / "sql"
+# Run by kkj.db.setup, in this order: schema erp (production stock), then the newer schemas
+SQL_FILES = ["schema.sql", "sales.sql", "stock_hist.sql"]
 DATA_DIR = PROJECT_DIR / "data"
 STOCK_RAW_DIR = DATA_DIR / "stock" / "raw"        # original server .xlsx files, never modified
 STOCK_META_DIR = DATA_DIR / "stock" / "meta"      # step A JSON responses
