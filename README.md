@@ -148,6 +148,29 @@ can be dropped and reloaded without touching `erp`.
   `age_days` is recalculated as snapshot date − label date. The file's own value,
   which is the age on the July 2026 export day, is kept in `age_days_reported`.
 
+## Dashboard
+
+```
+.venv\Scripts\python -m pip install -e ".[dashboard]"     # once
+.venv\Scripts\streamlit run src\kkj\dashboardpp.py    # http://localhost:8501
+```
+
+Read-only: the app connects as `powerbi_reader`. Pages:
+
+- **Overview:** stock value, net sales this FY, stock turn and days of stock,
+  value older than a year; monthly net sales and stock value over time.
+- **Stock health:** value by branch, age, item group; oldest stock; stock on
+  approval, in transit or in repair.
+- **Sales:** net sales by month and group, branch, items, days to sell,
+  salespeople, returns.
+- **Data checks:** freshness, every pipeline run and load, and the past-date
+  snapshot verdicts.
+
+Every number comes from `kkj.metrics.core` (definitions and their industry
+basis are in its docstring). Every chart has a table view. Colours follow the
+validated reference palette, with each item group keeping one colour
+throughout.
+
 ## Tests
 
 ```
