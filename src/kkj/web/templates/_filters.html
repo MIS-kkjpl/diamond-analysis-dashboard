@@ -1,0 +1,21 @@
+{# Filter form: any change re-fetches this page and swaps only #page; the URL keeps the filters (shareable). #}
+{% macro form(action) -%}
+<form class="card card-body py-2 mb-3" action="{{ action }}" method="get"
+      hx-get="{{ action }}" hx-target="#page" hx-select="#page" hx-swap="outerHTML" hx-push-url="true"
+      hx-trigger="change" hx-indicator="#filter-spin">
+  <div class="d-flex flex-wrap align-items-center gap-3">
+    {{ caller() }}
+    <span id="filter-spin" class="spinner-border spinner-border-sm htmx-indicator ms-auto"></span>
+  </div>
+</form>
+{%- endmacro %}
+
+{% macro toggles(name, options, selected, short=False) -%}
+<div class="btn-group flex-wrap" role="group">
+  {% for o in options %}
+  <input type="checkbox" class="btn-check" name="{{ name }}" id="{{ name }}-{{ loop.index }}" value="{{ o }}"
+         {% if o in selected %}checked{% endif %}>
+  <label class="btn btn-sm" for="{{ name }}-{{ loop.index }}">{{ o.split(" / ")[0] if short else o }}</label>
+  {% endfor %}
+</div>
+{%- endmacro %}

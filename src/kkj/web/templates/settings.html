@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Settings · KKJ Diamond Analytics{% endblock %}
+{% block pretitle %}Admin{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block content %}
+{% if not who %}<div class="alert alert-warning"><i class="ti ti-user"></i> Type your name at the top to change settings;
+  every change is recorded with it.</div>{% endif %}
+
+<ul class="nav nav-tabs mb-3" data-bs-toggle="tabs">
+  <li class="nav-item"><a href="#tab-rules" class="nav-link active" data-bs-toggle="tab"><i class="ti ti-adjustments me-1"></i>Business rules</a></li>
+  <li class="nav-item"><a href="#tab-people" class="nav-link" data-bs-toggle="tab"><i class="ti ti-users me-1"></i>Salespeople
+    {% if to_review %}<span class="badge bg-orange-lt ms-1">{{ to_review }} to review</span>{% endif %}</a></li>
+  <li class="nav-item"><a href="#tab-branches" class="nav-link" data-bs-toggle="tab"><i class="ti ti-building-store me-1"></i>Branches</a></li>
+  <li class="nav-item"><a href="#tab-history" class="nav-link" data-bs-toggle="tab"><i class="ti ti-history me-1"></i>Change history</a></li>
+</ul>
+
+<div class="tab-content">
+  <div class="tab-pane active show" id="tab-rules">
+    <div class="small text-secondary mb-3">The rules every recommendation is calculated from. Defaults are starting points:
+      tune them to how the business wants to run.</div>
+    {% for s in sections %}{% include "_rule_section.html" %}{% endfor %}
+  </div>
+
+  <div class="tab-pane" id="tab-people">
+    <div class="card">
+      <div class="card-header"><div><h3 class="card-title">Salespeople</h3>
+        <div class="card-subtitle small text-secondary">Everyone who appears on a sales line. Changes save as you make them.
+          Owners and generic accounts (e.g. exhibition sales) are left out of salesperson comparisons.</div></div></div>
+      <div class="table-responsive">
+        <table class="table table-sm table-vcenter card-table">
+          <thead><tr><th>Code in sales</th><th>Name</th><th>HR code</th><th>Main branch</th><th>Type</th><th>Active</th>
+            <th>Left on</th><th>Match</th><th>Note</th></tr></thead>
+          <tbody>{% set kinds = person_kinds %}{% for p in people %}{% include "_person_row.html" %}{% endfor %}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-branches">
+    <div class="card">
+      <div class="card-header"><div><h3 class="card-title">Branches</h3>
+        <div class="card-subtitle small text-secondary">Showrooms are compared with each other and exchange stock; head office,
+          wholesale and exhibitions are shown but kept out of showroom comparisons.</div></div></div>
+      <div class="table-responsive">
+        <table class="table table-sm table-vcenter card-table">
+          <thead><tr><th>Branch in the ERP</th><th>Short name</th><th>HR code</th><th>Place</th><th>Type</th><th>Active</th></tr></thead>
+          <tbody>{% set kinds = branch_kinds %}{% for b in branches %}{% include "_branch_row.html" %}{% endfor %}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-history">
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-sm table-vcenter card-table">
+          <thead><tr><th>When</th><th>Who</th><th>What</th><th>Item</th><th>Before</th><th>After</th></tr></thead>
+          <tbody>
+          {% for h in history %}
+            <tr><td class="text-nowrap">{{ h.changed_at | date("%d %b %Y %H:%M") }}</td><td>{{ h.changed_by }}</td>
+              <td>{{ h.table_name }}</td><td>{{ h.row_key }}</td>
+              <td class="small text-secondary">{{ h.old_value | tojson | truncate(120) }}</td>
+              <td class="small">{{ h.new_value | tojson | truncate(120) }}</td></tr>
+          {% else %}<tr><td colspan="6" class="text-secondary">No changes yet.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

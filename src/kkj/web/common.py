@@ -4,6 +4,7 @@ user's name (a cookie; there are no logins yet), and the live status shown on ev
 """
 import json
 import math
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -28,6 +29,25 @@ def engine():
 def read(sql, **params):
     with engine().connect() as conn:
         return pd.read_sql(text(sql), conn, params=params)
+
+
+_CACHE = {}
+
+
+def cached(fn, *args, ttl=600):
+    """fn(conn, *args) from kkj.db.queries, kept for ttl seconds (heavy reads shared by many requests)."""
+    key = (fn.__name__, args)
+    hit = _CACHE.get(key)
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    with engine().connect() as conn:
+        value = fn(conn, *args)
+    _CACHE[key] = (time.time(), value)
+    return value
+
+
+def clear_cache():
+    _CACHE.clear()
 
 
 def who(request: Request):

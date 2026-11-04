@@ -59,3 +59,48 @@ def test_response_needs_a_name_then_records_and_is_undone():
             c.execute(text("DELETE FROM brain.action_event WHERE by = 'pytest'"))
             c.execute(text("""UPDATE brain.action SET status = 'open', decided_at = NULL, decided_by = NULL,
                               decision_note = NULL WHERE action_id = :a"""), {"a": aid})
+
+
+@pytest.mark.parametrize("path", ["/inventory", "/inventory?branch=KJ2+%2F+Branch+Dharampeth&old_days=180",
+                                  "/sales", "/sales?start=2026-10-01&end=2026-10-31&group=Diamond+Jewellery",
+                                  "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings"])
+def test_analytics_and_settings_pages_render(path):
+    r = client.get(path)
+    assert r.status_code == 200, r.text[-800:]
+    assert "Traceback" not in r.text and "NaT" not in r.text
+
+
+def test_settings_save_rule_and_row_then_revert():
+    me = TestClient(app, cookies={"who": "pytest"})
+    with settings.app_engine().connect() as c:
+        aged = c.execute(text("SELECT value FROM config.setting WHERE key = 'aged_days'")).scalar()
+        person = c.execute(text("SELECT sales_code, name, note FROM config.salesperson LIMIT 1")).one()
+    targets = {"target_turn": "1.0", "overstock_days": "365", "understock_days": "60", "aged_days": "400",
+               "max_offer_discount_pct": "15"}
+    try:
+        refused = client.post("/settings/rules/Targets", data=targets).text                 # no name: refused
+        assert "alert-danger" in refused and "Saved:" not in refused
+        r = me.post("/settings/rules/Targets", data=targets)
+        assert r.status_code == 200 and "Saved: A piece is aged after" in r.text
+        from kkj import rules as R
+        with settings.app_engine().connect() as c:
+            now = R.load(c)
+        demand = [(r.key, v) for r in R.RULES if r.section == "Demand"
+                  for v in (now[r.key] if r.kind == "list" and r.choices else [", ".join(map(str, now[r.key]))]
+                            if r.kind == "list" else [now[r.key]])]
+        form = {}
+        for k, v in demand:
+            form.setdefault(k, []).append(str(v))
+        form["price_band_edges"] = ["100000, 50000"]
+        bad = me.post("/settings/rules/Demand", data=form)
+        assert "smallest to largest" in bad.text and "Saved:" not in bad.text
+        assert "enter a value" in me.post("/settings/rules/Demand", data={}).text
+        r = me.post(f"/settings/salesperson/{person.sales_code}",
+                    data={"name": person.name, "kind": "salesperson", "active": "on", "note": "pytest note"})
+        assert r.status_code == 200 and "pytest note" in r.text
+    finally:
+        with settings.etl_engine().begin() as c:
+            c.execute(text("UPDATE config.setting SET value = CAST(:v AS jsonb), updated_by = 'default' WHERE key = 'aged_days'"),
+                      {"v": str(aged)})
+            c.execute(text("UPDATE config.salesperson SET note = :n WHERE sales_code = :c"), {"n": person.note, "c": person.sales_code})
+            c.execute(text("DELETE FROM config.change_log WHERE changed_by = 'pytest'"))

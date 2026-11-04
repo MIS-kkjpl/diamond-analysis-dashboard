@@ -12,7 +12,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from kkj.web import exports, pages, recommendations
+from kkj.web import admin, analytics, exports, pages, recommendations
 from kkj.web.common import HERE, status, templates
 
 app = FastAPI(title="KKJ Diamond Analytics", docs_url=None, redoc_url=None, openapi_url=None)
@@ -20,6 +20,8 @@ app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 app.include_router(recommendations.router)
 app.include_router(pages.router)
 app.include_router(exports.router)
+app.include_router(analytics.router)
+app.include_router(admin.router)
 
 
 @app.get("/")

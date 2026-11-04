@@ -1,0 +1,55 @@
+{# Reusable pieces for the analytics pages. #}
+
+{% macro data_table(t, limit=None) -%}
+<div class="table-responsive">
+  <table class="table table-sm table-vcenter card-table table-striped">
+    <thead><tr>{% for c in t.columns %}<th {% if c in t.numeric %}class="text-end"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for r in (t.rows[:limit] if limit else t.rows) %}
+      <tr>{% for v in r %}<td {% if t.columns[loop.index0] in t.numeric %}class="text-end"{% endif %}>{{ v }}</td>{% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{%- endmacro %}
+
+{% macro chart(id, fig, title, sub="", t=None) -%}
+<div class="card h-100">
+  <div class="card-header">
+    <div><h3 class="card-title">{{ title }}</h3>{% if sub %}<div class="card-subtitle small text-secondary">{{ sub }}</div>{% endif %}</div>
+  </div>
+  <div class="card-body">
+    <div id="{{ id }}"></div>
+    <script>(function () { const f = {{ fig | safe }};
+      Plotly.newPlot("{{ id }}", f.data, f.layout, {displayModeBar: false, responsive: true}); })();</script>
+    {% if t %}<details class="small mt-2"><summary>Table</summary>{{ data_table(t) }}</details>{% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro kpi(label, value, sub="", icon="ti-chart-bar", colour="blue") -%}
+<div class="col-sm-6 col-lg">
+  <div class="card card-sm h-100"><div class="card-body">
+    <div class="d-flex align-items-center mb-1">
+      <span class="avatar avatar-sm bg-{{ colour }}-lt me-2"><i class="ti {{ icon }}"></i></span>
+      <div class="subheader">{{ label }}</div>
+    </div>
+    <div class="h1 mb-0">{{ value }}</div>
+    {% if sub %}<div class="text-secondary small">{{ sub }}</div>{% endif %}
+  </div></div>
+</div>
+{%- endmacro %}
+
+{% macro action(text) -%}
+<div class="alert alert-info d-flex align-items-start gap-2 mb-0 mt-3">
+  <i class="ti ti-bulb fs-2"></i><div><b>Recommended action:</b> {{ text }}</div>
+</div>
+{%- endmacro %}
+
+{% macro table_card(title, t, sub="", limit=None, icon="ti-table") -%}
+<div class="card">
+  <div class="card-header"><div><h3 class="card-title"><i class="ti {{ icon }} me-2"></i>{{ title }}</h3>
+    {% if sub %}<div class="card-subtitle small text-secondary">{{ sub }}</div>{% endif %}</div></div>
+  {{ data_table(t, limit) }}
+</div>
+{%- endmacro %}

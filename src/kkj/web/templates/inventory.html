@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% import "_filters.html" as flt %}
+{% block title %}Inventory health · KKJ Diamond Analytics{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
+{% block pretitle %}Analytics{% endblock %}
+{% block page_title %}Inventory health{% endblock %}
+{% block content %}
+<div id="page">
+{% call flt.form("/inventory") %}
+  {{ flt.toggles("branch", branches, f.branch, short=True) }}
+  {{ flt.toggles("group", groups, f.group) }}
+  <div class="d-flex align-items-center gap-2">
+    <span class="small text-secondary">Old means over</span>
+    <input type="number" name="old_days" value="{{ f.old_days }}" min="90" max="1095" step="30"
+           class="form-control form-control-sm" style="width: 6rem"><span class="small text-secondary">days</span>
+  </div>
+{% endcall %}
+
+{% if empty %}
+<div class="empty"><p class="empty-title">No stock for these filters</p></div>
+{% else %}
+<div class="row row-cards mb-3">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
+<div class="small text-secondary mb-3">As of {{ as_of | date }} · value = taxable amount before GST · customers' own items left out · age = days since the label date</div>
+
+<div class="row row-cards mb-3">
+  <div class="col-lg-6">{{ ui.chart("c-branch", fig_branch, "Value by branch", t=t_branch) }}</div>
+  <div class="col-lg-6">{{ ui.chart("c-age", fig_age, "Value by age since labelling", t=t_age) }}</div>
+</div>
+<div class="mb-3">{{ ui.table_card("Value by item group and age", t_pivot, icon="ti-layout-grid") }}</div>
+<div class="mb-3">{{ ui.table_card("Oldest stock: over " ~ f.old_days ~ " days, highest value first", t_oldest,
+                                    sub="Top 200", icon="ti-hourglass") }}</div>
+<div class="mb-3">{{ ui.table_card("Not on a counter", t_away, sub="On approval, in transit or in repair; longest days since branch-in",
+                                    icon="ti-truck") }}</div>
+{% endif %}
+</div>
+{% endblock %}

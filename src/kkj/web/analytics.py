@@ -1,0 +1,268 @@
+"""Analytics pages: Inventory health, Sales, Insights. Filters are plain GET parameters (shareable links)."""
+import numpy as np
+import pandas as pd
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import HTMLResponse
+
+from kkj import rules as rules_mod
+from kkj.db import queries as q
+from kkj.metrics import core as m
+from kkj.metrics import insights as ins
+from kkj.metrics.summary import fy_start
+from kkj.viz import GROUP_ORDER, money
+from kkj.web import charts
+from kkj.web.common import cached, engine, render
+
+router = APIRouter()
+
+
+def _rules():
+    with engine().connect() as conn:
+        return rules_mod.load(conn)
+
+
+def _short(b):
+    return str(b).split(" / ")[0] if isinstance(b, str) else "–"
+
+
+# ── Inventory health ──────────────────────────────────────────────────────────
+@router.get("/inventory", response_class=HTMLResponse)
+def inventory(request: Request, branch: list[str] = Query(default=[]), group: list[str] = Query(default=[]),
+              old_days: int = 365):
+    stock = m.company_stock(cached(q.stock_latest)).copy()
+    all_branches = sorted(stock["branch"].dropna().unique())
+    all_groups = sorted(stock["item_class_group"].dropna().unique())
+    if branch:
+        stock = stock[stock["branch"].isin(branch)]
+    if group:
+        stock = stock[stock["item_class_group"].isin(group)]
+    ctx = {"f": {"branch": branch, "group": group, "old_days": old_days}, "branches": all_branches, "groups": all_groups}
+    if stock.empty:
+        return render(request, "inventory.html", "inventory", empty=True, **ctx)
+    stock["value"] = m.value(stock)
+    stock["age_band"] = m.age_bucket(stock["age_days"]).values
+    stock["where"] = m.location_type(stock["location"])
+    total = stock["value"].sum()
+    old = stock[stock["age_days"] > old_days]
+    approval, transit = stock[stock["where"] == "Approval"], stock[stock["where"] == "In transit"]
+    kpis = [("Stock value", money(total), f"{stock['pcs'].sum():,.0f} pcs", "ti-diamond", "blue"),
+            (f"Older than {old_days} days", f"{100 * old['value'].sum() / total:.1f}%", money(old["value"].sum()), "ti-hourglass", "orange"),
+            ("Median age", f"{stock['age_days'].median():,.0f} days", "since labelling", "ti-clock", "azure"),
+            ("On approval", money(approval["value"].sum()), f"{len(approval):,} labels", "ti-user-share", "purple"),
+            ("In transit", money(transit["value"].sum()), f"{len(transit):,} labels", "ti-truck", "cyan")]
+
+    by_branch = stock.groupby("branch", as_index=False).agg(value=("value", "sum"), labels=("barcode", "size"),
+                                                            pcs=("pcs", "sum")).sort_values("value", ascending=False)
+    by_age = stock.groupby("age_band", observed=False, as_index=False).agg(value=("value", "sum"), labels=("barcode", "size"))
+    by_age["share"] = by_age["value"] / total
+    pivot = stock.pivot_table(index="item_class_group", columns="age_band", values="value", aggfunc="sum",
+                              observed=False, fill_value=0)
+    pivot["Total"] = pivot.sum(axis=1)
+    pivot = pivot.sort_values("Total", ascending=False).reset_index()
+    oldest = old.sort_values("value", ascending=False).head(200).assign(branch=lambda d: d["branch"].map(_short))
+    away = stock[stock["where"].isin(["Approval", "In transit", "Repair"])]
+    away_t = away.groupby(["where", "location"], as_index=False).agg(
+        labels=("barcode", "size"), value=("value", "sum"), longest_days_in_branch=("days_from_branch_in", "max")
+    ).sort_values("value", ascending=False)
+
+    return render(
+        request, "inventory.html", "inventory", empty=False, kpis=kpis, as_of=stock["snapshot_date"].iloc[0], **ctx,
+        fig_branch=charts.hbar(by_branch["branch"].map(_short), by_branch["value"] / 1e7, by_branch["labels"],
+                               " · %{customdata:,} labels"),
+        t_branch=charts.table(by_branch, {"value": "money", "labels": "num", "pcs": "num"}),
+        fig_age=charts.ordinal_bars(by_age["age_band"], by_age["value"] / 1e7, " Cr", "₹",
+                                    np.c_[by_age["labels"], 100 * by_age["share"]],
+                                    "<br>%{customdata[0]:,} labels · %{customdata[1]:.1f}%"),
+        t_age=charts.table(by_age.assign(age_band=by_age["age_band"].astype(str)), {"value": "money", "share": "pct"}),
+        t_pivot=charts.table(pivot.rename(columns=str), {c: "money" for c in pivot.columns if c != "item_class_group"},
+                             {"item_class_group": "item group"}),
+        t_oldest=charts.table(oldest[["barcode", "item_name", "category", "item_class_group", "branch", "location",
+                                      "supplier", "age_days", "days_from_branch_in", "dia_wt", "value"]],
+                              {"value": "money", "age_days": "num", "days_from_branch_in": "num", "dia_wt": "dec"}),
+        t_away=charts.table(away_t, {"value": "money", "labels": "num", "longest_days_in_branch": "num"}))
+
+
+# ── Sales ─────────────────────────────────────────────────────────────────────
+@router.get("/sales", response_class=HTMLResponse)
+def sales(request: Request, start: str = "", end: str = "", branch: list[str] = Query(default=[]),
+          group: list[str] = Query(default=[])):
+    today = pd.Timestamp.today().normalize()
+    start_d = pd.Timestamp(start) if start else fy_start(today)
+    end_d = pd.Timestamp(end) if end else today
+    lines = m.net_sales(cached(q.sales_lines, start_d.date()))
+    lines = lines[(lines["sale_date"] >= start_d) & (lines["sale_date"] <= end_d)]
+    all_branches = sorted(lines["branch"].dropna().unique())
+    all_groups = [g for g in GROUP_ORDER if g in set(lines["item_class_group"])]
+    if branch:
+        lines = lines[lines["branch"].isin(branch)]
+    if group:
+        lines = lines[lines["item_class_group"].isin(group)]
+    ctx = {"f": {"start": start_d.date().isoformat(), "end": end_d.date().isoformat(), "branch": branch, "group": group},
+           "branches": all_branches, "groups": all_groups}
+    if lines.empty:
+        return render(request, "sales.html", "sales", empty=True, **ctx)
+    sold, back = lines[lines["pcs"] > 0], lines[lines["pcs"] < 0]
+    gross, returned = sold["net_value"].sum(), -back["net_value"].sum()
+    kpis = [("Net sales", money(lines["net_value"].sum()), f"{lines['net_pcs'].sum():,.0f} pcs net", "ti-receipt", "green"),
+            ("Returns", money(returned), f"{100 * returned / gross:.1f}% of gross · {len(back)} lines" if gross else "",
+             "ti-arrow-back-up", "red"),
+            ("Average sale value", money(gross / sold["pcs"].sum()) if sold["pcs"].sum() else "–", "per piece", "ti-currency-rupee", "blue"),
+            ("Median days to sell", f"{sold['age_days_at_sale'].median():,.0f} days", "label date → sale", "ti-clock", "azure"),
+            ("Bills", f"{sold['bill_no'].nunique():,}", "", "ti-file-invoice", "purple")]
+    monthly = (lines.assign(month=lines["sale_date"].dt.to_period("M").dt.to_timestamp())
+               .groupby(["month", "item_class_group"], as_index=False).agg(net=("net_value", "sum"), pcs=("net_pcs", "sum")))
+    by_branch = lines.groupby("branch", as_index=False).agg(net=("net_value", "sum"), pcs=("net_pcs", "sum")) \
+        .sort_values("net", ascending=False)
+    by_item = lines.groupby("item_name", as_index=False).agg(net=("net_value", "sum"), pcs=("net_pcs", "sum")) \
+        .sort_values("net", ascending=False)
+    sold_b = sold.assign(age_band=m.age_bucket(sold["age_days_at_sale"]).values)
+    by_age = sold_b.groupby("age_band", observed=False, as_index=False).agg(pcs=("pcs", "sum"), value=("net_value", "sum"))
+
+    with engine().connect() as conn:
+        people = q.salespeople(conn)
+    from kkj.salespeople import split_salesman
+    staff = lines.dropna(subset=["salesman"]).assign(code=lambda d: d["salesman"].map(lambda v: split_salesman(v)[0]))
+    staff = staff.merge(people.rename(columns={"sales_code": "code", "name": "person", "branch": "home_branch"}),
+                        on="code", how="left")
+    staff["kind"] = staff["kind"].fillna("salesperson")
+    staff = staff[staff["kind"] == "salesperson"]
+    staff["discount"] = (staff["item_amt"] - staff["taxable_amount"]).where(staff["taxable_amount"].notna() & (staff["pcs"] > 0))
+    team = staff.groupby(staff["person"].fillna(staff["salesman"])).agg(
+        net_sales=("net_value", "sum"), pcs=("net_pcs", "sum"), bills=("bill_no", "nunique"),
+        discount=("discount", "sum"), label_value=("item_amt", lambda x: x[staff.loc[x.index, "pcs"] > 0].sum()),
+        returns=("pcs", lambda x: int((x < 0).sum()))).reset_index(names="salesperson")
+    team["discount_rate"] = team["discount"] / team["label_value"].replace(0, np.nan)
+    team = team.drop(columns=["discount", "label_value"]).sort_values("net_sales", ascending=False)
+
+    return render(
+        request, "sales.html", "sales", empty=False, kpis=kpis, legacy=(lines["source"] == "csv_legacy").any(), **ctx,
+        fig_monthly=charts.monthly_by_group(monthly),
+        t_monthly=charts.table(monthly.pivot_table(index="month", columns="item_class_group", values="net", aggfunc="sum",
+                                                   fill_value=0).reset_index().assign(month=lambda d: d["month"].dt.strftime("%b %Y")),
+                               {g: "money" for g in all_groups}),
+        fig_branch=charts.hbar(by_branch["branch"].map(_short), by_branch["net"] / 1e7, by_branch["pcs"], " · %{customdata:,.0f} pcs"),
+        t_branch=charts.table(by_branch, {"net": "money", "pcs": "num"}, {"net": "net sales"}),
+        fig_items=charts.hbar(by_item["item_name"].head(10), by_item["net"].head(10) / 1e7, by_item["pcs"].head(10),
+                              " · %{customdata:,.0f} pcs"),
+        t_items=charts.table(by_item, {"net": "money", "pcs": "num"}, {"net": "net sales"}),
+        fig_age=charts.ordinal_bars(by_age["age_band"], by_age["pcs"], " pcs", "", by_age["value"] / 1e7,
+                                    "<br>₹%{customdata:.2f} Cr"),
+        t_team=charts.table(team, {"net_sales": "money", "pcs": "num", "bills": "num", "returns": "num",
+                                   "discount_rate": "pct"}, {"discount_rate": "discount given"}),
+        t_returns=charts.table(back.sort_values("sale_date", ascending=False)[
+            ["sale_date", "bill_no", "orig_bill_no", "orig_sale_date", "item_name", "branch", "salesman", "pcs", "net_value"]]
+            .assign(branch=lambda d: d["branch"].map(_short)),
+            {"sale_date": "date", "orig_sale_date": "date", "net_value": "money", "pcs": "num"},
+            {"sale_date": "returned on", "orig_bill_no": "sold on bill", "orig_sale_date": "sold on", "net_value": "value"}))
+
+
+# ── Insights ──────────────────────────────────────────────────────────────────
+@router.get("/insights", response_class=HTMLResponse)
+def insights(request: Request, group: list[str] = Query(default=["Diamond Jewellery"])):
+    rules = _rules()
+    latest = m.company_stock(cached(q.stock_latest))
+    as_of = pd.Timestamp(latest["snapshot_date"].iloc[0])
+    history = ins.one_per_week(cached(q.stock_history, (as_of - pd.DateOffset(months=rules["insight_months"])).date()))
+    all_groups = sorted(history["item_class_group"].dropna().unique())
+    group = [g for g in group if g]
+    if group:
+        history = history[history["item_class_group"].isin(group)]
+        latest = latest[latest["item_class_group"].isin(group)]
+    start, end = history["snapshot_date"].min(), history["snapshot_date"].max()
+    lines = cached(q.sales_lines, start.date())
+    s = lines[(lines["sale_date"] >= start) & (lines["sale_date"] <= end) & (lines["pcs"] > 0)].copy()
+    if group:
+        s = s[s["item_class_group"].isin(group)]
+    s["value"], s["age_at_sale"] = m.value(s), s["age_days_at_sale"]
+    s["discount"] = 1 - s["taxable_amount"] / s["item_amt"]
+
+    latest = latest.assign(value=m.value(latest))
+    aged = latest[latest["age_days"] > rules["aged_days"]]
+    dead = latest[latest["age_days"] > rules["liquidation_age_days"]]
+    recovery = ins.recovery_value(dead, rules["diamond_recovery_pct"] / 100)
+    by_age = ins.sell_rate_by_age(history, s, start, end)
+    suggestion = ins.suggested_aged_days(by_age)
+    kpis = [(f"Aged stock (over {rules['aged_days']} days)", money(aged["value"].sum()),
+             f"{100 * aged['value'].sum() / latest['value'].sum():.1f}% of stock" if len(latest) else "", "ti-hourglass", "orange"),
+            ("Cost of holding it", money(ins.carrying_cost_per_month(aged["value"].sum(), rules["capital_cost_pct"])) + " / month",
+             f"at {rules['capital_cost_pct']:g}% a year", "ti-coin-rupee", "red"),
+            (f"Clearance candidates (over {rules['liquidation_age_days']} days)", money(dead["value"].sum()),
+             f"{len(dead):,} pieces · recovery ≈ {money(recovery.sum())}", "ti-recycle", "purple"),
+            ("Data suggests 'aged' from", f"{suggestion} days" if suggestion else "–",
+             f"setting now {rules['aged_days']} days", "ti-adjustments", "blue")]
+
+    # 1. age
+    t1 = by_age.reset_index(names="age")
+    new_rate = by_age["monthly_sell_rate"].iloc[:2].mean()
+    oldest = by_age.iloc[-1]
+    act1 = (f"A new piece sells about {new_rate / by_age['monthly_sell_rate'].iloc[3]:.1f}× as fast as a 6–12-month-old one. "
+            f"Act before pieces reach the slow end: at {oldest.name} only {100 * oldest['monthly_sell_rate']:.1f}% sell a month, "
+            f"so the {money(oldest['avg_value'])} held there needs a clearance plan, not a markdown.")
+    # 2. suppliers
+    bands = [0] + list(rules["price_band_edges"]) + [np.inf]
+    sup = ins.supplier_scorecard(history, s, start, end, bands, rules["min_supplier_pcs"]).dropna(subset=["performance"])
+    slow, fast = sup[sup["performance"] < 0.5], sup[sup["performance"] > 1.5]
+    act2 = (f"Increase purchases from the {len(fast)} suppliers selling over 1.5× the company rate at their price points "
+            f"({', '.join(fast.sort_values('performance', ascending=False).index[:5]) or '–'}); review the {len(slow)} under 0.5× "
+            f"(holding {money(slow['avg_value'].sum())}) for exchanges or returns.")
+    # 3. assortment
+    edges = [-np.inf] + list(rules["price_band_edges"]) + [np.inf]
+    from kkj.brain.generators import band_money
+    names = [f"< {band_money(edges[1])}"] + [f"{band_money(a)}–{band_money(b)}" for a, b in zip(edges[1:-2], edges[2:-1])] \
+        + [f"{band_money(edges[-2])} +"]
+    gap = ins.assortment_gap(history.assign(band=pd.cut(history["value"], edges, labels=names)),
+                             s.assign(band=pd.cut(s["value"], edges, labels=names)), start, end, "band").reset_index(names="band")
+    items = ins.assortment_gap(history, s, start, end, "item_name")
+    items = items[items["avg_pcs"] >= 20].sort_values("months_of_stock").reset_index(names="item")
+    under = gap[gap["gap"] > 0.02]["band"].astype(str).tolist()
+    over = gap[gap["gap"] < -0.02]["band"].astype(str).tolist()
+    act3 = (f"Shift purchasing towards {', '.join(under) or '–'} (a bigger share of sales than of stock) and away from "
+            f"{', '.join(over) or '–'}. Items at the bottom of the table hold the most months of stock.")
+    # 4. channels
+    with engine().connect() as conn:
+        kinds = q.branches(conn).set_index("erp_branch")["kind"]
+    channel = s["branch"].map(kinds).fillna("other").map(
+        lambda k: "Exhibition" if k == "exhibition" else "Showroom" if k == "showroom" else "Other")
+    ch = ins.channel_comparison(s, channel).reset_index()
+    # 5. clearance
+    liq = dead.assign(recovery=recovery.values, age_years=dead["age_days"] / 365, branch=dead["branch"].map(_short))
+    liq["recovery_share"] = liq["recovery"] / liq["value"]
+
+    return render(
+        request, "insights.html", "insights", kpis=kpis, groups=all_groups, f={"group": group},
+        period=f"{start:%d %b %Y} to {end:%d %b %Y} · {history['snapshot_date'].nunique()} stock snapshots · {len(s):,} sale lines",
+        fig_age=charts.ordinal_bars(t1["age"], 100 * t1["monthly_sell_rate"], "%", "",
+                                    np.c_[t1["avg_pcs"], t1["avg_value"] / 1e7, t1["months_to_sell_half"]],
+                                    " sold a month<br>%{customdata[0]:,.0f} pcs held · ₹%{customdata[1]:.1f} Cr"
+                                    "<br>half sell in %{customdata[2]:.0f} months"),
+        t_age=charts.table(t1[["age", "avg_pcs", "avg_value", "sold_per_month", "monthly_sell_rate", "months_to_sell_half"]],
+                           {"avg_pcs": "num", "avg_value": "money", "sold_per_month": "dec", "monthly_sell_rate": "pct",
+                            "months_to_sell_half": "dec"},
+                           {"avg_pcs": "held (pcs)", "avg_value": "held", "monthly_sell_rate": "sold a month",
+                            "months_to_sell_half": "months for half to sell"}),
+        act1=act1,
+        fig_sup=charts.performance_bars(sup.index.tolist(), sup["performance"],
+                                        np.c_[100 * sup["monthly_sell_rate"], sup["avg_value"] / 1e7],
+                                        "<br>%{customdata[0]:.1f}% sold a month · ₹%{customdata[1]:.2f} Cr held") if len(sup) else None,
+        t_sup=charts.table(sup.reset_index(names="supplier")[["supplier", "performance", "monthly_sell_rate", "avg_value",
+                                                              "avg_pcs", "annual_turn", "median_days_to_sell", "aged_share_now"]],
+                           {"performance": "dec", "monthly_sell_rate": "pct", "avg_value": "money", "avg_pcs": "num",
+                            "annual_turn": "dec", "median_days_to_sell": "num", "aged_share_now": "pct"},
+                           {"performance": "performance (×)", "monthly_sell_rate": "sold a month", "avg_value": "held",
+                            "avg_pcs": "held (pcs)", "annual_turn": "turn (×/yr)", "aged_share_now": "aged now"}),
+        act2=act2,
+        fig_band=charts.two_series(gap["band"].astype(str).tolist(), 100 * gap["share_of_stock"], 100 * gap["share_of_sales"],
+                                   "Share of stock (pcs)", "Share of sales (pcs)"),
+        t_items=charts.table(items[["item", "avg_pcs", "sold_per_month", "months_of_stock", "share_of_stock", "share_of_sales"]],
+                             {"avg_pcs": "num", "sold_per_month": "dec", "months_of_stock": "dec", "share_of_stock": "pct",
+                              "share_of_sales": "pct"}, {"avg_pcs": "held (pcs)"}),
+        act3=act3,
+        t_channel=charts.table(ch, {"lines": "num", "value": "money", "median_age_at_sale": "num", "share_over_1y": "pct",
+                                    "median_discount": "pct"},
+                               {"median_age_at_sale": "median age at sale (days)", "share_over_1y": "sold pieces over 1 yr old"}),
+        t_liq=charts.table(liq.sort_values("value", ascending=False)[
+            ["barcode", "item_name", "category", "branch", "location", "supplier", "age_years", "net_wt", "dia_wt", "value",
+             "recovery", "recovery_share"]],
+            {"age_years": "dec", "net_wt": "dec", "dia_wt": "dec", "value": "money", "recovery": "money", "recovery_share": "pct"},
+            {"value": "tag value", "recovery": "recovery value", "recovery_share": "recovery %"}),
+        recovery_pct=rules["diamond_recovery_pct"], liq_days=rules["liquidation_age_days"])

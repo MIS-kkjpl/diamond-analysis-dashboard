@@ -1,0 +1,47 @@
+{# One section of business rules; saving swaps just this card. #}
+<div class="card mb-3" id="rules-{{ s.section | lower }}">
+  <form hx-post="/settings/rules/{{ s.section }}" hx-target="#rules-{{ s.section | lower }}" hx-swap="outerHTML"
+        hx-disabled-elt="find button">
+    <div class="card-header"><h3 class="card-title">{{ s.section }}</h3>
+      <div class="card-actions">
+        <button class="btn btn-primary btn-sm" {% if not who %}disabled title="Type your name at the top first"{% endif %}>
+          <i class="ti ti-device-floppy"></i> Save {{ s.section | lower }}</button>
+      </div>
+    </div>
+    <div class="card-body">
+      {% if s.saved %}<div class="alert alert-success py-2"><i class="ti ti-check"></i> {{ s.saved }}
+        <span class="small">· recommendations use the new rules from the next refresh</span></div>{% endif %}
+      {% if s.error %}<div class="alert alert-danger py-2"><i class="ti ti-alert-circle"></i> {{ s.error }}</div>{% endif %}
+      <div class="row g-3">
+      {% for r in s.rules %}{% set v = s.current[r.key] %}
+        <div class="col-md-6">
+          <label class="form-label mb-1">{{ r.label }}{% if r.unit %} <span class="text-secondary">({{ r.unit }})</span>{% endif %}</label>
+          {% if r.kind == "bool" %}
+            <label class="form-check form-switch"><input class="form-check-input" type="checkbox" name="{{ r.key }}" {% if v %}checked{% endif %}>
+              <span class="form-check-label">{{ "On" if v else "Off" }}</span></label>
+          {% elif r.kind in ("int", "number") %}
+            <input class="form-control form-control-sm" type="number" name="{{ r.key }}" value="{{ v }}"
+                   step="{{ 1 if r.kind == 'int' else 'any' }}" {% if r.min is not none %}min="{{ r.min }}"{% endif %}
+                   {% if r.max is not none %}max="{{ r.max }}"{% endif %} style="max-width: 12rem">
+          {% elif r.kind == "choice" %}
+            <select class="form-select form-select-sm" name="{{ r.key }}" style="max-width: 16rem">
+              {% for c in r.choices %}<option value="{{ c }}" {% if c == v %}selected{% endif %}>{{ c | replace("_", " ") }}</option>{% endfor %}
+            </select>
+          {% elif r.choices or r.key == "transfer_excluded_branches" %}
+            <div class="d-flex flex-wrap gap-2">
+              {% for c in (r.choices if r.choices else s.branch_names) %}
+              <label class="form-check form-check-inline mb-0">
+                <input class="form-check-input" type="checkbox" name="{{ r.key }}" value="{{ c }}" {% if c in v %}checked{% endif %}>
+                <span class="form-check-label small">{{ c | replace("_", " ") }}</span></label>
+              {% endfor %}
+            </div>
+          {% else %}
+            <input class="form-control form-control-sm" name="{{ r.key }}" value="{{ v | join(', ') }}">
+          {% endif %}
+          <div class="form-hint small">{{ r.help }}</div>
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+  </form>
+</div>

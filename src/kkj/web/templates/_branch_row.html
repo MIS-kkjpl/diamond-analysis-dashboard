@@ -1,0 +1,11 @@
+{# One branch; any change saves this row and swaps it back. #}
+<tr hx-post="/settings/branch/{{ b.erp_branch | urlencode }}" hx-trigger="change" hx-include="this" hx-target="this"
+    hx-swap="outerHTML" {% if saved %}class="row-saved"{% endif %}>
+  <td class="text-nowrap">{{ b.erp_branch }}{% if saved %} <i class="ti ti-check text-green" title="Saved"></i>{% endif %}</td>
+  <td><input class="form-control form-control-sm" name="short_name" value="{{ b.short_name }}" {% if not who %}disabled{% endif %}></td>
+  <td><input class="form-control form-control-sm" name="hr_code" value="{{ b.hr_code or '' }}" {% if not who %}disabled{% endif %}></td>
+  <td><input class="form-control form-control-sm" name="place" value="{{ b.place or '' }}" {% if not who %}disabled{% endif %}></td>
+  <td><select class="form-select form-select-sm" name="kind" {% if not who %}disabled{% endif %}>
+    {% for k in kinds %}<option value="{{ k }}" {% if b.kind == k %}selected{% endif %}>{{ k | replace("_", " ") }}</option>{% endfor %}</select></td>
+  <td class="text-center"><input class="form-check-input" type="checkbox" name="active" {% if b.active %}checked{% endif %} {% if not who %}disabled{% endif %}></td>
+</tr>

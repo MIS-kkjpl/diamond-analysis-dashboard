@@ -148,72 +148,43 @@ can be dropped and reloaded without touching `erp`.
   `age_days` is recalculated as snapshot date − label date. The file's own value,
   which is the age on the July 2026 export day, is kept in `age_days_reported`.
 
-## Web app (KKJ Diamond Brain)
+## Web app (KKJ Diamond Analytics)
 
 ```
 .venv\Scripts\python -m pip install -e ".[web]"                       # once
 .venv\Scripts\uvicorn kkj.web.app:app --host 0.0.0.0 --port 8600      # http://localhost:8600
 ```
 
-Stack: FastAPI, Jinja2 templates (`src/kkj/web/templates`, plain HTML), HTMX
-(`hx-*` attributes update part of a page) and Tabler (a dashboard UI kit loaded
-from a CDN). There is no JavaScript build step. The app connects as
-`dashboard_app`, which can write only schemas `brain` and `config`.
+**Stack:** FastAPI routes (`src/kkj/web/*.py`), Jinja2 templates
+(`src/kkj/web/templates`, plain HTML), HTMX (`hx-*` attributes update part of a
+page) and Tabler (a dashboard UI kit from a CDN). Charts are Plotly figures
+built in Python (`kkj/web/charts.py`). There is no JavaScript build step. The app
+connects as `dashboard_app`, which can write only schemas `brain` and `config`.
+Your name is kept in a browser cookie and recorded with every approval, note
+and settings change; there are no logins yet.
 
-- **Decisions:** the live inbox (`brain.action`):
-  - filter by status, type, branch, or search;
-  - approve, reject, snooze, mark done or add a note (recorded with your name,
-    which is kept in a browser cookie; there are no logins yet);
-  - each decision has its own page (`/decisions/<id>`) with its evidence,
-    pieces and history;
-  - exports: transfer slips per branch, offer lists, the buying list.
-- **Overview, Data checks** are also built in the web app. Stock, Sales,
-  Insights and Settings open the Streamlit app (marked "classic") until they
-  are moved.
-- **Refreshing decisions:** `python -m kkj.brain.run` re-runs every rule on the
-  latest data. A decision keeps its identity across refreshes:
-  - it reopens if its problem comes back;
-  - it closes by itself when the problem clears;
-  - once approved, it is marked done when the problem clears.
+| Section | Page | What it does |
+|---|---|---|
+| Actions | **Recommendations** (`/recommendations`) | The live inbox: filter, approve, dismiss, snooze, mark complete, add a note. Each recommendation has its own page with supporting data, the pieces and history. Exports: transfer slips, markdown lists, the purchasing list. |
+| Analytics | **Overview** | Headline numbers (stock, FY net sales, turn, ageing), monthly sales, stock over time |
+| | **Inventory health** | Value by branch and age, group × age, oldest stock, stock not on a counter |
+| | **Sales** | By month and group, branch, items, days to sell, salespeople (named from Settings), returns |
+| | **Insights** | Sell rate by age, price-adjusted supplier performance, stock vs sales by price band and item, exhibitions vs showrooms, clearance candidates; each with a recommended action |
+| Admin | **Data quality** | Recommendation refreshes, stock runs, sales loads, past-date snapshot verdicts |
+| | **Settings** | Business rules by section, salesperson and branch lists (rows save as you edit), change history |
 
-  It runs after the overnight load and from the **Refresh decisions** button.
+All filters are plain URL parameters, so a filtered view can be shared as a link.
 
-## Dashboard (Streamlit, classic)
+**Refreshing recommendations:** `python -m kkj.brain.run` re-runs every rule on
+the latest data. A recommendation keeps its identity across refreshes:
+- it reopens if its issue comes back;
+- it is resolved automatically when the issue clears;
+- once approved, it is completed when the issue clears.
 
-```
-.venv\Scripts\python -m pip install -e ".[dashboard]"     # once
-.venv\Scripts\streamlit run src\kkj\dashboard\app.py    # http://localhost:8501
-```
+It runs after the overnight load and from the **Refresh recommendations** button.
 
-Read-only: the app connects as `powerbi_reader`. Pages:
-
-- **Overview:** stock value, net sales this FY, stock turn and days of stock,
-  value older than a year; monthly net sales and stock value over time.
-- **Stock health:** value by branch, age, item group; oldest stock; stock on
-  approval, in transit or in repair.
-- **Sales:** net sales by month and group, branch, items, days to sell,
-  salespeople, returns.
-- **Insights** (`kkj/metrics/insights.py`), over the period set in Settings:
-  - sell rate by age, which also suggests where "aged" should start;
-  - suppliers scored against the company's sell rate in the same price bands;
-  - share of stock vs share of sales by price band and by item;
-  - exhibitions vs showrooms;
-  - liquidation candidates, with their recovery value;
-  - the cost of holding aged stock.
-- **Data checks:** freshness, every pipeline run and load, and the past-date
-  snapshot verdicts.
-
-**Settings** holds the business rules (`kkj/rules.py`: targets, how demand is
-measured, transfer policy, discounts, cost of money), the salesperson list, the
-branch list and the change history. Saving needs a name. The dashboard saves as
-`dashboard_app`, which can write only schema `config` (`sql/config.sql`).
-Salespeople are added from sales with `python -m kkj.salespeople --hr-file <users.xlsx>`;
-existing rows, including edits made in the app, are never overwritten.
-
-Every number comes from `kkj.metrics.core` (definitions and their industry
-basis are in its docstring). Every chart has a table view. Colours follow the
-validated reference palette, with each item group keeping one colour
-throughout.
+The earlier Streamlit dashboard (`src/kkj/dashboard`) is superseded by the web
+app and no longer run.
 
 ## Tests
 
