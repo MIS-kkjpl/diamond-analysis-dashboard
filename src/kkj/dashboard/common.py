@@ -16,6 +16,41 @@ GROUP_ORDER = ["Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP 
 GROUP_COLOURS = dict(zip(GROUP_ORDER, SERIES))
 
 
+THEME_CSS = """
+<style>
+.block-container {padding-top: 1.4rem; padding-bottom: 2rem; max-width: 1400px;}
+header[data-testid="stHeader"] {height: 0; background: transparent;}
+[data-testid="stToolbar"], footer {visibility: hidden;}
+h1 {font-size: 1.55rem !important; font-weight: 650 !important; margin-bottom: .2rem !important;}
+h2, h3 {font-size: 1.05rem !important; font-weight: 600 !important; margin-top: .6rem !important;}
+[data-testid="stMetric"] {background: #fcfcfb; border: 1px solid rgba(11,11,11,.08); border-radius: 12px;
+    padding: .7rem .9rem;}
+[data-testid="stMetricLabel"] p {font-size: .78rem; color: #52514e;}
+[data-testid="stMetricValue"] {font-size: 1.45rem; font-weight: 650;}
+[data-testid="stMetricDelta"] {font-size: .78rem;}
+[data-testid="stVerticalBlockBorderWrapper"] {border-radius: 12px; background: #fcfcfb;}
+[data-testid="stSidebar"] {background: #f4f3ef;}
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {font-size: .85rem;}
+.kk-pill {display: inline-block; padding: .12rem .6rem; border-radius: 999px; font-size: .78rem;
+    background: #eef4fd; color: #1c5cab; margin-right: .35rem; border: 1px solid #cde2fb;}
+.kk-live {background: #e9f6e9; color: #006300; border-color: #bfe3bf;}
+.kk-meta {font-size: .8rem; color: #52514e;}
+.kk-title {font-size: 1.02rem; font-weight: 620; color: #0b0b0b; margin: .15rem 0;}
+.kk-impact {font-size: 1.35rem; font-weight: 650; color: #0b0b0b; text-align: right; line-height: 1.2;}
+.kk-impact-sub {font-size: .76rem; color: #52514e; text-align: right;}
+</style>
+"""
+
+
+def apply_theme():
+    """Dashboard look: tight spacing, card metrics, quiet chrome (call once per run)."""
+    st.markdown(THEME_CSS, unsafe_allow_html=True)
+
+
+def pill(text, live=False):
+    return f'<span class="kk-pill{" kk-live" if live else ""}">{text}</span>'
+
+
 def indian(n, decimals=0):
     """1234567.8 -> '12,34,568' (Indian digit grouping)."""
     if n is None or (isinstance(n, float) and math.isnan(n)):

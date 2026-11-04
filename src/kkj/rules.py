@@ -49,6 +49,11 @@ RULES = [
          "₹", "Taxable value boundaries between price bands.", "list"),
     Rule("ct_band_edges", "Demand", "Diamond weight band edges", [0.1, 0.25, 0.5, 1.0, 2.0], "ct",
          "Diamond weight boundaries between carat bands.", "list"),
+    Rule("no_buy_groups", "Demand", "Never suggest buying", ["Broken Dia Jew", "Customer Diamond"], "",
+         "Item groups that don't come from suppliers (customers' broken or own pieces): no reorder or "
+         "pause-buying suggestions for them.", "list",
+         choices=("Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND", "Broken Dia Jew",
+                  "Customer Diamond")),
     # ── transfers ──
     Rule("transfer_enabled", "Transfers", "Suggest transfers between branches", True, "",
          "Move pieces from a branch with excess to one short of the same group.", "bool"),

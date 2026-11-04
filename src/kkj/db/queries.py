@@ -1,0 +1,83 @@
+"""
+Read queries shared by the dashboard (cached in kkj.dashboard.data) and the decision
+engine (kkj.brain.run). Each takes an open SQLAlchemy connection and returns a DataFrame.
+"""
+import pandas as pd
+from sqlalchemy import text
+
+STOCK_COLUMNS = """snapshot_date, barcode, label_no, branch, location, item_class_group, item_name,
+    category, supplier, pcs, gross_wt, net_wt, dia_wt, dia_amt, rate, item_amt, taxable_amount, age_days,
+    days_from_branch_in, branch_in_date, coalesce(label_dt, labeling_date) AS label_date"""
+
+
+def read(conn, sql, **params):
+    return pd.read_sql(text(sql), conn, params=params)
+
+
+def stock_latest(conn):
+    """Every label in the latest production snapshot (erp.stock_snapshot)."""
+    return read(conn, f"""SELECT {STOCK_COLUMNS} FROM erp.stock_snapshot
+                         WHERE snapshot_date = (SELECT max(snapshot_date) FROM erp.stock_snapshot)""")
+
+
+def stock_on(conn, snapshot_date):
+    return read(conn, f"SELECT {STOCK_COLUMNS} FROM erp.stock_snapshot WHERE snapshot_date = :d", d=snapshot_date)
+
+
+def stock_series(conn):
+    """Company stock totals per date, best source per date (ERP daily > ERP as-on > legacy file)."""
+    df = read(conn, """
+        SELECT snapshot_date, 'ERP daily' AS source, 1 AS rank,
+               sum(coalesce(taxable_amount, item_amt)) AS value, sum(pcs) AS pcs, count(*) AS labels
+        FROM erp.stock_snapshot WHERE item_class_group <> 'Customer Diamond' GROUP BY 1
+        UNION ALL
+        SELECT snapshot_date, CASE source WHEN 'erp_asof' THEN 'ERP as-on' ELSE 'Legacy file' END,
+               CASE source WHEN 'erp_asof' THEN 2 ELSE 3 END,
+               sum(coalesce(taxable_amount, item_amt)), sum(pcs), count(*)
+        FROM stock_hist.snapshot WHERE item_class_group <> 'Customer Diamond' GROUP BY 1, 2, 3""")
+    df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
+    df = df.sort_values(["snapshot_date", "rank"]).drop_duplicates("snapshot_date")
+    return df.drop(columns="rank").reset_index(drop=True)
+
+
+def stock_history(conn, date_from):
+    """Piece-level company stock on every snapshot date since date_from, best source per date.
+
+    value is on the common basis (taxable, else item_amt); age = snapshot date - label date.
+    """
+    df = read(conn, """
+        WITH all_rows AS (
+            SELECT snapshot_date, 1 AS rank, barcode, branch, location, item_class_group, item_name, supplier, pcs,
+                   coalesce(taxable_amount, item_amt) AS value, coalesce(label_dt, labeling_date) AS label_date
+            FROM erp.stock_snapshot WHERE snapshot_date >= :d
+            UNION ALL
+            SELECT snapshot_date, CASE source WHEN 'erp_asof' THEN 2 ELSE 3 END, barcode, branch, location,
+                   item_class_group, item_name, supplier, pcs, coalesce(taxable_amount, item_amt),
+                   coalesce(label_dt, labeling_date)
+            FROM stock_hist.snapshot WHERE snapshot_date >= :d),
+        best AS (SELECT snapshot_date, min(rank) AS rank FROM all_rows GROUP BY 1)
+        SELECT a.* FROM all_rows a JOIN best USING (snapshot_date, rank)
+        WHERE a.item_class_group <> 'Customer Diamond'""", d=date_from)
+    df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
+    df["age"] = (df["snapshot_date"] - pd.to_datetime(df["label_date"])).dt.days
+    df["source"] = df.pop("rank").map({1: "ERP daily", 2: "ERP as-on", 3: "Legacy file"})
+    return df
+
+
+def sales_lines(conn, date_from):
+    """Sales lines from sales.v_sales_line (ERP where loaded, legacy before) since date_from."""
+    df = read(conn, """
+        SELECT source, sale_date, bill_no, barcode, label_no, item_name, category, item_class_group,
+               branch, location, salesman, supplier, pcs, dia_wt, item_amt, taxable_amount,
+               age_days_at_sale, inventory_ref_code, orig_bill_no, orig_sale_date, sales_return_done
+        FROM sales.v_sales_line WHERE sale_date >= :d""", d=date_from)
+    df["sale_date"] = pd.to_datetime(df["sale_date"])
+    return df
+
+
+def branches(conn):
+    return read(conn, "SELECT erp_branch, short_name, kind, active FROM config.branch")
+
+
+def salespeople(conn):
+    return read(conn, "SELECT sales_code, name, branch, kind, active FROM config.salesperson")
