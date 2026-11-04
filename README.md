@@ -152,7 +152,7 @@ can be dropped and reloaded without touching `erp`.
 
 ```
 .venv\Scripts\python -m pip install -e ".[dashboard]"     # once
-.venv\Scripts\streamlit run src\kkj\dashboardpp.py    # http://localhost:8501
+.venv\Scripts\streamlit run src\kkj\dashboard\app.py    # http://localhost:8501
 ```
 
 Read-only: the app connects as `powerbi_reader`. Pages:
