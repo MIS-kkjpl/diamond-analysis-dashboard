@@ -69,9 +69,14 @@ recorded in `erp.etl_run_log`. Re-running a day replaces that day's rows.
   snapshot checks in `kkj/checks/snapshot.py` pass.
 - Verified on 30/06/2026: the labels, pieces, weights, locations and label dates
   were 100% identical to the verified legacy snapshot.
-- **Values are not reliable in this mode.** `item_amt` leaves out the metal value
-  for many labels (₹160 Cr vs ₹239 Cr). Use it for pieces and carats only until the
-  report's rate setting is resolved.
+- **Value: use `taxable_amount`.** In this mode `item_amt` leaves out the metal
+  for many labels; `taxable_amount` holds the full pre-GST value (30/06/2026:
+  ₹239.26 Cr vs ₹238.63 Cr in the legacy file, 0.3% apart; DTP15907 =
+  ₹3,39,407.52 as on the ERP screen).
+
+**Value basis everywhere: `taxable_amount` (before GST).** Sales revenue and
+stock value (current and as-on) both use it, so stock turn compares like with
+like. Legacy files only have `item_amt`, which is within about 0.4% of it.
 
 ## Sales pipeline
 
