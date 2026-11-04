@@ -1,5 +1,5 @@
 """
-KKJ Diamond Analytics: the web app (FastAPI + Jinja2 templates + HTMX + Tabler).
+Stockwise: inventory and sales intelligence, the web app (FastAPI + Jinja2 templates + HTMX + Tabler).
 
 Reads and writes through dashboard_app (writes only brain and config). Pages are plain
 HTML templates in web/templates; HTMX swaps parts of a page (a card, the list, the
@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from kkj.web import admin, analytics, exports, pages, recommendations
 from kkj.web.common import HERE, status, templates
 
-app = FastAPI(title="KKJ Diamond Analytics", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title="Stockwise", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 app.include_router(recommendations.router)
 app.include_router(pages.router)

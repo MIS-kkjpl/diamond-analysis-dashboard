@@ -1,8 +1,14 @@
-# KKJ diamond analysis dashboard
+# Stockwise
 
-Internal diamond inventory and sales analytics for KKJ: daily ERP pipelines into
-PostgreSQL, a tested metric library (stock turn, sell-through, ageing, ...), data
-checks, and a Python web dashboard.
+**Inventory and sales intelligence for KKJ.**
+
+
+Stockwise turns KKJ's daily ERP stock and sales data into recommendations:
+stock transfers, replenishment, markdowns, clearance, purchasing and supplier
+reviews, each with its supporting data, approved or dismissed in the app. It is
+made of daily ERP pipelines into PostgreSQL, a tested metric library (stock
+turn, sell-through, ageing, ...), data checks, and a Python web app. Diamond
+products come first; the design extends to gold and silver.
 
 This repo replaces two earlier projects, kept locally in `archive/` for reference
 (not in git):
@@ -148,7 +154,7 @@ can be dropped and reloaded without touching `erp`.
   `age_days` is recalculated as snapshot date − label date. The file's own value,
   which is the age on the July 2026 export day, is kept in `age_days_reported`.
 
-## Web app (KKJ Diamond Analytics)
+## Web app (Stockwise)
 
 ```
 .venv\Scripts\python -m pip install -e ".[web]"                       # once
