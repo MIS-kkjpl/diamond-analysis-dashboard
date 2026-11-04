@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Overview · KKJ Diamond Brain{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
+{% block pretitle %}Monitor{% endblock %}
+{% block page_title %}Overview{% endblock %}
+{% block content %}
+{% if not h %}
+<div class="empty"><p class="empty-title">No stock snapshot yet</p></div>
+{% else %}
+{% macro kpi(label, value, sub, icon, colour) -%}
+<div class="col-sm-6 col-lg">
+  <div class="card card-sm"><div class="card-body">
+    <div class="d-flex align-items-center mb-1">
+      <span class="avatar avatar-sm bg-{{ colour }}-lt me-2"><i class="ti {{ icon }}"></i></span>
+      <div class="subheader">{{ label }}</div>
+    </div>
+    <div class="h1 mb-0">{{ value }}</div>
+    <div class="text-secondary small">{{ sub }}</div>
+  </div></div>
+</div>
+{%- endmacro %}
+<div class="row row-cards mb-3">
+  {{ kpi("Stock value", h.stock_value | money,
+         (("▲ " if h.change_7d > 0 else "▼ ") ~ ((h.change_7d if h.change_7d > 0 else -h.change_7d) | money) ~ " vs " ~ (h.change_vs | date("%d %b"))) if h.change_7d is not none else "",
+         "ti-diamond", "blue") }}
+  {{ kpi("Pieces in stock", h.pcs | num, (h.labels | num) ~ " labels", "ti-packages", "azure") }}
+  {{ kpi("Net sales this FY", h.net_sales_fy | money, "returns " ~ (h.returns_share | pct) ~ " of gross", "ti-receipt", "green") }}
+  {{ kpi("Stock turn (annualised)", ("%.2f×" | format(h.turn)) if h.turn == h.turn else "–",
+         (h.days_of_stock | num) ~ " days of stock", "ti-refresh", "purple") }}
+  {{ kpi("Value aged over " ~ h.aged_days ~ " d", h.aged_share | pct, h.aged_value | money, "ti-hourglass", "orange") }}
+</div>
+<div class="small text-secondary mb-3">Stock as of {{ h.as_of | date }} · sales {{ h.fy_start | date }} to {{ h.sales_to | date }} ·
+  value = taxable amount before GST; returns valued at the sale they reverse; turn = net sales ÷ time-weighted
+  average stock over {{ h.fy_days }} days ({{ h.snapshots_in_fy }} snapshots); retail value on both sides (no cost data).</div>
+
+<div class="row row-cards">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Net sales by month</h3></div>
+      <div class="card-body"><div id="c-monthly"></div>
+        <details class="small mt-2"><summary>Table</summary>
+          <table class="table table-sm"><thead><tr><th>Month</th><th>Source</th><th class="text-end">Net sales</th><th class="text-end">Net pcs</th></tr></thead>
+          <tbody>{% for r in h.monthly_rows %}<tr><td>{{ r.month }}</td><td>{{ r.source }}</td><td class="text-end">{{ r.net | money }}</td><td class="text-end">{{ r.pcs | num }}</td></tr>{% endfor %}</tbody></table>
+        </details>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Stock value over time</h3></div>
+      <div class="card-body"><div id="c-series"></div>
+        <details class="small mt-2"><summary>Table</summary>
+          <table class="table table-sm"><thead><tr><th>Date</th><th>Source</th><th class="text-end">Value</th><th class="text-end">Pcs</th></tr></thead>
+          <tbody>{% for r in h.series_rows %}<tr><td>{{ r.snapshot_date }}</td><td>{{ r.source }}</td><td class="text-end">{{ r.value | money }}</td><td class="text-end">{{ r.pcs | num }}</td></tr>{% endfor %}</tbody></table>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if charts %}
+<script>
+  for (const [id, fig] of [["c-monthly", {{ charts.monthly | safe }}], ["c-series", {{ charts.series | safe }}]]) {
+    Plotly.newPlot(id, fig.data, fig.layout, {displayModeBar: false, responsive: true});
+  }
+</script>
+{% endif %}
+{% endblock %}

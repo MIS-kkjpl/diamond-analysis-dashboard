@@ -1,0 +1,9 @@
+{% if status %}
+<span class="badge bg-green-lt"><span class="status-dot status-dot-animated status-green me-1"></span>Live</span>
+<span class="badge bg-blue-lt">Stock {{ status.stock_as_of | date("%d %b") }}</span>
+<span class="badge bg-blue-lt">Sales to {{ status.sales_to | date("%d %b") }}</span>
+<span class="badge bg-secondary-lt" title="Decisions last refreshed {{ status.finished | date('%d %b %Y %H:%M') }}">
+  Refreshed {{ status.finished | ago }}</span>
+{% else %}
+<span class="badge bg-yellow-lt">Decisions not refreshed yet</span>
+{% endif %}

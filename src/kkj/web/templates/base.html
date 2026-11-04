@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}KKJ Diamond Brain{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="page">
+  {# ── sidebar ── #}
+  <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+    <div class="container-fluid">
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <h1 class="navbar-brand navbar-brand-autodark">
+        <a href="/decisions" class="text-reset text-decoration-none"><i class="ti ti-diamond me-1"></i>KKJ Diamond Brain</a>
+      </h1>
+      <div class="collapse navbar-collapse" id="sidebar-menu">
+        <ul class="navbar-nav pt-lg-3">
+          {% macro item(key, href, icon, label, classic=False) -%}
+          <li class="nav-item {% if active == key %}active{% endif %}">
+            <a class="nav-link" href="{{ href }}" {% if classic %}target="_blank"{% endif %}>
+              <span class="nav-link-icon"><i class="ti {{ icon }}"></i></span>
+              <span class="nav-link-title">{{ label }}</span>
+              {% if classic %}<span class="badge badge-sm bg-secondary-lt ms-auto">classic</span>{% endif %}
+            </a>
+          </li>
+          {%- endmacro %}
+          <li class="nav-section">Decide</li>
+          {{ item("decisions", "/decisions", "ti-bolt", "Decisions") }}
+          <li class="nav-section">Monitor</li>
+          {{ item("overview", "/overview", "ti-chart-line", "Overview") }}
+          {{ item("stock", classic ~ "/stock", "ti-packages", "Stock health", True) }}
+          {{ item("sales", classic ~ "/sales", "ti-receipt", "Sales", True) }}
+          <li class="nav-section">Learn</li>
+          {{ item("insights", classic ~ "/insights", "ti-bulb", "Insights", True) }}
+          <li class="nav-section">System</li>
+          {{ item("checks", "/checks", "ti-checklist", "Data checks") }}
+          {{ item("settings", classic ~ "/settings", "ti-adjustments", "Settings", True) }}
+        </ul>
+      </div>
+    </div>
+  </aside>
+
+  <div class="page-wrapper">
+    {# ── top bar: live status + who you are ── #}
+    <div class="topbar d-print-none">
+      <div class="container-xl d-flex flex-wrap align-items-center gap-2 py-2">
+        <div id="live" hx-get="/status" hx-trigger="every 60s" hx-swap="innerHTML">{% include "_status.html" %}</div>
+        <div class="ms-auto">
+          {% if who %}
+            <span class="text-secondary small"><i class="ti ti-user-circle"></i> {{ who }}</span>
+            <a href="#" class="small ms-2" onclick="document.getElementById('me').classList.toggle('d-none');return false;">change</a>
+          {% endif %}
+          <form id="me" class="d-inline-flex gap-1 {% if who %}d-none{% endif %}" hx-post="/me">
+            <input name="name" class="form-control form-control-sm" placeholder="Your name (recorded with decisions)"
+                   value="{{ who }}" style="width: 16rem" required>
+            <button class="btn btn-sm btn-primary">Save</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-header d-print-none">
+      <div class="container-xl">
+        <div class="row g-2 align-items-center">
+          <div class="col">
+            <div class="page-pretitle">{% block pretitle %}{% endblock %}</div>
+            <h2 class="page-title">{% block page_title %}{% endblock %}</h2>
+          </div>
+          <div class="col-auto ms-auto d-flex gap-2">{% block actions %}{% endblock %}</div>
+        </div>
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="container-xl">{% block content %}{% endblock %}</div>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/js/tabler.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

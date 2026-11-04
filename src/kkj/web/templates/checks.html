@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Data checks · KKJ Diamond Brain{% endblock %}
+{% block pretitle %}System{% endblock %}
+{% block page_title %}Data checks{% endblock %}
+{% block content %}
+{% macro table(title, icon, rows, note="") -%}
+<div class="col-12">
+  <div class="card">
+    <div class="card-header"><h3 class="card-title"><i class="ti {{ icon }} me-2"></i>{{ title }}</h3></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-vcenter card-table">
+        {% if rows %}
+        <thead><tr>{% for k in rows[0].keys() %}<th>{{ k | replace("_", " ") }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for r in rows %}<tr>{% for k, v in r.items() %}<td>
+          {%- if k == "status" -%}
+            <span class="badge bg-{{ {'success': 'green', 'loaded': 'green', 'failed': 'red', 'quarantined': 'orange', 'running': 'blue'}.get(v, 'secondary') }}-lt">{{ v }}</span>
+          {%- elif k in ("started",) %}{{ v | date("%d %b %Y %H:%M") }}
+          {%- elif v is none %}<span class="text-secondary">–</span>
+          {%- else %}{{ v | string | truncate(90) }}{% endif -%}
+        </td>{% endfor %}</tr>{% endfor %}
+        </tbody>
+        {% endif %}
+      </table>
+    </div>
+    {% if note %}<div class="card-footer small text-secondary">{{ note }}</div>{% endif %}
+  </div>
+</div>
+{%- endmacro %}
+<div class="row row-cards">
+  {{ table("Decision refreshes", "ti-bolt", brain_runs, "Each refresh re-runs every rule on the latest stock and sales and updates the decisions.") }}
+  {{ table("Stock pipeline runs", "ti-packages", stock_runs) }}
+  {{ table("Sales loads", "ti-receipt", sales_loads, "A failed load never leaves half-written data; a later successful load of the same range replaces it.") }}
+  {{ table("Past-date stock snapshots", "ti-calendar-time", snapshots, "Quarantined snapshots failed a check and are not used anywhere.") }}
+</div>
+{% endblock %}

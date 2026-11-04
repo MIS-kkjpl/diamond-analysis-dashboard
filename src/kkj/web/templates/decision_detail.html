@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ a.title }} · KKJ Diamond Brain{% endblock %}
+{% block pretitle %}<a href="/decisions"><i class="ti ti-arrow-left"></i> Decisions</a> · {{ a.label }}{% endblock %}
+{% block page_title %}Decision #{{ a.action_id }}{% endblock %}
+{% block actions %}
+{% if a.pieces %}<a class="btn btn-outline-secondary" href="/exports/decision/{{ a.action_id }}.xlsx"><i class="ti ti-download"></i> Pieces (Excel)</a>{% endif %}
+{% endblock %}
+{% block content %}
+{% include "_card.html" %}
+<div class="row row-cards mt-1">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-dots me-2"></i>Why: the numbers behind it</h3></div>
+      <table class="table table-sm table-vcenter card-table">
+        <tbody>
+        {% for key, value in flatten(a.evidence) %}
+          <tr><td class="text-secondary">{{ key }}</td><td class="text-end">{{ value }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="ti ti-history me-2"></i>History</h3></div>
+      <div class="list-group list-group-flush">
+        {% for e in history %}
+        <div class="list-group-item py-2">
+          <div class="d-flex justify-content-between small">
+            <span><b>{{ e.event | replace("_", " ") }}</b> · {{ e.by }}</span>
+            <span class="text-secondary">{{ e.at | date("%d %b %Y %H:%M") }}</span>
+          </div>
+          {% if e.note %}<div class="small text-secondary">“{{ e.note }}”</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% if a.pieces %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title"><i class="ti ti-diamond me-2"></i>Pieces ({{ a.pieces | length }})</h3></div>
+      <div class="table-responsive">
+        <table class="table table-sm table-vcenter card-table table-striped">
+          <thead><tr>{% for k in a.pieces[0].keys() %}<th>{{ k | replace("_", " ") }}</th>{% endfor %}</tr></thead>
+          <tbody>
+          {% for p in a.pieces %}
+            <tr>{% for k, v in p.items() %}<td {% if v is number %}class="text-end"{% endif %}>
+              {%- if k == "value" or k == "recovery" %}{{ v | money }}{% elif v is number %}{{ v | num(2 if v % 1 else 0) }}{% else %}{{ v if v is not none else "–" }}{% endif -%}
+            </td>{% endfor %}</tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

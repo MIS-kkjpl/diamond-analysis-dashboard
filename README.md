@@ -148,7 +148,37 @@ can be dropped and reloaded without touching `erp`.
   `age_days` is recalculated as snapshot date − label date. The file's own value,
   which is the age on the July 2026 export day, is kept in `age_days_reported`.
 
-## Dashboard
+## Web app (KKJ Diamond Brain)
+
+```
+.venv\Scripts\python -m pip install -e ".[web]"                       # once
+.venv\Scripts\uvicorn kkj.web.app:app --host 0.0.0.0 --port 8600      # http://localhost:8600
+```
+
+Stack: FastAPI, Jinja2 templates (`src/kkj/web/templates`, plain HTML), HTMX
+(`hx-*` attributes update part of a page) and Tabler (a dashboard UI kit loaded
+from a CDN). There is no JavaScript build step. The app connects as
+`dashboard_app`, which can write only schemas `brain` and `config`.
+
+- **Decisions:** the live inbox (`brain.action`):
+  - filter by status, type, branch, or search;
+  - approve, reject, snooze, mark done or add a note (recorded with your name,
+    which is kept in a browser cookie; there are no logins yet);
+  - each decision has its own page (`/decisions/<id>`) with its evidence,
+    pieces and history;
+  - exports: transfer slips per branch, offer lists, the buying list.
+- **Overview, Data checks** are also built in the web app. Stock, Sales,
+  Insights and Settings open the Streamlit app (marked "classic") until they
+  are moved.
+- **Refreshing decisions:** `python -m kkj.brain.run` re-runs every rule on the
+  latest data. A decision keeps its identity across refreshes:
+  - it reopens if its problem comes back;
+  - it closes by itself when the problem clears;
+  - once approved, it is marked done when the problem clears.
+
+  It runs after the overnight load and from the **Refresh decisions** button.
+
+## Dashboard (Streamlit, classic)
 
 ```
 .venv\Scripts\python -m pip install -e ".[dashboard]"     # once

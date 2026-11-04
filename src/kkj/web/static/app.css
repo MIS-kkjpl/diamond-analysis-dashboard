@@ -1,0 +1,16 @@
+/* Small additions to Tabler for the decision feed. */
+.topbar { background: var(--tblr-bg-surface); border-bottom: 1px solid var(--tblr-border-color); }
+.nav-section { padding: 1rem 1rem .25rem; font-size: .68rem; letter-spacing: .06em; text-transform: uppercase;
+               color: rgba(255, 255, 255, .45); }
+.decision-card { border-left: 3px solid transparent; transition: border-color .2s; }
+.decision-card.status-approved { border-left-color: var(--tblr-green); }
+.decision-card.status-rejected { border-left-color: var(--tblr-red); opacity: .8; }
+.decision-card.status-snoozed { border-left-color: var(--tblr-yellow); }
+.decision-card.status-done, .decision-card.status-resolved { opacity: .75; }
+.decision-title { font-size: 1rem; font-weight: 600; color: var(--tblr-body-color); text-decoration: none; }
+.decision-title:hover { text-decoration: underline; }
+.impact { font-size: 1.35rem; font-weight: 650; line-height: 1.2; }
+.impact-col { min-width: 11rem; }
+.note-box summary { list-style: none; }
+.note-box summary::-webkit-details-marker { display: none; }
+.htmx-request.btn { opacity: .6; }

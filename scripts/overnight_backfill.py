@@ -5,6 +5,7 @@ One-off overnight ERP backfill (run after the 2 am server backups, e.g. at 4 am)
   2. stock as on every Wednesday from 01/04/2026 to the last one before today
      -> stock_hist (source erp_asof), each through the snapshot checks
   3. today's stock -> erp.stock_snapshot (the production pipeline)
+  4. refresh the decisions (python -m kkj.brain.run)
 
 Each report runs as its own `python -m kkj.pipelines.stock ...` process, with a
 pause between them; one failure is logged and the rest carry on. Summary in
@@ -92,6 +93,11 @@ def main():
         if i:
             time.sleep(a.pause)
         results.append(run(s, log))
+    # 4. refresh the decisions on the new data
+    r = subprocess.run([str(PYTHON), "-m", "kkj.brain.run", "--trigger", "pipeline"], cwd=ROOT, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace", env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    log(f"decisions refresh: exit {r.returncode}; {(r.stdout or r.stderr).strip().splitlines()[-1:]}")
+    results.append(r.returncode == 0)
     log(f"Done: {sum(results)}/{len(results)} succeeded.")
     sys.exit(0 if all(results) else 1)
 
