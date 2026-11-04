@@ -127,7 +127,7 @@ def act(request: Request, action_id: int, verb: str, note: str = Form(default=""
     """Record a person's response; returns the updated card plus the refreshed summary."""
     name = who(request)
     if not name:
-        return Response("Type your name at the top first.", status_code=400)
+        return Response("Sign in first.", status_code=400)
     if verb not in ACTIONS:
         return Response("Unknown action", status_code=400)
     with engine().begin() as conn:

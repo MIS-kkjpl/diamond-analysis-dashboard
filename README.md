@@ -165,9 +165,41 @@ can be dropped and reloaded without touching `erp`.
 (`src/kkj/web/templates`, plain HTML), HTMX (`hx-*` attributes update part of a
 page) and Tabler (a dashboard UI kit from a CDN). Charts are Plotly figures
 built in Python (`kkj/web/charts.py`). There is no JavaScript build step. The app
-connects as `dashboard_app`, which can write only schemas `brain` and `config`.
-Your name is kept in a browser cookie and recorded with every approval, note
-and settings change; there are no logins yet.
+connects as `dashboard_app`, which can write only schemas `brain` and `config`
+(plus sessions and the sign-in log in `auth`).
+
+### Sign-in
+
+Every page needs a signed-in account. There are no roles: everyone signed in
+sees and can do everything. The account's display name is recorded with every
+approval, note and settings change. Accounts are managed from the command line
+only:
+
+```
+.venv\Scripts\python -m kkj.web.users add kartik --name "Kartik Riyal"   # asks for the password
+.venv\Scripts\python -m kkj.web.users list
+.venv\Scripts\python -m kkj.web.users reset <username>      # new password, signed out everywhere
+.venv\Scripts\python -m kkj.web.users disable <username>    # someone leaves
+.venv\Scripts\python -m kkj.web.users enable <username>     # also clears a lock-out
+.venv\Scripts\python -m kkj.web.users log                   # recent sign-in attempts
+```
+
+- **Passwords** are hashed with Argon2id; at least 10 characters, no forced
+  symbols (NIST SP 800-63B). Anyone can change their own from **Account** (top
+  right), which signs out their other browsers.
+- **Sessions** are kept in `auth.session`. The cookie is HttpOnly and
+  SameSite=Lax, and the table stores only a SHA-256 of the token. A session
+  ends after 12 hours unused (the pages' background polling doesn't count) or
+  7 days in all; see `SESSION_*` in `.env.example`. Signing out ends it on the
+  server.
+- **Lock-out:** 5 wrong passwords in a row lock the account for 15 minutes. The
+  message never says whether the username or the password was wrong. Every
+  attempt is logged in `auth.login_event`.
+- **Protection:** POSTs from another site are refused (Origin check). Pages are
+  sent with `no-store`, `X-Frame-Options: DENY` and `nosniff`.
+- **HTTPS:** on plain HTTP a password can be read by anyone able to watch the
+  office network. Serve over HTTPS (a reverse proxy or uvicorn's
+  `--ssl-keyfile/--ssl-certfile`), then set `COOKIE_SECURE=true`.
 
 | Section | Page | What it does |
 |---|---|---|

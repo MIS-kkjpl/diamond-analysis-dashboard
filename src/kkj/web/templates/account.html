@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Account · Stockwise{% endblock %}
+{% block pretitle %}Account{% endblock %}
+{% block page_title %}{{ who }}{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8 col-lg-6">
+    <form class="card" method="post" action="/account/password">
+      <div class="card-header"><h3 class="card-title"><i class="ti ti-key"></i> Change password</h3></div>
+      <div class="card-body">
+        {% if error %}<div class="alert alert-danger"><i class="ti ti-alert-circle"></i> {{ error }}</div>{% endif %}
+        {% if saved %}<div class="alert alert-success"><i class="ti ti-check"></i> Password changed. Any other signed-in browsers have been signed out.</div>{% endif %}
+        <input type="text" name="username" value="{{ request.state.user.username }}" autocomplete="username" hidden>
+        <div class="mb-3">
+          <label class="form-label" for="current">Current password</label>
+          <input id="current" name="current" type="password" class="form-control" autocomplete="current-password" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="new">New password</label>
+          <input id="new" name="new" type="password" class="form-control" autocomplete="new-password" minlength="10" required>
+          <div class="form-hint">At least 10 characters. A short phrase is easier to remember than symbols.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="confirm">New password again</label>
+          <input id="confirm" name="confirm" type="password" class="form-control" autocomplete="new-password" required>
+        </div>
+      </div>
+      <div class="card-footer text-end"><button class="btn btn-primary">Change password</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

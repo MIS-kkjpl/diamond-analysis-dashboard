@@ -1,6 +1,6 @@
 """
-Shared pieces of the web app: database engine, templates and their filters, the current
-user's name (a cookie; there are no logins yet), and the live status shown on every page.
+Shared pieces of the web app: database engine, templates and their filters, the signed-in
+user's name (see web/auth.py), and the live status shown on every page.
 """
 import json
 import math
@@ -51,7 +51,9 @@ def clear_cache():
 
 
 def who(request: Request):
-    return (request.cookies.get("who") or "").strip()
+    """The signed-in person's display name, recorded with approvals, notes and settings changes."""
+    user = getattr(request.state, "user", None)
+    return user["display_name"] if user else ""
 
 
 def _date(value, fmt="%d %b %Y"):

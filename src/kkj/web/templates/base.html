@@ -58,15 +58,11 @@
     <div class="topbar d-print-none">
       <div class="container-xl d-flex flex-wrap align-items-center gap-2 py-2">
         <div id="live" hx-get="/status" hx-trigger="every 60s" hx-swap="innerHTML">{% include "_status.html" %}</div>
-        <div class="ms-auto">
-          {% if who %}
-            <span class="text-secondary small"><i class="ti ti-user-circle"></i> {{ who }}</span>
-            <a href="#" class="small ms-2" onclick="document.getElementById('me').classList.toggle('d-none');return false;">change</a>
-          {% endif %}
-          <form id="me" class="d-inline-flex gap-1 {% if who %}d-none{% endif %}" hx-post="/me">
-            <input name="name" class="form-control form-control-sm" placeholder="Your name (recorded with approvals)"
-                   value="{{ who }}" style="width: 16rem; max-width: 60vw" required>
-            <button class="btn btn-sm btn-primary">Save</button>
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <a href="/account" class="small text-secondary text-decoration-none" title="Account and password">
+            <i class="ti ti-user-circle"></i> {{ who }}</a>
+          <form method="post" action="/logout" class="d-inline">
+            <button class="btn btn-sm btn-ghost-secondary" title="Sign out"><i class="ti ti-logout"></i> Sign out</button>
           </form>
         </div>
       </div>

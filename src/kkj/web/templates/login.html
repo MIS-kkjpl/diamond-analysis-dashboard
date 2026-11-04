@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Stockwise</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="d-flex flex-column">
+<div class="page page-center">
+  <div class="container container-tight py-4">
+    <div class="text-center mb-4">
+      <span class="login-brand"><i class="ti ti-stack-2 brand-icon"></i> Stockwise</span>
+      <div class="text-secondary small">Inventory &amp; sales intelligence</div>
+    </div>
+    <form class="card card-md" method="post" action="/login" autocomplete="on">
+      <div class="card-body">
+        <h2 class="h2 text-center mb-4">Sign in</h2>
+        {% if error %}<div class="alert alert-danger" role="alert"><i class="ti ti-alert-circle"></i> {{ error }}</div>{% endif %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="mb-3">
+          <label class="form-label" for="username">Username</label>
+          <input id="username" name="username" class="form-control" value="{{ username }}" autocomplete="username"
+                 autocapitalize="none" spellcheck="false" required {% if not username %}autofocus{% endif %}>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="password">Password</label>
+          <input id="password" name="password" type="password" class="form-control" autocomplete="current-password"
+                 required {% if username %}autofocus{% endif %}>
+        </div>
+        <button class="btn btn-primary w-100">Sign in</button>
+      </div>
+    </form>
+    <div class="text-center text-secondary small mt-3">Confidential company data. Access is limited to authorised staff.</div>
+  </div>
+</div>
+</body>
+</html>

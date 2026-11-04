@@ -85,7 +85,7 @@ async def save_rules(request: Request, section: str):
         return Response("Unknown section", status_code=404)
     if not name:
         return templates.TemplateResponse(request, "_rule_section.html",
-                                          {"s": _section_ctx(section, error="Type your name at the top first."), "who": name})
+                                          {"s": _section_ctx(section, error="Sign in first."), "who": name})
     form = await request.form()
     try:
         values = {r.key: _parse(r, form) for r in rules_mod.RULES if r.section == section}
@@ -113,7 +113,7 @@ async def _save_row(request, table, key_col, key, cols, kinds):
     if new.get("kind") not in kinds:
         return None, "Unknown type"
     if not name:
-        return None, "Type your name at the top first."
+        return None, "Sign in first."
     set_sql = ", ".join(f"{c} = :{c}" for c in cols)
     extra = ", match_status = CASE WHEN match_status = 'matched' THEN 'matched' ELSE 'manual' END" if table == "salesperson" else ""
     with engine().begin() as conn:

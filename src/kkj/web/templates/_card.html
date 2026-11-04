@@ -59,7 +59,7 @@
       </details>
       {% if a.pieces %}<span class="small text-secondary"><i class="ti ti-diamond"></i> {{ a.pieces | length }} pieces</span>{% endif %}
       <a class="small ms-auto" href="/recommendations/{{ a.action_id }}">Details <i class="ti ti-arrow-right"></i></a>
-      {% if not who %}<span class="small text-secondary">Enter your name at the top to respond</span>{% endif %}
+      {% if not who %}<span class="small text-secondary">Sign in to respond</span>{% endif %}
     </div>
     {% if just_acted %}<div class="small text-green mt-2"><i class="ti ti-check"></i> Recorded</div>{% endif %}
   </div>

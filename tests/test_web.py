@@ -1,12 +1,38 @@
-"""Web app routes against the real database (read-only, except one decision that is undone)."""
+"""Web app routes against the real database (read-only, except one decision and some settings that are undone,
+and temporary pytest accounts that are removed)."""
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from kkj import settings
+from kkj.web import auth
 from kkj.web.app import app
 
-client = TestClient(app)
+USER, PASSWORD = "pytest", "pytest-password-123"
+client = TestClient(app)          # signed in as the pytest account by the fixture below
+anon = TestClient(app)            # never signed in
+
+
+def _remove_test_accounts():
+    with settings.etl_engine().begin() as c:
+        c.execute(text("DELETE FROM auth.app_user WHERE username LIKE 'pytest%'"))
+        c.execute(text("DELETE FROM auth.login_event WHERE username LIKE 'pytest%'"))
+
+
+def _add_account(username, password):
+    with settings.etl_engine().begin() as c:
+        c.execute(text("INSERT INTO auth.app_user (username, display_name, password_hash) VALUES (:u, 'pytest', :h)"),
+                  {"u": username, "h": auth.hash_password(password)})
+
+
+@pytest.fixture(scope="module", autouse=True)
+def signed_in():
+    _remove_test_accounts()
+    _add_account(USER, PASSWORD)
+    r = client.post("/login", data={"username": USER, "password": PASSWORD}, follow_redirects=False)
+    assert r.status_code == 303 and auth.COOKIE in client.cookies
+    yield
+    _remove_test_accounts()
 
 
 def _has_decisions():
@@ -47,11 +73,11 @@ def test_detail_and_exports():
         assert r.status_code == 200 and r.content[:2] == b"PK", path
 
 
-def test_response_needs_a_name_then_records_and_is_undone():
+def test_response_needs_sign_in_then_records_and_is_undone():
     with settings.app_engine().connect() as c:
         aid = c.execute(text("SELECT action_id FROM brain.action WHERE status = 'open' LIMIT 1")).scalar()
-    assert client.post(f"/recommendations/{aid}/approve").status_code == 400    # no name, nothing recorded
-    r = TestClient(app, cookies={"who": "pytest"}).post(f"/recommendations/{aid}/approve")
+    assert anon.post(f"/recommendations/{aid}/approve", follow_redirects=False).status_code == 303   # nothing recorded
+    r = client.post(f"/recommendations/{aid}/approve")
     try:
         assert r.status_code == 200 and "APPROVED" in r.text.upper() and 'id="summary"' in r.text
     finally:
@@ -71,15 +97,15 @@ def test_analytics_and_settings_pages_render(path):
 
 
 def test_settings_save_rule_and_row_then_revert():
-    me = TestClient(app, cookies={"who": "pytest"})
+    me = client
     with settings.app_engine().connect() as c:
         aged = c.execute(text("SELECT value FROM config.setting WHERE key = 'aged_days'")).scalar()
         person = c.execute(text("SELECT sales_code, name, note FROM config.salesperson LIMIT 1")).one()
     targets = {"target_turn": "1.0", "overstock_days": "365", "understock_days": "60", "aged_days": "400",
                "max_offer_discount_pct": "15"}
     try:
-        refused = client.post("/settings/rules/Targets", data=targets).text                 # no name: refused
-        assert "alert-danger" in refused and "Saved:" not in refused
+        refused = anon.post("/settings/rules/Targets", data=targets, follow_redirects=False)  # not signed in: refused
+        assert refused.status_code == 303 and refused.headers["location"].startswith("/login")
         r = me.post("/settings/rules/Targets", data=targets)
         assert r.status_code == 200 and "Saved: A piece is aged after" in r.text
         from kkj import rules as R
@@ -104,3 +130,77 @@ def test_settings_save_rule_and_row_then_revert():
                       {"v": str(aged)})
             c.execute(text("UPDATE config.salesperson SET note = :n WHERE sales_code = :c"), {"n": person.note, "c": person.sales_code})
             c.execute(text("DELETE FROM config.change_log WHERE changed_by = 'pytest'"))
+
+
+# ── sign-in ──────────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("path", ["/recommendations", "/overview", "/settings", "/exports/transfers.xlsx",
+                                  "/recommendations/12", "/account"])
+def test_every_page_needs_sign_in(path):
+    r = anon.get(path, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/login?next=")
+    assert anon.get("/login").status_code == 200 and anon.get("/static/app.css").status_code == 200
+
+
+def test_htmx_request_without_session_is_sent_to_login():
+    r = anon.get("/recommendations/feed", headers={"HX-Request": "true"})
+    assert r.status_code == 401 and r.headers["HX-Redirect"] == "/login"
+
+
+def test_wrong_password_is_generic_and_locks_after_five():
+    _add_account("pytest_lock", PASSWORD)
+    wrong = anon.post("/login", data={"username": "pytest_lock", "password": "nope-nope-nope"})
+    unknown = anon.post("/login", data={"username": "pytest_nobody", "password": "nope-nope-nope"})
+    assert wrong.status_code == unknown.status_code == 401
+    assert "username or password is incorrect" in wrong.text and "username or password is incorrect" in unknown.text
+    for _ in range(4):
+        anon.post("/login", data={"username": "pytest_lock", "password": "nope-nope-nope"})
+    locked = anon.post("/login", data={"username": "pytest_lock", "password": PASSWORD}, follow_redirects=False)
+    assert locked.status_code == 401 and "Too many wrong attempts" in locked.text      # right password, still locked
+    with settings.app_engine().connect() as c:
+        reasons = c.execute(text("SELECT reason FROM auth.login_event WHERE username = 'pytest_lock' "
+                                 "ORDER BY event_id")).scalars().all()
+    assert reasons == ["bad_password"] * 5 + ["locked"]
+
+
+def test_sign_in_returns_to_the_page_asked_for_but_never_off_site():
+    r = TestClient(app).post("/login", data={"username": USER, "password": PASSWORD, "next": "/sales?group=x"},
+                             follow_redirects=False)
+    assert r.headers["location"] == "/sales?group=x"
+    for bad in ["https://evil.example", "//evil.example", "/\\evil.example"]:
+        r = TestClient(app).post("/login", data={"username": USER, "password": PASSWORD, "next": bad},
+                                 follow_redirects=False)
+        assert r.headers["location"] == "/recommendations"
+
+
+def test_cookie_flags_headers_and_sign_out():
+    c = TestClient(app)
+    r = c.post("/login", data={"username": USER, "password": PASSWORD}, follow_redirects=False)
+    cookie = r.headers["set-cookie"].lower()
+    assert "httponly" in cookie and "samesite=lax" in cookie
+    page = c.get("/overview")
+    assert page.headers["cache-control"] == "no-store" and page.headers["x-frame-options"] == "DENY"
+    assert "pytest" in page.text                                                     # display name in the top bar
+    token = c.cookies[auth.COOKIE]
+    c.post("/logout")
+    assert auth.session_user(token) is None                                          # ended on the server too
+    assert TestClient(app, cookies={auth.COOKIE: token}).get("/overview", follow_redirects=False).status_code == 303
+
+
+def test_post_from_another_site_is_refused():
+    r = client.post("/recommendations/1/comment", data={"note": "x"}, headers={"Origin": "http://evil.example"})
+    assert r.status_code == 403
+
+
+def test_change_password_signs_out_other_sessions():
+    _add_account("pytest_pw", PASSWORD)
+    a, b = TestClient(app), TestClient(app)
+    for c in (a, b):
+        c.post("/login", data={"username": "pytest_pw", "password": PASSWORD})
+    assert "incorrect" in a.post("/account/password", data={"current": "wrong", "new": "x" * 12, "confirm": "x" * 12}).text
+    assert "at least 10" in a.post("/account/password", data={"current": PASSWORD, "new": "short", "confirm": "short"}).text
+    r = a.post("/account/password", data={"current": PASSWORD, "new": "a-new-password-1", "confirm": "a-new-password-1"})
+    assert "Password changed" in r.text
+    assert a.get("/overview", follow_redirects=False).status_code == 200            # this browser stays signed in
+    assert b.get("/overview", follow_redirects=False).status_code == 303            # the other one is signed out
+    assert TestClient(app).post("/login", data={"username": "pytest_pw", "password": "a-new-password-1"},
+                                follow_redirects=False).status_code == 303

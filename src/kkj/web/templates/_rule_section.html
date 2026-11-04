@@ -4,7 +4,7 @@
         hx-disabled-elt="find button">
     <div class="card-header"><h3 class="card-title">{{ s.section }}</h3>
       <div class="card-actions">
-        <button class="btn btn-primary btn-sm" {% if not who %}disabled title="Type your name at the top first"{% endif %}>
+        <button class="btn btn-primary btn-sm" {% if not who %}disabled title="Sign in first"{% endif %}>
           <i class="ti ti-device-floppy"></i> Save {{ s.section | lower }}</button>
       </div>
     </div>

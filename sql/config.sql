@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS config.salesperson (
     updated_by     text
 );
 
--- Every change made from the app: what, when, by whom (typed in; there are no logins yet)
+-- Every change made from the app: what, when, by whom (the signed-in account's display name)
 CREATE TABLE IF NOT EXISTS config.change_log (
     change_id    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     changed_at   timestamptz NOT NULL DEFAULT now(),
