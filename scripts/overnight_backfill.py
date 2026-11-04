@@ -2,16 +2,18 @@
 One-off overnight ERP backfill (run after the 2 am server backups, e.g. at 4 am):
 
   1. pg_dump kkj_erp_stock to C:\\Users\\kartik.riyal\\Software\\db_backups (safety copy)
-  2. stock as on every Wednesday from 01/04/2026 to the last one before today
-     -> stock_hist (source erp_asof), each through the snapshot checks
-  3. today's stock -> erp.stock_snapshot (the production pipeline)
-  4. refresh the decisions (python -m kkj.brain.run)
+  2. today's stock -> erp.stock_snapshot (the production pipeline), first so nothing can crowd it out
+  3. stock as on every Wednesday from 01/04/2026 to the last one before today
+     -> stock_hist (source erp_asof), each through the snapshot checks. No new pull starts
+     after --stop-at (default 09:00), to keep the ERP free in business hours; the ones
+     skipped are listed in the log for another night.
+  4. refresh the recommendations (python -m kkj.brain.run), always
 
 Each report runs as its own `python -m kkj.pipelines.stock ...` process, with a
 pause between them; one failure is logged and the rest carry on. Summary in
 logs/overnight_<stamp>.log.
 
-Run:  .venv\\Scripts\\python scripts\\overnight_backfill.py [--plan] [--from 01/04/2026] [--pause 30]
+Run:  .venv\\Scripts\\python scripts\\overnight_backfill.py [--plan] [--from 01/04/2026] [--pause 30] [--stop-at 09:00]
       --plan prints what would run and exits (no ERP, no database).
 """
 import argparse
@@ -65,10 +67,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--from", dest="start", default="01/04/2026")
     ap.add_argument("--pause", type=float, default=30)
+    ap.add_argument("--stop-at", default="09:00", help="start no ERP pull after this time (HH:MM)")
     ap.add_argument("--plan", action="store_true")
     a = ap.parse_args()
     dates = weekly_dates(datetime.strptime(a.start, "%d/%m/%Y").date(), date.today())
-    steps = [["--as-on", "--date", f"{d:%d/%m/%Y}"] for d in dates] + [[]]
+    steps = [[]] + [["--as-on", "--date", f"{d:%d/%m/%Y}"] for d in dates]
+    stop_at = datetime.combine(date.today(), datetime.strptime(a.stop_at, "%H:%M").time())
 
     if a.plan:
         print(f"backup kkj_erp_stock, then {len(steps)} reports ({len(dates)} as-on + today's production):")
@@ -92,6 +96,10 @@ def main():
     for i, s in enumerate(steps):
         if i:
             time.sleep(a.pause)
+        if datetime.now() >= stop_at:
+            log(f"Stopped at {a.stop_at}; not run tonight: " + ", ".join(x[-1] for x in steps[i:]))
+            results.append(False)
+            break
         results.append(run(s, log))
     # 4. refresh the decisions on the new data
     r = subprocess.run([str(PYTHON), "-m", "kkj.brain.run", "--trigger", "pipeline"], cwd=ROOT, capture_output=True,
