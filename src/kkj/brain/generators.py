@@ -138,7 +138,7 @@ def transfers_and_understock(stock, sales, rules, showrooms):
                     r, d = g.loc[receiver], g.loc[donor]
                     actions.append(_action(
                         "transfer", f"{group}|{donor}|{receiver}",
-                        f"Move {len(pieces)} {group} from {short(donor)} to {short(receiver)}",
+                        f"Transfer {len(pieces)} {group} from {short(donor)} to {short(receiver)}",
                         f"{short(receiver)} sells {r['sold_pcs']:.0f} in {window} days and holds {r['pcs']:.0f} "
                         f"({r['days_of_stock']:.0f} days of stock); {short(donor)} holds {d['pcs']:.0f} and sold "
                         f"{d['sold_pcs']:.0f} ({'no sales' if np.isinf(d['days_of_stock']) else f'{d.days_of_stock:.0f} days of stock'}).",
@@ -152,7 +152,7 @@ def transfers_and_understock(stock, sales, rules, showrooms):
             if wanted > 0 and r["days_of_stock"] < under and buyable:
                 actions.append(_action(
                     "understock", f"{group}|{receiver}",
-                    f"{short(receiver)} is running short of {group}: buy {wanted}",
+                    f"Replenish {group} at {short(receiver)}: {wanted} pieces",
                     f"Sells {r['sold_pcs']:.0f} in {window} days ({r['per_day'] * 30.44:.1f} a month) and holds "
                     f"{r['pcs']:.0f}: {r['days_of_stock']:.0f} days of stock. No other showroom has spare to send.",
                     r["per_day"] * 91 * r["avg_piece_value"],
@@ -182,9 +182,9 @@ def offers(stock, sales, rules, showrooms, exclude_barcodes=()):
         value = g["value"].sum()
         actions.append(_action(
             "offer", f"{branch}|{item}",
-            f"Put {len(g)} aged {item} at {short(branch)} on offer",
+            f"Mark down {len(g)} aged {item} at {short(branch)}",
             f"{len(g)} pieces over {rules['aged_days']} days old in groups that hold more than "
-            f"{rules['overstock_days']} days of stock at this showroom. Suggested offer by age: "
+            f"{rules['overstock_days']} days of stock at this showroom. Suggested markdown by age: "
             f"{g['offer_pct'].min():g}%–{g['offer_pct'].max():g}%.",
             value, f"{money(value)} of aged stock to turn into cash",
             confidence(g["sold_pcs"].max()),
@@ -205,9 +205,9 @@ def liquidation(stock, rules):
         value, rec = g["value"].sum(), g["recovery"].sum()
         actions.append(_action(
             "liquidate", f"{branch}",
-            f"Decide on {len(g)} pieces over {rules['liquidation_age_days'] // 365} years old at {short(branch)}",
-            f"These almost never sell now. Tag value {money(value)}, recovery value about {money(rec)} "
-            f"({100 * rec / value:.0f}%): choose between breaking up, returning to the supplier, an exhibition or a final offer.",
+            f"Clear {len(g)} pieces over {rules['liquidation_age_days'] // 365} years old at {short(branch)}",
+            f"Pieces this old rarely sell. Tag value {money(value)}, recovery value about {money(rec)} "
+            f"({100 * rec / value:.0f}%): options: break up and recover, return to the supplier, send to an exhibition, or a final markdown.",
             value, f"{money(value)} tied up; ≈{money(rec)} recoverable", "high",
             {"pieces": len(g), "tag_value": value, "recovery_value": rec},
             branch=branch, pieces=g.assign(recovery=g["recovery"].round(0))[
@@ -229,7 +229,7 @@ def suppliers(scorecard, stock):
         if s["performance"] < 0.5:
             held = held_now.get(name, 0)
             actions.append(_action(
-                "supplier_slow", name, f"Talk to {name} about exchanges or returns",
+                "supplier_slow", name, f"Review supplier {name}: slow sell-through",
                 f"Their pieces sell at {s['performance']:.2f}× the company's rate at the same prices "
                 f"({100 * s['monthly_sell_rate']:.1f}% a month); {100 * (s['aged_share_now'] or 0):.0f}% of what we hold "
                 f"from them is over a year old. Hold back new orders until it moves.",
@@ -237,7 +237,7 @@ def suppliers(scorecard, stock):
         elif s["performance"] > 1.5:
             monthly = s["sold_per_month"] * (s["avg_value"] / max(s["avg_pcs"], 1))
             actions.append(_action(
-                "supplier_fast", name, f"Buy more from {name}",
+                "supplier_fast", name, f"Increase purchases from {name}",
                 f"Their pieces sell at {s['performance']:.2f}× the company's rate at the same prices "
                 f"({100 * s['monthly_sell_rate']:.1f}% a month, median {s['median_days_to_sell']:.0f} days to sell).",
                 monthly, f"≈{money(monthly)} of sales a month from their pieces", conf, ev, subject={"supplier": name}))
@@ -260,7 +260,7 @@ def buying(stock, sales, rules):
         excess_pcs = r["pcs"] - (r["sold_pcs"] / months) * limit
         excess = excess_pcs * r["value"] / r["pcs"]
         actions.append(_action(
-            "pause_buying", item, f"Pause buying {item}",
+            "pause_buying", item, f"Hold purchases of {item}",
             f"Holding {r['pcs']:.0f} pieces against {r['sold_pcs']:.0f} sold in {window} days: "
             f"{'no sales' if np.isinf(r['months_of_stock']) else f'{r.months_of_stock:.0f} months of stock'} "
             f"(limit {limit:.0f}).", excess, f"≈{money(excess)} more than {limit:.0f} months needs",
@@ -278,7 +278,7 @@ def buying(stock, sales, rules):
         over = share[share["gap"] < -0.03]
         over_value = stock[s_band.isin(over.index).values]["value"].sum()
         actions.append(_action(
-            "buy_band", "price_bands", f"Shift buying towards {', '.join(under.index)}",
+            "buy_band", "price_bands", f"Rebalance purchasing towards {', '.join(under.index)}",
             "; ".join(f"{b}: {100 * r['sales']:.0f}% of sales vs {100 * r['stock']:.0f}% of stock" for b, r in under.iterrows())
             + (f". Over-held: {', '.join(over.index)}." if len(over) else ""),
             over_value, f"{money(over_value)} sits in price bands that sell less than their share",
@@ -317,7 +317,7 @@ def discounts(stock, sales, rules, people):
             continue
         name = names.at[code, "name"] if code in names.index else code
         actions.append(_action(
-            "discount", code, f"Review discounting by {name}",
+            "discount", code, f"Review discounts given by {name}",
             f"On fast-selling pieces (groups with under {rules['fast_group_days']} days of stock) {name} gave "
             f"{100 * r['rate']:.1f}% off across {r['lines']:.0f} lines in {window} days, against {100 * team_rate:.1f}% "
             f"for the team.", avoidable, f"≈{money(avoidable)} more discount than the team rate",

@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}{{ a.title }} · KKJ Diamond Brain{% endblock %}
-{% block pretitle %}<a href="/decisions"><i class="ti ti-arrow-left"></i> Decisions</a> · {{ a.label }}{% endblock %}
-{% block page_title %}Decision #{{ a.action_id }}{% endblock %}
+{% block title %}{{ a.title }} · KKJ Diamond Analytics{% endblock %}
+{% block pretitle %}<a href="/recommendations"><i class="ti ti-arrow-left"></i> Recommendations</a> · {{ a.label }}{% endblock %}
+{% block page_title %}Recommendation #{{ a.action_id }}{% endblock %}
 {% block actions %}
-{% if a.pieces %}<a class="btn btn-outline-secondary" href="/exports/decision/{{ a.action_id }}.xlsx"><i class="ti ti-download"></i> Pieces (Excel)</a>{% endif %}
+{% if a.pieces %}<a class="btn btn-outline-secondary" href="/exports/recommendation/{{ a.action_id }}.xlsx"><i class="ti ti-download"></i> Pieces (Excel)</a>{% endif %}
 {% endblock %}
 {% block content %}
 {% include "_card.html" %}
 <div class="row row-cards mt-1">
   <div class="col-lg-6">
     <div class="card">
-      <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-dots me-2"></i>Why: the numbers behind it</h3></div>
+      <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-dots me-2"></i>Supporting data</h3></div>
       <table class="table table-sm table-vcenter card-table">
         <tbody>
         {% for key, value in flatten(a.evidence) %}
@@ -27,7 +27,7 @@
         {% for e in history %}
         <div class="list-group-item py-2">
           <div class="d-flex justify-content-between small">
-            <span><b>{{ e.event | replace("_", " ") }}</b> · {{ e.by }}</span>
+            <span><b>{{ EVENTS.get(e.event, e.event) }}</b> · {{ e.by }}</span>
             <span class="text-secondary">{{ e.at | date("%d %b %Y %H:%M") }}</span>
           </div>
           {% if e.note %}<div class="small text-secondary">“{{ e.note }}”</div>{% endif %}

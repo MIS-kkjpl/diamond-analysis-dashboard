@@ -1,4 +1,4 @@
-"""Excel exports people act on: transfer slips, offer lists, the buying list, one decision's pieces."""
+"""Excel exports people act on: transfer slips, markdown lists, the purchasing list, one recommendation's pieces."""
 import io
 import json
 from datetime import date
@@ -34,7 +34,7 @@ def _pieces(kind, statuses):
         subject = a["subject"] if isinstance(a["subject"], dict) else json.loads(a["subject"] or "{}")
         pieces = a["pieces"] if isinstance(a["pieces"], list) else json.loads(a["pieces"] or "[]")
         for p in pieces:
-            rows.append({"decision": a["action_id"], "status": a["status"], "decision title": a["title"],
+            rows.append({"recommendation": a["action_id"], "status": a["status"], "recommendation title": a["title"],
                          **{k: v for k, v in subject.items()}, **p})
     return pd.DataFrame(rows)
 
@@ -43,10 +43,10 @@ def _pieces(kind, statuses):
 def transfers(status: str = "both"):
     df = _pieces("transfer", STATUS.get(status, STATUS["both"]))
     if df.empty:
-        return Response("No transfer decisions to export.", status_code=404)
+        return Response("No transfer recommendations to export.", status_code=404)
     df["from"] = df["from"].str.split(" / ").str[0]
     df["to"] = df["to"].str.split(" / ").str[0]
-    cols = ["decision", "status", "from", "to", "group", "barcode", "item_name", "location", "age_days", "dia_wt", "value"]
+    cols = ["recommendation", "status", "from", "to", "group", "barcode", "item_name", "location", "age_days", "dia_wt", "value"]
     df = df[[c for c in cols if c in df]]
     return _xlsx({"All transfers": df, **{f"From {b}": g for b, g in df.groupby("from")}}, "transfer_slips")
 
@@ -55,29 +55,29 @@ def transfers(status: str = "both"):
 def offers(status: str = "both"):
     df = _pieces("offer", STATUS.get(status, STATUS["both"]))
     if df.empty:
-        return Response("No offer decisions to export.", status_code=404)
-    df["branch"] = df["decision title"].str.extract(r" at (\S+) on offer")[0]
-    cols = ["decision", "status", "branch", "item", "barcode", "group", "location", "age_days", "value", "offer_pct"]
-    df = df[[c for c in cols if c in df]].rename(columns={"offer_pct": "suggested offer %"})
-    return _xlsx({"All offers": df, **{b: g for b, g in df.groupby("branch")}}, "offer_lists")
+        return Response("No markdown recommendations to export.", status_code=404)
+    df["branch"] = df["recommendation title"].str.extract(r" at (\S+)$")[0]
+    cols = ["recommendation", "status", "branch", "item", "barcode", "group", "location", "age_days", "value", "offer_pct"]
+    df = df[[c for c in cols if c in df]].rename(columns={"offer_pct": "suggested markdown %"})
+    return _xlsx({"All markdowns": df, **{b: g for b, g in df.groupby("branch")}}, "markdown_lists")
 
 
 @router.get("/buying.xlsx")
 def buying(status: str = "both"):
     s = STATUS.get(status, STATUS["both"])
-    q = """SELECT action_id AS decision, status, kind, title, summary, impact_label, confidence
+    q = """SELECT action_id AS recommendation, status, kind, title, summary, impact_label, confidence
            FROM brain.action WHERE kind = ANY(:k) AND status = ANY(:s) ORDER BY priority DESC"""
-    return _xlsx({"Buy (running short)": read(q, k=["understock"], s=s),
-                  "Pause buying": read(q, k=["pause_buying"], s=s),
+    return _xlsx({"Replenishment": read(q, k=["understock"], s=s),
+                  "Hold purchases": read(q, k=["pause_buying"], s=s),
                   "Price bands": read(q, k=["buy_band"], s=s),
-                  "Suppliers": read(q, k=["supplier_slow", "supplier_fast"], s=s)}, "buying_list")
+                  "Suppliers": read(q, k=["supplier_slow", "supplier_fast"], s=s)}, "purchasing_list")
 
 
-@router.get("/decision/{action_id}.xlsx")
-def decision_pieces(action_id: int):
+@router.get("/recommendation/{action_id}.xlsx")
+def recommendation_pieces(action_id: int):
     a = read("SELECT title, pieces FROM brain.action WHERE action_id = :a", a=action_id)
     if a.empty:
-        return Response("No such decision", status_code=404)
+        return Response("No such recommendation", status_code=404)
     pieces = a["pieces"].iloc[0]
     pieces = pieces if isinstance(pieces, list) else json.loads(pieces or "[]")
-    return _xlsx({"Pieces": pd.DataFrame(pieces)}, f"decision_{action_id}")
+    return _xlsx({"Pieces": pd.DataFrame(pieces)}, f"recommendation_{action_id}")

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}KKJ Diamond Brain{% endblock %}</title>
+  <title>{% block title %}KKJ Diamond Analytics{% endblock %}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="/static/app.css">
@@ -19,7 +19,7 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <h1 class="navbar-brand navbar-brand-autodark">
-        <a href="/decisions" class="text-reset text-decoration-none"><i class="ti ti-diamond me-1"></i>KKJ Diamond Brain</a>
+        <a href="/recommendations" class="text-reset text-decoration-none"><i class="ti ti-diamond me-1"></i>KKJ Diamond Analytics</a>
       </h1>
       <div class="collapse navbar-collapse" id="sidebar-menu">
         <ul class="navbar-nav pt-lg-3">
@@ -32,16 +32,15 @@
             </a>
           </li>
           {%- endmacro %}
-          <li class="nav-section">Decide</li>
-          {{ item("decisions", "/decisions", "ti-bolt", "Decisions") }}
-          <li class="nav-section">Monitor</li>
+          <li class="nav-section">Actions</li>
+          {{ item("recommendations", "/recommendations", "ti-checklist", "Recommendations") }}
+          <li class="nav-section">Analytics</li>
           {{ item("overview", "/overview", "ti-chart-line", "Overview") }}
-          {{ item("stock", classic ~ "/stock", "ti-packages", "Stock health", True) }}
+          {{ item("stock", classic ~ "/stock", "ti-packages", "Inventory health", True) }}
           {{ item("sales", classic ~ "/sales", "ti-receipt", "Sales", True) }}
-          <li class="nav-section">Learn</li>
-          {{ item("insights", classic ~ "/insights", "ti-bulb", "Insights", True) }}
-          <li class="nav-section">System</li>
-          {{ item("checks", "/checks", "ti-checklist", "Data checks") }}
+                    {{ item("insights", classic ~ "/insights", "ti-bulb", "Insights", True) }}
+          <li class="nav-section">Admin</li>
+          {{ item("checks", "/checks", "ti-database-check", "Data quality") }}
           {{ item("settings", classic ~ "/settings", "ti-adjustments", "Settings", True) }}
         </ul>
       </div>
@@ -59,7 +58,7 @@
             <a href="#" class="small ms-2" onclick="document.getElementById('me').classList.toggle('d-none');return false;">change</a>
           {% endif %}
           <form id="me" class="d-inline-flex gap-1 {% if who %}d-none{% endif %}" hx-post="/me">
-            <input name="name" class="form-control form-control-sm" placeholder="Your name (recorded with decisions)"
+            <input name="name" class="form-control form-control-sm" placeholder="Your name (recorded with approvals)"
                    value="{{ who }}" style="width: 16rem" required>
             <button class="btn btn-sm btn-primary">Save</button>
           </form>

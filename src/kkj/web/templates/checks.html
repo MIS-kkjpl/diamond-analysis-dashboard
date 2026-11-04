@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Data checks · KKJ Diamond Brain{% endblock %}
-{% block pretitle %}System{% endblock %}
-{% block page_title %}Data checks{% endblock %}
+{% block title %}Data quality · KKJ Diamond Analytics{% endblock %}
+{% block pretitle %}Admin{% endblock %}
+{% block page_title %}Data quality{% endblock %}
 {% block content %}
 {% macro table(title, icon, rows, note="") -%}
 <div class="col-12">
@@ -28,7 +28,7 @@
 </div>
 {%- endmacro %}
 <div class="row row-cards">
-  {{ table("Decision refreshes", "ti-bolt", brain_runs, "Each refresh re-runs every rule on the latest stock and sales and updates the decisions.") }}
+  {{ table("Recommendation refreshes", "ti-refresh", brain_runs, "Each refresh re-runs every rule on the latest stock and sales and updates the recommendations.") }}
   {{ table("Stock pipeline runs", "ti-packages", stock_runs) }}
   {{ table("Sales loads", "ti-receipt", sales_loads, "A failed load never leaves half-written data; a later successful load of the same range replaces it.") }}
   {{ table("Past-date stock snapshots", "ti-calendar-time", snapshots, "Quarantined snapshots failed a check and are not used anywhere.") }}

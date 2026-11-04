@@ -1,15 +1,15 @@
 {% if offset == 0 %}
-<div class="small text-secondary mb-2">{{ total }} decision{{ '' if total == 1 else 's' }} · ranked by money involved,
+<div class="small text-secondary mb-2">{{ total }} recommendation{{ '' if total == 1 else 's' }} · ranked by money involved,
   confidence and urgency (impacts of different types overlap, so they aren't added up)</div>
 {% if total == 0 %}
 <div class="empty"><div class="empty-icon"><i class="ti ti-mood-check"></i></div>
-  <p class="empty-title">Nothing here</p><p class="empty-subtitle text-secondary">No decisions match these filters.</p></div>
+  <p class="empty-title">Nothing here</p><p class="empty-subtitle text-secondary">No recommendations match these filters.</p></div>
 {% endif %}
 {% endif %}
 {% for a in items %}{% include "_card.html" %}{% endfor %}
 {% if offset + page < total %}
 <div id="more" class="text-center my-3">
-  <button class="btn btn-outline-primary" hx-get="/decisions/feed?offset={{ offset + page }}&{{ f | urlencode }}"
+  <button class="btn btn-outline-primary" hx-get="/recommendations/feed?offset={{ offset + page }}&{{ f | urlencode }}"
           hx-target="#more" hx-swap="outerHTML">Show {{ [page, total - offset - page] | min }} more</button>
 </div>
 {% endif %}

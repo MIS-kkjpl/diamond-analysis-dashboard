@@ -85,7 +85,7 @@ templates.env.globals.update(flatten=flatten)
 
 
 def status():
-    """The latest successful decision refresh (shown live on every page)."""
+    """The latest successful recommendation refresh (shown live on every page)."""
     run = read("""SELECT run_id, finished_at AT TIME ZONE 'Asia/Kolkata' AS finished, stock_as_of, sales_to,
                          created, resolved FROM brain.run_log WHERE status = 'success' ORDER BY run_id DESC LIMIT 1""")
     return run.iloc[0].to_dict() if len(run) else None

@@ -1,5 +1,5 @@
 <div id="summary" class="row row-cards mb-3" {% if oob %}hx-swap-oob="true"{% endif %}
-     hx-get="/decisions/summary" hx-trigger="every 60s" hx-swap="outerHTML">
+     hx-get="/recommendations/summary" hx-trigger="every 60s" hx-swap="outerHTML">
   {% macro stat(icon, colour, value, label, sub) -%}
   <div class="col-6 col-lg-3">
     <div class="card card-sm">
@@ -13,8 +13,8 @@
     </div>
   </div>
   {%- endmacro %}
-  {{ stat("ti-inbox", "blue", summary.open, "to decide", summary.open_high ~ " high confidence") }}
+  {{ stat("ti-inbox", "blue", summary.open, "to review", summary.open_high ~ " high confidence") }}
   {{ stat("ti-sparkles", "purple", summary.new_24h, "new in the last 24 h", "") }}
   {{ stat("ti-player-play", "green", summary.approved, "approved, in progress", summary.snoozed ~ " snoozed") }}
-  {{ stat("ti-circle-check", "secondary", summary.closed_7d, "closed this week", "done or cleared by itself") }}
+  {{ stat("ti-circle-check", "secondary", summary.closed_7d, "closed this week", "completed or resolved") }}
 </div>

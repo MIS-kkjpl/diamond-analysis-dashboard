@@ -1,19 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Decisions · KKJ Diamond Brain{% endblock %}
-{% block pretitle %}Decide{% endblock %}
-{% block page_title %}Decisions{% endblock %}
+{% block title %}Recommendations · KKJ Diamond Analytics{% endblock %}
+{% block pretitle %}Actions{% endblock %}
+{% block page_title %}Recommendations{% endblock %}
 {% block actions %}
 <div class="dropdown">
   <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="ti ti-download"></i> Export</button>
   <div class="dropdown-menu dropdown-menu-end">
-    <a class="dropdown-item" href="/exports/transfers.xlsx"><i class="ti ti-arrows-exchange me-2"></i>Transfer slips (open + approved)</a>
+    <a class="dropdown-item" href="/exports/transfers.xlsx"><i class="ti ti-arrows-exchange me-2"></i>Transfer slips (to review + approved)</a>
     <a class="dropdown-item" href="/exports/transfers.xlsx?status=approved"><i class="ti ti-arrows-exchange me-2"></i>Transfer slips (approved only)</a>
-    <a class="dropdown-item" href="/exports/offers.xlsx"><i class="ti ti-tag me-2"></i>Offer lists by branch</a>
-    <a class="dropdown-item" href="/exports/buying.xlsx"><i class="ti ti-shopping-cart me-2"></i>Buying list</a>
+    <a class="dropdown-item" href="/exports/offers.xlsx"><i class="ti ti-tag me-2"></i>Markdown lists by branch</a>
+    <a class="dropdown-item" href="/exports/buying.xlsx"><i class="ti ti-shopping-cart me-2"></i>Purchasing list</a>
   </div>
 </div>
 <button class="btn btn-primary" hx-post="/refresh" hx-disabled-elt="this" hx-indicator="#refresh-spin">
-  <i class="ti ti-refresh"></i> Refresh decisions
+  <i class="ti ti-refresh"></i> Refresh recommendations
   <span id="refresh-spin" class="spinner-border spinner-border-sm ms-2 htmx-indicator"></span>
 </button>
 {% endblock %}
@@ -21,7 +21,7 @@
 {% block content %}
 {% set oob = False %}{% include "_summary.html" %}
 
-<form id="filters" class="card card-body py-2 mb-3" hx-get="/decisions/feed" hx-target="#feed"
+<form id="filters" class="card card-body py-2 mb-3" hx-get="/recommendations/feed" hx-target="#feed"
       hx-trigger="change, keyup changed delay:400ms from:#q">
   <div class="d-flex flex-wrap align-items-center gap-3">
     <div class="btn-group" role="group">
