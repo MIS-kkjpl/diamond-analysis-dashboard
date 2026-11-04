@@ -1,0 +1,26 @@
+# Secrets
+.env
+erp_auth.json
+keys.txt
+
+# Old projects, kept locally for reference only (inventory_project has its own git history)
+archive/
+
+# ERP downloads, cleaned copies and run logs (contain business data)
+data/
+logs/
+scripts/probes/sales_probe/
+scripts/probes/*.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

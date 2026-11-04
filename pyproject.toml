@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kkj"
+version = "0.1.0"
+description = "KKJ diamond inventory & sales analytics: ERP pipelines, metrics, checks and dashboard"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "python-dotenv>=1.0",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.1",
+    "pyarrow>=15.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# openpyxl warns on every ERP export; the file reads fine without a default style
+filterwarnings = ["ignore:Workbook contains no default style:UserWarning"]
