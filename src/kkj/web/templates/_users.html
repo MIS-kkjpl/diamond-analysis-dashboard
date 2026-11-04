@@ -1,0 +1,104 @@
+{# Settings -> Users. Every form posts back and this whole card is swapped. #}
+<div id="users">
+  {% if error %}<div class="alert alert-danger"><i class="ti ti-alert-circle"></i> {{ error }}</div>{% endif %}
+  {% if saved %}<div class="alert alert-success"><i class="ti ti-check"></i> {{ saved }}</div>{% endif %}
+
+  <div class="card mb-3">
+    <div class="card-header"><div><h3 class="card-title">Users</h3>
+      <div class="card-subtitle small text-secondary">Everyone here can see and do everything, including managing users.
+        A password you set for someone is temporary: they choose their own when they next sign in.</div></div></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-vcenter card-table">
+        <thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Last sign-in</th><th>Signed in on</th><th></th></tr></thead>
+        <tbody>
+        {% for u in users %}
+          <tr {% if not u.active %}class="text-secondary"{% endif %}>
+            <td>
+              <form class="d-flex gap-1" hx-post="/settings/users/{{ u.user_id }}/rename" hx-target="#users" hx-swap="outerHTML">
+                <input name="display_name" class="form-control form-control-sm" value="{{ u.display_name }}" style="min-width: 10rem">
+                <button class="btn btn-sm btn-ghost-secondary" title="Save name"><i class="ti ti-device-floppy"></i></button>
+              </form>
+            </td>
+            <td class="text-nowrap">{{ u.username }}{% if u.user_id == me %} <span class="badge bg-blue-lt">you</span>{% endif %}</td>
+            <td class="text-nowrap">
+              {% if not u.active %}<span class="badge bg-secondary-lt">Disabled</span>
+              {% elif u.locked %}<span class="badge bg-red-lt">Locked (wrong passwords)</span>
+              {% elif u.must_change_password %}<span class="badge bg-yellow-lt">Temporary password</span>
+              {% else %}<span class="badge bg-green-lt">Active</span>{% endif %}
+            </td>
+            <td class="text-nowrap">{{ u.last_login_at | date("%d %b %Y %H:%M") if u.last_login_at else "never" }}</td>
+            <td>{{ u.sessions }} browser{{ "" if u.sessions == 1 else "s" }}</td>
+            <td class="text-end">
+              {% if u.user_id != me %}
+              <div class="d-flex flex-wrap gap-1 justify-content-end">
+                <details class="note-box">
+                  <summary class="btn btn-sm btn-outline-secondary"><i class="ti ti-key"></i> Set password</summary>
+                  <form class="d-flex gap-1 mt-1" hx-post="/settings/users/{{ u.user_id }}/password" hx-target="#users" hx-swap="outerHTML">
+                    <input name="password" type="text" class="form-control form-control-sm" placeholder="Temporary password"
+                           minlength="{{ min_password }}" autocomplete="off" required>
+                    <button class="btn btn-sm btn-primary">Set</button>
+                  </form>
+                </details>
+                {% if u.sessions %}
+                <button class="btn btn-sm btn-outline-secondary" hx-post="/settings/users/{{ u.user_id }}/signout"
+                        hx-target="#users" hx-swap="outerHTML"><i class="ti ti-logout"></i> Sign out</button>
+                {% endif %}
+                {% if u.active %}
+                <button class="btn btn-sm btn-outline-danger" hx-post="/settings/users/{{ u.user_id }}/disable"
+                        hx-target="#users" hx-swap="outerHTML"
+                        hx-confirm="Disable {{ u.display_name }}? They are signed out and can't sign in until enabled again.">
+                  <i class="ti ti-user-off"></i> Disable</button>
+                {% else %}
+                <button class="btn btn-sm btn-outline-success" hx-post="/settings/users/{{ u.user_id }}/enable"
+                        hx-target="#users" hx-swap="outerHTML"><i class="ti ti-user-check"></i> Enable</button>
+                {% endif %}
+                {% if u.locked and u.active %}
+                <button class="btn btn-sm btn-outline-warning" hx-post="/settings/users/{{ u.user_id }}/enable"
+                        hx-target="#users" hx-swap="outerHTML"><i class="ti ti-lock-open"></i> Unlock</button>
+                {% endif %}
+              </div>
+              {% else %}<a href="/account" class="btn btn-sm btn-ghost-secondary"><i class="ti ti-user-circle"></i> Account</a>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <form class="card mb-3" hx-post="/settings/users" hx-target="#users" hx-swap="outerHTML">
+    <div class="card-header"><h3 class="card-title"><i class="ti ti-user-plus me-1"></i>Add a user</h3></div>
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-6 col-lg-3"><label class="form-label">Name</label>
+          <input name="display_name" class="form-control" placeholder="Full name" required></div>
+        <div class="col-sm-6 col-lg-3"><label class="form-label">Username</label>
+          <input name="username" class="form-control" placeholder="e.g. firstname" autocapitalize="none" autocomplete="off" required></div>
+        <div class="col-sm-6 col-lg-3"><label class="form-label">Temporary password</label>
+          <input name="password" type="text" class="form-control" minlength="{{ min_password }}" autocomplete="off" required>
+          <div class="form-hint">At least {{ min_password }} characters.</div></div>
+        <div class="col-sm-6 col-lg-3"><button class="btn btn-primary w-100"><i class="ti ti-plus"></i> Add user</button></div>
+      </div>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><div><h3 class="card-title">Recent sign-in attempts</h3>
+      <div class="card-subtitle small text-secondary">Last 25. Several failures for one username can mean someone is guessing.</div></div></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-vcenter card-table">
+        <thead><tr><th>When</th><th>Username typed</th><th>Result</th><th>From</th></tr></thead>
+        <tbody>
+        {% set why = {"bad_password": "wrong password", "unknown_user": "no such user", "locked": "account locked",
+                      "inactive": "account disabled", "password_changed": "password changed"} %}
+        {% for a in attempts %}
+          <tr><td class="text-nowrap">{{ a.at | date("%d %b %Y %H:%M") }}</td><td>{{ a.username }}</td>
+            <td>{% if a.success %}<span class="text-green"><i class="ti ti-check"></i> {{ why.get(a.reason, "signed in") }}</span>
+                {% else %}<span class="text-red"><i class="ti ti-x"></i> {{ why.get(a.reason, a.reason) }}</span>{% endif %}</td>
+            <td class="text-secondary">{{ a.ip or "" }}</td></tr>
+        {% else %}<tr><td colspan="4" class="text-secondary">None yet.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

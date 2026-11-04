@@ -1,7 +1,7 @@
 -- Schema auth: Stockwise sign-in. Accounts, sessions and a log of sign-in attempts.
 -- Run by kkj.db.setup as a superuser connected to kkj_erp_stock. Safe to re-run.
--- No roles: every account sees and can do everything. Accounts are managed from the
--- command line (python -m kkj.web.users), never from the app.
+-- No roles: every account sees and can do everything, including managing accounts
+-- (Settings -> Users, or python -m kkj.web.users).
 -- powerbi_reader gets nothing here.
 
 CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION erp_etl;
@@ -43,9 +43,15 @@ CREATE TABLE IF NOT EXISTS auth.login_event (
     ip         text
 );
 
+-- Added after the first version: a password set by someone else is temporary and must be changed at sign-in
+ALTER TABLE auth.app_user ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
+
+-- Any signed-in person can manage accounts from Settings -> Users (no roles), so the app may add and edit them
 GRANT USAGE ON SCHEMA auth TO dashboard_app;
 GRANT SELECT ON auth.app_user TO dashboard_app;
-GRANT UPDATE (failed_logins, locked_until, last_login_at, password_hash, password_changed_at)
+GRANT INSERT (username, display_name, password_hash, must_change_password) ON auth.app_user TO dashboard_app;
+GRANT UPDATE (failed_logins, locked_until, last_login_at, password_hash, password_changed_at,
+              display_name, active, must_change_password)
     ON auth.app_user TO dashboard_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON auth.session TO dashboard_app;
 GRANT SELECT, INSERT ON auth.login_event TO dashboard_app;

@@ -1,5 +1,5 @@
 """
-Stockwise accounts, managed from the command line (the app itself can't create accounts).
+Stockwise accounts from the command line (the same as Settings -> Users in the app).
 
   python -m kkj.web.users list
   python -m kkj.web.users add <username> --name "Display Name"   # asks for the password (hidden)

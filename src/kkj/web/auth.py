@@ -10,10 +10,13 @@ Sign-in for Stockwise: one account per person, no roles (everyone signed in sees
 - Every page except /login and /static needs a session. POSTs from another site are
   refused (Origin check, on top of SameSite).
 - Every sign-in attempt is logged in auth.login_event.
+- A password set for someone else (Settings -> Users) is temporary: until they choose
+  their own, every page sends them to Account.
 
-Accounts are added and reset from the command line: python -m kkj.web.users
+Accounts are managed in Settings -> Users, or from the command line: python -m kkj.web.users
 """
 import hashlib
+import json
 import secrets
 from urllib.parse import quote, urlsplit
 
@@ -32,8 +35,9 @@ IDLE_HOURS = float(settings.optional("SESSION_IDLE_HOURS", "12"))
 MAX_DAYS = float(settings.optional("SESSION_MAX_DAYS", "7"))
 SECURE_COOKIE = settings.optional("COOKIE_SECURE", "false").lower() == "true"   # true once served over HTTPS
 LOCK_AFTER, LOCK_MINUTES = 5, 15
-MIN_PASSWORD = 10
+MIN_PASSWORD = 8                                      # NIST SP 800-63B minimum
 PUBLIC = ("/login", "/static/")
+WHILE_TEMPORARY = ("/account", "/logout", "/status")  # all a temporary password allows
 POLLS = ("/status", "/recommendations/summary")      # background refreshes: don't keep a session alive
 
 hasher = PasswordHasher()
@@ -125,7 +129,7 @@ def session_user(token, touch=True):
         return None
     with engine().begin() as conn:
         row = conn.execute(text(f"""
-            SELECT u.user_id, u.username, u.display_name
+            SELECT u.user_id, u.username, u.display_name, u.must_change_password
             FROM auth.session s JOIN auth.app_user u USING (user_id)
             WHERE s.token_hash = :t AND u.active AND s.expires_at > now()
               AND s.last_seen_at > now() - interval '{IDLE_HOURS} hours'"""), {"t": _digest(token)}).first()
@@ -165,6 +169,10 @@ async def middleware(request: Request, call_next):
                 return Response(status_code=401, headers={"HX-Redirect": "/login"})
             nxt = path + (f"?{request.url.query}" if request.url.query else "")
             return RedirectResponse(f"/login?next={quote(nxt)}", status_code=303)
+        if user["must_change_password"] and not path.startswith(WHILE_TEMPORARY):
+            if request.headers.get("hx-request"):
+                return Response(status_code=403, headers={"HX-Redirect": "/account"})
+            return RedirectResponse("/account", status_code=303)
         request.state.user = user
     response = await call_next(request)
     response.headers.setdefault("X-Frame-Options", "DENY")
@@ -228,11 +236,111 @@ def change_password(request: Request, current: str = Form(default=""), new: str 
     if error:
         return render(request, "account.html", "account", error=error, saved=False)
     token = _digest(request.cookies.get(COOKIE) or "")
+    if new == current:
+        return render(request, "account.html", "account", error="Choose a password different from the current one.",
+                      saved=False)
     with engine().begin() as conn:
-        conn.execute(text("""UPDATE auth.app_user SET password_hash = :h, password_changed_at = now()
-                             WHERE user_id = :id"""), {"h": hash_password(new), "id": me["user_id"]})
+        conn.execute(text("""UPDATE auth.app_user SET password_hash = :h, password_changed_at = now(),
+                             must_change_password = false WHERE user_id = :id"""),
+                     {"h": hash_password(new), "id": me["user_id"]})
         # signed out everywhere else
         conn.execute(text("DELETE FROM auth.session WHERE user_id = :id AND token_hash <> :t"),
                      {"id": me["user_id"], "t": token})
         _log(conn, me["username"], me["user_id"], True, "password_changed", _ip(request))
+    request.state.user = {**me, "must_change_password": False}
     return render(request, "account.html", "account", error=None, saved=True)
+
+
+# ── Settings -> Users: any signed-in person manages accounts (no roles) ─────────
+def _users_ctx(request, error=None, saved=None):
+    users = conn_rows("""
+        SELECT u.user_id, u.username, u.display_name, u.active, u.must_change_password,
+               u.locked_until > now() AS locked, u.last_login_at AT TIME ZONE 'Asia/Kolkata' AS last_login_at,
+               (SELECT count(*) FROM auth.session s WHERE s.user_id = u.user_id AND s.expires_at > now()) AS sessions
+        FROM auth.app_user u ORDER BY u.active DESC, u.display_name""")
+    attempts = conn_rows("""SELECT at AT TIME ZONE 'Asia/Kolkata' AS at, username, success, reason, ip
+                            FROM auth.login_event ORDER BY event_id DESC LIMIT 25""")
+    return {"users": users, "attempts": attempts, "me": request.state.user["user_id"], "error": error, "saved": saved,
+            "min_password": MIN_PASSWORD}
+
+
+def conn_rows(sql, **params):
+    with engine().connect() as conn:
+        return [r._asdict() for r in conn.execute(text(sql), params)]
+
+
+def _users_card(request, error=None, saved=None):
+    return templates.TemplateResponse(request, "_users.html", _users_ctx(request, error, saved))
+
+
+def _record(conn, by, username, old, new):
+    """Account changes go into the settings change history (never a password)."""
+    conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value)
+                         VALUES (:by, 'user', :k, CAST(:old AS jsonb), CAST(:new AS jsonb))"""),
+                 {"by": by, "k": username, "old": json.dumps(old), "new": json.dumps(new)})
+
+
+@router.get("/settings/users", response_class=HTMLResponse)
+def users_card(request: Request):
+    return _users_card(request)
+
+
+@router.post("/settings/users", response_class=HTMLResponse)
+def add_user(request: Request, username: str = Form(default=""), display_name: str = Form(default=""),
+             password: str = Form(default="")):
+    username, display_name = username.strip(), " ".join(display_name.split())
+    if not username or not username.replace(".", "").replace("_", "").replace("-", "").isalnum() or len(username) > 40:
+        return _users_card(request, error="Username: letters, digits, '.', '_' or '-' only.")
+    if not display_name:
+        return _users_card(request, error="Enter the person's name; it is recorded with their approvals.")
+    problem = password_problem(password, username)
+    if problem:
+        return _users_card(request, error=f"Temporary password: {problem}")
+    by = request.state.user["display_name"]
+    with engine().begin() as conn:
+        if conn.execute(text("SELECT 1 FROM auth.app_user WHERE lower(username) = lower(:u)"), {"u": username}).first():
+            return _users_card(request, error=f"{username} already exists.")
+        conn.execute(text("""INSERT INTO auth.app_user (username, display_name, password_hash, must_change_password)
+                             VALUES (:u, :n, :h, true)"""), {"u": username, "n": display_name, "h": hash_password(password)})
+        _record(conn, by, username, None, {"added": display_name})
+    return _users_card(request, saved=f"Added {display_name}. Give them the temporary password; "
+                                      "they choose their own at first sign-in.")
+
+
+@router.post("/settings/users/{user_id}/{verb}", response_class=HTMLResponse)
+def manage_user(request: Request, user_id: int, verb: str, password: str = Form(default=""),
+                display_name: str = Form(default="")):
+    me = request.state.user
+    with engine().connect() as conn:
+        user = conn.execute(text("SELECT user_id, username, display_name, active FROM auth.app_user WHERE user_id = :id"),
+                            {"id": user_id}).first()
+    if user is None or verb not in ("password", "disable", "enable", "signout", "rename"):
+        return Response("Not found", status_code=404)
+    if user_id == me["user_id"] and verb in ("password", "disable", "signout"):
+        return _users_card(request, error="For your own account use Account (top right).")
+    if verb == "password":
+        problem = password_problem(password, user.username)
+        if problem:
+            return _users_card(request, error=f"Temporary password for {user.display_name}: {problem}")
+    if verb == "rename" and not " ".join(display_name.split()):
+        return _users_card(request, error="Enter a name.")
+    sets = {"password": "password_hash = :h, password_changed_at = now(), must_change_password = true, "
+                        "failed_logins = 0, locked_until = NULL",
+            "disable": "active = false",
+            "enable": "active = true, failed_logins = 0, locked_until = NULL",
+            "rename": "display_name = :n",
+            "signout": None}[verb]
+    with engine().begin() as conn:
+        if sets:
+            conn.execute(text(f"UPDATE auth.app_user SET {sets} WHERE user_id = :id"),
+                         {"id": user_id, "h": hash_password(password) if verb == "password" else None,
+                          "n": " ".join(display_name.split())})
+        if verb in ("password", "disable", "signout"):
+            conn.execute(text("DELETE FROM auth.session WHERE user_id = :id"), {"id": user_id})
+        _record(conn, me["display_name"], user.username, None,
+                {"password": "temporary password set", "disable": "disabled", "enable": "enabled",
+                 "signout": "signed out everywhere", "rename": f"name: {' '.join(display_name.split())}"}[verb])
+    done = {"password": f"Temporary password set for {user.display_name}; they choose their own at next sign-in.",
+            "disable": f"{user.display_name} can no longer sign in.", "enable": f"{user.display_name} can sign in again.",
+            "signout": f"{user.display_name} has been signed out everywhere.", "rename": "Name saved."}[verb]
+    return _users_card(request, saved=done)

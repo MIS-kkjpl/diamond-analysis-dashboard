@@ -197,10 +197,52 @@ def test_change_password_signs_out_other_sessions():
     for c in (a, b):
         c.post("/login", data={"username": "pytest_pw", "password": PASSWORD})
     assert "incorrect" in a.post("/account/password", data={"current": "wrong", "new": "x" * 12, "confirm": "x" * 12}).text
-    assert "at least 10" in a.post("/account/password", data={"current": PASSWORD, "new": "short", "confirm": "short"}).text
+    assert "at least 8" in a.post("/account/password", data={"current": PASSWORD, "new": "short", "confirm": "short"}).text
     r = a.post("/account/password", data={"current": PASSWORD, "new": "a-new-password-1", "confirm": "a-new-password-1"})
     assert "Password changed" in r.text
     assert a.get("/overview", follow_redirects=False).status_code == 200            # this browser stays signed in
     assert b.get("/overview", follow_redirects=False).status_code == 303            # the other one is signed out
     assert TestClient(app).post("/login", data={"username": "pytest_pw", "password": "a-new-password-1"},
                                 follow_redirects=False).status_code == 303
+
+
+def test_users_tab_adds_resets_disables_and_forces_a_new_password():
+    r = client.get("/settings/users")
+    assert r.status_code == 200 and 'id="users"' in r.text and "you</span>" in r.text
+    assert "already exists" in client.post("/settings/users", data={"username": USER, "display_name": "x",
+                                                                    "password": "longenough1"}).text
+    assert "at least 8" in client.post("/settings/users", data={"username": "pytest_new", "display_name": "New Person",
+                                                                "password": "short"}).text
+    r = client.post("/settings/users", data={"username": "pytest_new", "display_name": "New  Person", "password": "temp-pass-1"})
+    assert "Added New Person" in r.text
+    with settings.app_engine().connect() as c:
+        uid = c.execute(text("SELECT user_id FROM auth.app_user WHERE username = 'pytest_new'")).scalar()
+
+    new = TestClient(app)                                        # first sign-in with the temporary password
+    assert new.post("/login", data={"username": "pytest_new", "password": "temp-pass-1"},
+                    follow_redirects=False).status_code == 303
+    assert new.get("/overview", follow_redirects=False).headers["location"] == "/account"
+    assert new.get("/recommendations/feed", headers={"HX-Request": "true"}).headers["HX-Redirect"] == "/account"
+    assert "temporary password" in new.get("/account").text
+    assert "different" in new.post("/account/password", data={"current": "temp-pass-1", "new": "temp-pass-1",
+                                                              "confirm": "temp-pass-1"}).text
+    new.post("/account/password", data={"current": "temp-pass-1", "new": "my-own-pass-1", "confirm": "my-own-pass-1"})
+    assert new.get("/overview", follow_redirects=False).status_code == 200    # free to use the app now
+
+    r = client.post(f"/settings/users/{uid}/password", data={"password": "temp-pass-2"})
+    assert "Temporary password set" in r.text
+    assert new.get("/overview", follow_redirects=False).status_code == 303    # reset signed them out
+    client.post(f"/settings/users/{uid}/disable")
+    assert "account is switched off" in TestClient(app).post("/login", data={"username": "pytest_new",
+                                                                             "password": "temp-pass-2"}).text
+    client.post(f"/settings/users/{uid}/enable")
+    assert TestClient(app).post("/login", data={"username": "pytest_new", "password": "temp-pass-2"},
+                                follow_redirects=False).status_code == 303
+    with settings.app_engine().connect() as c:
+        me = c.execute(text("SELECT user_id FROM auth.app_user WHERE username = :u"), {"u": USER}).scalar()
+        logged = c.execute(text("SELECT count(*) FROM config.change_log WHERE table_name = 'user' "
+                                "AND row_key = 'pytest_new'")).scalar()
+    assert "your own account" in client.post(f"/settings/users/{me}/disable").text   # can't lock yourself out
+    assert logged == 4
+    with settings.etl_engine().begin() as c:
+        c.execute(text("DELETE FROM config.change_log WHERE table_name = 'user' AND row_key LIKE 'pytest%'"))

@@ -171,22 +171,30 @@ connects as `dashboard_app`, which can write only schemas `brain` and `config`
 ### Sign-in
 
 Every page needs a signed-in account. There are no roles: everyone signed in
-sees and can do everything. The account's display name is recorded with every
-approval, note and settings change. Accounts are managed from the command line
-only:
+sees and can do everything, including managing users. The account's display
+name is recorded with every approval, note and settings change.
+
+**Settings → Users** lists the accounts, with recent sign-in attempts. From
+there you can:
+- add a person;
+- set a temporary password;
+- sign someone out everywhere;
+- disable or enable an account, which also unlocks it;
+- rename an account.
+
+A password set for someone else is temporary: until they choose their own, every
+page sends them to **Account**. Your own password is changed from **Account**
+(top right). Account changes appear in the change history, never with
+passwords. The same can be done from the command line:
 
 ```
-.venv\Scripts\python -m kkj.web.users add kartik --name "Kartik Riyal"   # asks for the password
-.venv\Scripts\python -m kkj.web.users list
-.venv\Scripts\python -m kkj.web.users reset <username>      # new password, signed out everywhere
-.venv\Scripts\python -m kkj.web.users disable <username>    # someone leaves
-.venv\Scripts\python -m kkj.web.users enable <username>     # also clears a lock-out
-.venv\Scripts\python -m kkj.web.users log                   # recent sign-in attempts
+.venv\Scripts\python -m kkj.web.users add <username> --name "Full Name"   # asks for the password
+.venv\Scripts\python -m kkj.web.users list | reset <username> | disable <username> | enable <username> | log
 ```
 
-- **Passwords** are hashed with Argon2id; at least 10 characters, no forced
-  symbols (NIST SP 800-63B). Anyone can change their own from **Account** (top
-  right), which signs out their other browsers.
+- **Passwords** are hashed with Argon2id; at least 8 characters, no forced
+  symbols (NIST SP 800-63B). Changing a password signs out that person's other
+  browsers.
 - **Sessions** are kept in `auth.session`. The cookie is HttpOnly and
   SameSite=Lax, and the table stores only a SHA-256 of the token. A session
   ends after 12 hours unused (the pages' background polling doesn't count) or
