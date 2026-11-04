@@ -166,6 +166,13 @@ Read-only: the app connects as `powerbi_reader`. Pages:
 - **Data checks:** freshness, every pipeline run and load, and the past-date
   snapshot verdicts.
 
+**Settings** holds the business rules (`kkj/rules.py`: targets, how demand is
+measured, transfer policy, discounts, cost of money), the salesperson list, the
+branch list and the change history. Saving needs a name. The dashboard saves as
+`dashboard_app`, which can write only schema `config` (`sql/config.sql`).
+Salespeople are added from sales with `python -m kkj.salespeople --hr-file <users.xlsx>`;
+existing rows, including edits made in the app, are never overwritten.
+
 Every number comes from `kkj.metrics.core` (definitions and their industry
 basis are in its docstring). Every chart has a table view. Colours follow the
 validated reference palette, with each item group keeping one colour

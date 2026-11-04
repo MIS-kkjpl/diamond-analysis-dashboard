@@ -3,7 +3,7 @@ One-time database setup. Safe to re-run.
 
 Uses the DIIS admin account (DIIS_DB_USER / DIIS_DB_PASSWORD) to:
   1. create database ERP_DB_NAME (kkj_erp_stock) if it doesn't exist
-  2. create roles erp_etl and powerbi_reader (LOGIN) if missing; if they exist,
+  2. create roles erp_etl, powerbi_reader and dashboard_app (LOGIN) if missing; if they exist,
      reset their passwords to the ones in .env so .env stays the source of truth
   3. run the sql/ files in settings.SQL_FILES inside the database (schemas, tables,
      indexes, views, grants); every file is safe to re-run
@@ -22,7 +22,7 @@ from psycopg import sql
 from kkj import settings
 
 # The sql/ files grant to these role names, so .env must use the same ones
-SCHEMA_ROLES = ("erp_etl", "powerbi_reader")
+SCHEMA_ROLES = ("erp_etl", "powerbi_reader", "dashboard_app")
 
 
 def psycopg_conn(engine, autocommit):
@@ -87,11 +87,12 @@ def main(argv=None):
     try:
         db_name = settings.erp_db_name()
         roles = [(settings.require("ERP_DB_USER"), settings.require("ERP_DB_PASSWORD")),
-                 (settings.require("PBI_DB_USER"), settings.require("PBI_DB_PASSWORD"))]
+                 (settings.require("PBI_DB_USER"), settings.require("PBI_DB_PASSWORD")),
+                 (settings.require("APP_DB_USER"), settings.require("APP_DB_PASSWORD"))]
     except settings.ConfigError as e:
         sys.exit(f"ERROR: {e}")
     if tuple(u for u, _ in roles) != SCHEMA_ROLES:
-        sys.exit(f"ERROR: ERP_DB_USER / PBI_DB_USER must be {SCHEMA_ROLES} to match the sql/ files")
+        sys.exit(f"ERROR: ERP_DB_USER / PBI_DB_USER / APP_DB_USER must be {SCHEMA_ROLES} to match the sql/ files")
 
     try:
         ensure_database_and_roles(db_name, roles)

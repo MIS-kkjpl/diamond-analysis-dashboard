@@ -20,7 +20,7 @@ CONFIG_DIR = PROJECT_DIR / "config"
 STOCK_PAYLOAD_FILE = CONFIG_DIR / "stock_payload.json"   # stock report filters (from the browser)
 SQL_DIR = PROJECT_DIR / "sql"
 # Run by kkj.db.setup, in this order: schema erp (production stock), then the newer schemas
-SQL_FILES = ["schema.sql", "sales.sql", "stock_hist.sql"]
+SQL_FILES = ["schema.sql", "sales.sql", "stock_hist.sql", "config.sql"]
 DATA_DIR = PROJECT_DIR / "data"
 STOCK_RAW_DIR = DATA_DIR / "stock" / "raw"        # original server .xlsx files, never modified
 STOCK_META_DIR = DATA_DIR / "stock" / "meta"      # step A JSON responses
@@ -79,6 +79,11 @@ def admin_engine(database="postgres"):
 def etl_engine():
     """erp_etl: the pipeline's account (full rights on schema erp)."""
     return _engine("ERP_DB_USER", "ERP_DB_PASSWORD", erp_db_name())
+
+
+def app_engine():
+    """dashboard_app: reads everything, writes only schema config (settings, salesperson list)."""
+    return _engine("APP_DB_USER", "APP_DB_PASSWORD", erp_db_name())
 
 
 def reader_engine():
