@@ -57,6 +57,52 @@ Nothing is loaded unless every check passes:
 After loading, the stored rows are read back and compared again. Every run is
 recorded in `erp.etl_run_log`. Re-running a day replaces that day's rows.
 
+### Stock as on a past date
+
+```
+.venv\Scripts\python -m kkj.pipelines.stock --as-on --date 30/06/2026 [--no-load]
+```
+
+- Sends the ERP's "as on date" settings: `isLabelAsOnDate=1`,
+  `calStkAsOnLabelDate=true`, `flagForItem=false`.
+- Loads into `stock_hist` as `erp_asof`, never into `erp`, and only after the
+  snapshot checks in `kkj/checks/snapshot.py` pass.
+- Verified on 30/06/2026: the labels, pieces, weights, locations and label dates
+  were 100% identical to the verified legacy snapshot.
+- **Values are not reliable in this mode.** `item_amt` leaves out the metal value
+  for many labels (₹160 Cr vs ₹239 Cr). Use it for pieces and carats only until the
+  report's rate setting is resolved.
+
+## Sales pipeline
+
+```
+.venv\Scripts\python -m kkj.pipelines.sales --from 01/10/2026 --to 31/10/2026
+.venv\Scripts\python -m kkj.pipelines.sales --from 01/04/2026 --to 04/11/2026 --by-month --pause 20
+.venv\Scripts\python -m kkj.pipelines.sales --from 30/06/2026 --no-load            # fetch + check only
+.venv\Scripts\python -m kkj.pipelines.sales --from-file data\sales\raw\<file>.json.gz
+```
+
+- **Fetch:**
+  - Calls step A (`getRptKeyAndServerTotalForSalesRpt`), then the JSON details
+    pages, and saves the whole response to `data/sales/raw/` before cleaning.
+  - The item codes for each product group are looked up live on every run.
+- **Checks** (nothing loads unless all pass): row count and sums of pcs,
+  item_amt, net_wt and dia_wt must match the ERP's `serverTotal`.
+- **Load:** replaces the date range in one transaction, then reads it back and
+  checks again.
+- **Revenue** is `taxable_amount` (the billed amount before GST). `item_amt` is
+  the label value.
+- **Returns:**
+  - `considerSalesReturn` defaults to `2`, the only value that includes them
+    (`0` and `1` leave them out).
+  - They come as bill type `SR`, with negative pcs, weights and item_amt.
+  - They have no barcode, label number or taxable amount. `item_inv_own_code`
+    links them to the item.
+  - A return can be dated outside the range it was pulled with, so loads also
+    replace rows with the same bill number and inventory id.
+- `salesType`: `1` and `2` returned the same rows and `3` returned none, so it
+  stays `1`.
+
 ## Database schemas (`kkj_erp_stock`)
 
 | Schema | Holds | Notes |

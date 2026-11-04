@@ -128,6 +128,10 @@ def build_filters(cfg, log_code=None):
     p["productCodeList"] = cfg["products"]
     p["itemCodeList"] = cfg["items"]
     p["labelDate"] = cfg["date"]
+    if cfg.get("as_on"):
+        # Stock as it stood on labelDate (the screen's "as on date" option); without
+        # these flags a past labelDate still returns today's stock
+        p.update(isLabelAsOnDate=1, calStkAsOnLabelDate=True, flagForItem=False)
     if log_code:
         p["logCode"] = log_code
     for key in STEP_B_ONLY:

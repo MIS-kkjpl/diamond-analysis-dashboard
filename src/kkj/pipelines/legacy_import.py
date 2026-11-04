@@ -9,10 +9,8 @@ Run `sales` before `stock`: the stock integrity checks use the imported sales.
 
 Stock snapshot files are checked before loading; a file that fails is recorded in
 stock_hist.snapshot_status as 'quarantined' (with its numbers) and not loaded:
-  - labeled_after:  labels whose label date is AFTER the snapshot date (a true
-                    snapshot cannot hold them)
-  - sold_before:    labels sold in the 30 days before the snapshot date that are
-                    still in it (they should have left stock)
+  - the checks in kkj.checks.snapshot (labels dated after the snapshot; items
+    sold in the 30 days before it still present)
   - duplicate_of:   identical labels and values to another file (a copy)
 Legacy files were exported in July 2026, so their Age column is the age on the
 export day; age_days is recomputed as snapshot_date - label date (the ERP's own
@@ -24,15 +22,14 @@ Run:
   python -m kkj.pipelines.legacy_import stock [--folder PATH] [--check-only]
 """
 import argparse
-import hashlib
 import logging
 import re
 import sys
-from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
 
+from kkj.checks import snapshot as snapcheck
 from kkj.db import history as db
 from kkj.erp.stock_report import (DATE_COLUMNS, DECIMAL_COLUMNS, EXCEL_TO_DB, INT_COLUMNS, check,
                                   to_number, to_text)
@@ -49,11 +46,6 @@ DIAMOND_GROUPS = ["Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "M
                   "Broken Dia Jew", "Customer Diamond"]
 
 DATE_FORMATS = ("%d/%m/%Y", "%d-%b-%y")   # the sales CSV switches format in May 2026
-
-# Quarantine thresholds for stock snapshot files
-MAX_LABELED_AFTER_PCT = 0.5     # % of labels dated after the snapshot
-MAX_SOLD_BEFORE_PCT = 5.0       # % of the previous 30 days' sold labels still present
-SOLD_BEFORE_DAYS = 30
 
 SALES_COLUMNS = {
     "Label No": "label_no", "ItemName": "item_name", "Date": "sale_date", "Bill No": "bill_no",
@@ -252,29 +244,6 @@ def read_stock_file(path):
     return df, file_checks
 
 
-def integrity(df, snapshot_date):
-    """The snapshot-is-real checks (see module docstring), as numbers."""
-    label_date = pd.to_datetime(df["label_dt"]).fillna(pd.to_datetime(df["labeling_date"]))
-    after = int((label_date > pd.Timestamp(snapshot_date)).sum())
-    sold = db.sold_barcodes(SOURCE, snapshot_date - timedelta(days=SOLD_BEFORE_DAYS),
-                            snapshot_date - timedelta(days=1))
-    still = int(sold["barcode"].isin(df["barcode"]).sum())
-    implied_export = (label_date + pd.to_timedelta(df["age_days_reported"].astype("float"), unit="D")).mode()
-    signature = hashlib.md5(pd.util.hash_pandas_object(
-        df[["barcode", "item_amt"]].sort_values("barcode").reset_index(drop=True), index=False).values
-    ).hexdigest()
-    return {
-        "labels": len(df),
-        "labeled_after": after,
-        "labeled_after_pct": round(100 * after / max(len(df), 1), 2),
-        "sold_prev_30d": len(sold),
-        "sold_before_still_present": still,
-        "sold_before_pct": round(100 * still / max(len(sold), 1), 1),
-        "implied_export_date": str(implied_export.iloc[0].date()) if len(implied_export) else None,
-        "signature": signature,
-    }
-
-
 def import_stock(folder, check_only):
     files = sorted(folder.glob("*_Stock.csv"), key=snapshot_date_from_name)
     log.info(f"{len(files)} snapshot files in {folder}")
@@ -284,10 +253,9 @@ def import_stock(folder, check_only):
         snapshot_date = snapshot_date_from_name(path)
         df, file_checks = read_stock_file(path)
         df["branch"] = df["location"].map(branch_map)
-        label_date = pd.to_datetime(df["label_dt"]).fillna(pd.to_datetime(df["labeling_date"]))
-        df["age_days"] = (pd.Timestamp(snapshot_date) - label_date).dt.days.astype("Int64")
+        df["age_days"] = snapcheck.recomputed_age(df, snapshot_date)
         results.append({"path": path, "date": snapshot_date, "df": df, "file_checks": file_checks,
-                        "integrity": integrity(df, snapshot_date)})
+                        "integrity": snapcheck.integrity(df, snapshot_date)})
         log.info(f"  {path.name}: {len(df):,} diamond labels")
 
     # Duplicate groups by signature
@@ -297,12 +265,7 @@ def import_stock(folder, check_only):
     for r in results:
         i = r["integrity"]
         i["duplicate_of"] = [str(d) for d in by_sig[i["signature"]] if d != r["date"]]
-        reasons = [c["check"] for c in r["file_checks"] if not c["passed"]]
-        if i["labeled_after_pct"] > MAX_LABELED_AFTER_PCT:
-            reasons.append(f"{i['labeled_after_pct']}% labels dated after the snapshot")
-        if i["sold_before_pct"] > MAX_SOLD_BEFORE_PCT:
-            reasons.append(f"{i['sold_before_pct']}% of the previous {SOLD_BEFORE_DAYS} days' sales still present")
-        r["reasons"] = reasons
+        r["reasons"] = [c["check"] for c in r["file_checks"] if not c["passed"]] + snapcheck.reasons(i)
     # A copy whose group has more than one member passing the checks: no way to tell which date is real
     for sig, dates in by_sig.items():
         group = [r for r in results if r["integrity"]["signature"] == sig]
@@ -313,7 +276,7 @@ def import_stock(folder, check_only):
     table = pd.DataFrame([{
         "date": r["date"], "labels": r["integrity"]["labels"],
         "lbl_after%": r["integrity"]["labeled_after_pct"],
-        "sold_prev30": r["integrity"]["sold_prev_30d"], "still_present%": r["integrity"]["sold_before_pct"],
+        "sold_prev30": r["integrity"]["sold_prev_days"], "still_present%": r["integrity"]["sold_before_pct"],
         "export_day": r["integrity"]["implied_export_date"],
         "copy_of": ",".join(r["integrity"]["duplicate_of"]),
         "status": "quarantined" if r["reasons"] else "loaded"} for r in results])

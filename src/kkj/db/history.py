@@ -88,12 +88,24 @@ def finish_sales_load(load_id, status, rows_loaded, validation, error=None, dq_w
 
 
 def replace_sales(df, source, date_from, date_to, load_id):
-    """Replace one source's rows for sale_date in [date_from, date_to]; return rows loaded."""
+    """Replace one source's rows for sale_date in [date_from, date_to]; return rows loaded.
+
+    Rows already stored under the same (bill_no, item_inv_own_code) are replaced too:
+    a return can be dated outside the range it was pulled with, so the next range
+    would otherwise load it a second time.
+    """
     df = df.assign(source=source, load_id=load_id)
+    keys = df.loc[df["item_inv_own_code"].notna(), ["bill_no", "item_inv_own_code"]]         if "item_inv_own_code" in df else df.iloc[0:0]
 
     def work(cur):
         cur.execute("DELETE FROM sales.sales_line WHERE source = %s AND sale_date BETWEEN %s AND %s",
                     (source, date_from, date_to))
+        if len(keys):
+            cur.execute("""
+                DELETE FROM sales.sales_line s
+                USING unnest(%s::text[], %s::bigint[]) AS k(bill_no, inv)
+                WHERE s.source = %s AND s.bill_no = k.bill_no AND s.item_inv_own_code = k.inv
+            """, (keys["bill_no"].tolist(), [int(v) for v in keys["item_inv_own_code"]], source))
         _copy(cur, "sales.sales_line", df)
         return len(df)
     return _transaction(work)
@@ -109,14 +121,15 @@ def sales_totals(source, date_from, date_to):
     return {"count": n, "pcs": float(pcs or 0), "item_amt": float(amt or 0)}
 
 
-def sold_barcodes(source, date_from, date_to):
-    """DataFrame of (barcode, sale_date) sold in the range, excluding lines whose barcode is the bill no."""
+def sold_barcodes(date_from, date_to):
+    """(barcode, sale_date) sold in the range, from sales.v_sales_line (ERP where loaded,
+    legacy before that). Lines whose barcode is still the bill no and returns are left out."""
     with get_engine().connect() as conn:
         return pd.read_sql(text("""
-            SELECT barcode, sale_date FROM sales.sales_line
-            WHERE source = :s AND sale_date BETWEEN :a AND :b
+            SELECT barcode, sale_date FROM sales.v_sales_line
+            WHERE sale_date BETWEEN :a AND :b AND pcs > 0
               AND barcode IS NOT NULL AND barcode IS DISTINCT FROM bill_no
-        """), conn, params={"s": source, "a": date_from, "b": date_to})
+        """), conn, params={"a": date_from, "b": date_to})
 
 
 # ── stock_hist ───────────────────────────────────────────────────────────────

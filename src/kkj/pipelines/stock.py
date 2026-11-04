@@ -4,6 +4,9 @@ Stock pipeline: Item-Wise Current Stock, Acme Padm ERP -> PostgreSQL (erp.stock_
 Normal run:   login -> step A -> step B -> save raw/ + meta/ -> clean -> validate -> load
 --from-file:  skip the ERP; clean -> validate -> load an Excel file in data/stock/raw/.
 --check-only: with --from-file, clean + validate only; no database, no ERP (safe test).
+--as-on:      stock as it stood on --date (a past date). Loads into stock_hist
+              (source erp_asof) after the snapshot checks; never touches erp.*.
+              Add --no-load to fetch + check only.
 
 Every real run is recorded in erp.etl_run_log from its first moment (status
 'running'). If any step fails (login, step A, step B, cleaning, validation,
@@ -17,6 +20,7 @@ Run (from the project folder, see README):
   python -m kkj.pipelines.stock --from-file data/stock/raw/itemwise_current_stock_20261028_1328.xlsx
   python -m kkj.pipelines.stock --from-file <file> --check-only
   python -m kkj.pipelines.stock --dry-run       # show both request bodies' changes, no ERP call
+  python -m kkj.pipelines.stock --as-on --date 30/06/2026 [--no-load]
 
 Ported from archive/inventory_project/Phase_one.py; behaviour is unchanged
 except the new --check-only mode and the data/ + logs/ paths.
@@ -31,6 +35,8 @@ from datetime import datetime
 from pathlib import Path
 
 from kkj import settings
+from kkj.checks import snapshot as snapcheck
+from kkj.db import history
 from kkj.db import stock as db
 from kkj.erp.client import HOST, SPROGRAM_KEY, ErpError
 from kkj.erp.stock_report import (EXPORT_ENDPOINT, ITEM_CODES, LOCATION_CODES, PRODUCT_CODES,
@@ -204,6 +210,60 @@ def check_only(raw_path, meta_path):
     return all(c["passed"] for c in checks), df
 
 
+class LocalRun:
+    """Stand-in for RunTracker on --as-on runs: steps are logged, nothing goes to erp.etl_run_log."""
+
+    def at(self, step):
+        log.info(f"[{step}]")
+
+    def record(self, **details):
+        pass
+
+
+def run_as_on(cfg, stamp):
+    """Stock as on cfg["date"] (or a saved --from-file) -> checks -> stock_hist (source erp_asof)."""
+    if cfg["from_file"]:
+        raw_path = cfg["from_file"].resolve()
+        _, _, meta_path = files_for_raw(raw_path)
+    else:
+        name = f"{cfg['name']}_asof_{datetime.strptime(cfg['date'], '%d/%m/%Y'):%Y%m%d}"
+        raw_path = settings.STOCK_RAW_DIR / f"{name}_{stamp}.xlsx"
+        meta_path = settings.STOCK_META_DIR / f"{name}_{stamp}_stepA.json"
+        fetch_report(cfg, settings.erp_login_settings(), raw_path, meta_path, LocalRun())
+
+    df, checks, _ = clean_export(raw_path, meta_path)
+    log_checks(checks, "Validation")
+    log_dq_warnings(data_quality(df))
+    if not all(c["passed"] for c in checks):
+        log.error("Validation failed. Nothing loaded.")
+        return False
+
+    snapshot_date = df["snapshot_date"].iloc[0]
+    hist = df.drop(columns=["snapshot_date", "report_id"]).rename(columns={"age_days": "age_days_reported"})
+    hist["age_days"] = snapcheck.recomputed_age(hist, snapshot_date)
+    numbers = snapcheck.integrity(hist, snapshot_date)
+    reasons = snapcheck.reasons(numbers)
+    age_match = round(100 * float((hist["age_days"] == hist["age_days_reported"]).mean()), 1)
+    log.info(f"Snapshot checks for {snapshot_date}: {numbers}; reported age == date - label date "
+             f"for {age_match}% of labels")
+    log.info("  PASS" if not reasons else f"  QUARANTINE: {'; '.join(reasons)}")
+    if cfg["no_load"]:
+        log.info("--no-load: checked only, nothing written to the database.")
+        return not reasons
+
+    status = {"file": raw_path.name, "status": "quarantined" if reasons else "loaded",
+              "reason": "; ".join(reasons) or None, "labels": len(hist),
+              "checks": {"file": checks, "age_match_pct": age_match, **numbers}}
+    rows = history.replace_stock_hist(None if reasons else hist, snapshot_date, "erp_asof", status)
+    if not rows:
+        return False
+    stored = history.stock_hist_totals(snapshot_date, "erp_asof")
+    same = stored["count"] == len(hist) and abs(stored["item_amt"] - float(hist["item_amt"].sum())) <= SUM_TOLERANCE
+    log.info(f"Loaded {rows} rows into stock_hist for {snapshot_date}; read back "
+             f"{stored['count']} rows, item_amt {stored['item_amt']:,.2f} {'OK' if same else 'MISMATCH'}")
+    return same
+
+
 def files_for_raw(raw_path):
     """From <name>_<YYYYMMDD_HHMM>.xlsx work out name, stamp and the step A meta file."""
     m = re.match(r"(.+)_(\d{8}_\d{4})$", raw_path.stem)
@@ -242,6 +302,10 @@ def parse_args(argv=None):
                     help="clean + load an existing data/stock/raw/ Excel file; no ERP calls")
     ap.add_argument("--check-only", action="store_true",
                     help="with --from-file: clean + validate only; no database writes")
+    ap.add_argument("--as-on", action="store_true",
+                    help="stock as it stood on --date; loads into stock_hist, never erp.*")
+    ap.add_argument("--no-load", action="store_true",
+                    help="with --as-on: fetch + check only; no database writes")
     ap.add_argument("--dry-run", action="store_true",
                     help="build both request bodies and show the overrides; do not call the ERP")
     args = ap.parse_args(argv)
@@ -251,12 +315,15 @@ def parse_args(argv=None):
         ap.error(f"--date must be dd/mm/yyyy, got '{args.date}'")
     if args.check_only and not args.from_file:
         ap.error("--check-only needs --from-file")
+    if args.no_load and not args.as_on:
+        ap.error("--no-load is for --as-on (use --check-only for the production pipeline)")
     return {"name": args.name, "run_endpoint": args.run_endpoint.strip("/"),
             "export_endpoint": args.export_endpoint.strip("/"),
             "locations": args.locations, "products": args.products,
             "items": args.items, "date": args.date, "dry_run": args.dry_run,
             "role": args.role, "keep_logcode": args.keep_logcode,
-            "from_file": args.from_file, "check_only": args.check_only}
+            "from_file": args.from_file, "check_only": args.check_only,
+            "as_on": args.as_on, "no_load": args.no_load}
 
 
 def dry_run(cfg):
@@ -286,6 +353,16 @@ def main(argv=None):
         return
 
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M")
+
+    if cfg["as_on"]:
+        log_path = setup_logging(run_stamp)
+        try:
+            ok = run_as_on(cfg, run_stamp)
+        except (ErpError, settings.ConfigError) as e:
+            log.error(f"ERROR: {e}")
+            ok = False
+        log.info(f"Log: {rel(log_path)}")
+        sys.exit(0 if ok else 1)
 
     if cfg["check_only"]:
         log.addHandler(logging.StreamHandler(sys.stdout))
