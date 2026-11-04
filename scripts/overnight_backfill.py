@@ -55,7 +55,7 @@ def run(args, log):
                        capture_output=True, text=True, encoding="utf-8", errors="replace",
                        env=dict(os.environ, PYTHONIOENCODING="utf-8"))
     tail = [l for l in r.stdout.splitlines() if any(k in l for k in
-            ("recordCount", "FAIL", "QUARANTINE", "PASS\n", "Loaded", "read back", "ERROR", "Run "))]
+            ("recordCount", "FAIL", "QUARANTINE", "Loaded", "read back", "ERROR", "Run "))]
     log(f"{' '.join(args)}: exit {r.returncode} in {time.time() - t0:.0f} s; " + " | ".join(tail[-4:]))
     return r.returncode == 0
 
