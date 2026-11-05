@@ -53,9 +53,10 @@ RULES = [
          choices=("Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND", "Broken Dia Jew",
                   "Customer Diamond")),
     # ── weighted stock turn per brick (kkj.metrics.brick_turn) ──
-    Rule("target_turn", "Stock turn", "Ideal stock turn", 1.0, "× a year",
-         "How many times a year a brick's stock should sell through. Every brick is compared with this; "
-         "the company as a whole turns about 0.5× today.", min=0.1, max=12),
+    Rule("target_turn", "Stock turn", "Default ideal stock turn", 1.0, "× a year",
+         "How many times a year stock should sell through, for every brick without its own ideal (set ideals per "
+         "brick, group, product or item group under Settings → Ideal turns). The company turns about 0.6× today.",
+         min=0.1, max=12),
     Rule("turn_band_pct", "Stock turn", "Keep stock as it is when the turn is within", 10.0, "% of the ideal",
          "Inside this band a brick is left alone; below it is a candidate to reduce, above it to increase.",
          min=0, max=50),
@@ -76,6 +77,11 @@ RULES = [
     Rule("turn_brick_levels", "Stock turn", "A brick is made of", ["purity", "item_name", "category", "sub_category",
                                                                    "weight_band"], "",
          "Purity – Product (item) – Variety (category) – Type (sub-category) – Weight range.", "list",
+         choices=("purity", "item_name", "category", "sub_category", "weight_band")),
+    Rule("turn_group_levels", "Stock turn", "A brick group (where recommendations are made) is made of",
+         ["purity", "item_name", "weight_band"], "",
+         "Bricks are tracked individually; recommendations are made per group of bricks, from the group's pooled "
+         "stock and sales, with its bricks listed as evidence.", "list",
          choices=("purity", "item_name", "category", "sub_category", "weight_band")),
     Rule("turn_weight_basis", "Stock turn", "Weight range measured by", "diamond_ct", "",
          "diamond_ct = total diamond weight (the usual measure for diamond jewellery); gross_wt = gross weight in "

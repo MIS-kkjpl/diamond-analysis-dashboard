@@ -93,6 +93,13 @@ CREATE TABLE IF NOT EXISTS brain.brick_turn (
     PRIMARY KEY (as_of, scope, brick)
 );
 
+-- Added after: rows for brick groups too (level), each brick's group, and where its ideal turn was set
+ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS level text NOT NULL DEFAULT 'brick';
+ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS brick_group text;
+ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS ideal_source text;
+ALTER TABLE brain.brick_turn DROP CONSTRAINT IF EXISTS brick_turn_pkey;
+ALTER TABLE brain.brick_turn ADD PRIMARY KEY (as_of, scope, level, brick);   -- brick = the brick or group key
+
 GRANT USAGE ON SCHEMA brain TO powerbi_reader, dashboard_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA brain TO powerbi_reader, dashboard_app;
 GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA brain TO dashboard_app;

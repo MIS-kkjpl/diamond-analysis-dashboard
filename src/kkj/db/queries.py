@@ -145,6 +145,11 @@ def sales_lines(conn, date_from):
     return df
 
 
+def ideal_turns(conn):
+    """config.ideal_turn: (level, key, ideal) set in Settings -> Ideal turns."""
+    return read(conn, "SELECT level, key, ideal::float AS ideal, note, updated_at, updated_by FROM config.ideal_turn")
+
+
 def branches(conn):
     return read(conn, "SELECT erp_branch, short_name, kind, active FROM config.branch")
 

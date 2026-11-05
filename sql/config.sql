@@ -70,3 +70,19 @@ CREATE TABLE IF NOT EXISTS config.branch (
 GRANT SELECT ON config.branch TO powerbi_reader, dashboard_app;
 GRANT INSERT, UPDATE ON config.branch TO dashboard_app;
 RESET ROLE;
+
+-- Ideal stock turn per brick, brick group, product or item group (added after the first version).
+-- The most specific row wins; anything without one uses the target_turn rule. Edited in Settings -> Ideal turns.
+SET ROLE erp_etl;
+CREATE TABLE IF NOT EXISTS config.ideal_turn (
+    level       text NOT NULL CHECK (level IN ('brick', 'group', 'product', 'item_group')),
+    key         text NOT NULL,                 -- e.g. '18KT · D RING · 0.25–0.5ct' for a group, 'D RING' for a product
+    ideal       numeric(6,2) NOT NULL CHECK (ideal > 0),
+    note        text,
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    updated_by  text,
+    PRIMARY KEY (level, key)
+);
+GRANT SELECT ON config.ideal_turn TO powerbi_reader, dashboard_app;
+GRANT INSERT, UPDATE, DELETE ON config.ideal_turn TO dashboard_app;
+RESET ROLE;

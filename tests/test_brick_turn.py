@@ -35,14 +35,15 @@ def test_grid_takes_the_latest_snapshot_in_each_fortnight_and_leaves_gaps():
 def _stock(pcs_by_date, brick="b", band=2, group="Diamond Jewellery", value_each=100_000):
     return pd.DataFrame([{"snapshot_date": d, "brick": brick, "item_class_group": group, "purity": "18KT",
                           "item_name": "D RING", "category": "MICRO", "sub_category": "", "weight_band": f"band{band}",
-                          "band_order": band, "pcs": p, "value": p * value_each}
+                          "band_order": band, "brick_group": f"g{brick}", "pcs": p, "value": p * value_each}
                          for d, p in pcs_by_date.items()])
 
 
 def _sales(dates_pcs, brick="b", band=2):
     return pd.DataFrame([{"sale_date": d, "brick": brick, "item_class_group": "Diamond Jewellery", "purity": "18KT",
                           "item_name": "D RING", "category": "MICRO", "sub_category": "", "weight_band": f"band{band}",
-                          "band_order": band, "pcs": p, "value": p * 100_000} for d, p in dates_pcs])
+                          "band_order": band, "brick_group": f"g{brick}", "pcs": p, "value": p * 100_000}
+                         for d, p in dates_pcs])
 
 
 def _one(stock, sales, **rules):
@@ -118,3 +119,26 @@ def test_lost_sales_brick_with_no_stock_still_appears():
     stock = _stock({d: 5 for d in DATES}, "other")
     t = bt.compute(stock, _sales([(AS_OF, 2)], "b"), AS_OF, RULES).set_index("brick")
     assert "b" in t.index and t.loc["b", "current_pcs"] == 0 and np.isinf(t.loc["b", "turn_12m"])
+
+
+def test_group_pools_its_bricks_stock_and_sales():
+    a = _stock({d: 10 for d in DATES}, "a").assign(brick_group="G")
+    b = _stock({d: 30 for d in DATES}, "b").assign(brick_group="G")
+    sales = pd.concat([_sales([(AS_OF - pd.Timedelta(days=7 * k), 1) for k in range(52)], "a"),
+                       _sales([(AS_OF - pd.Timedelta(days=7 * k), 1) for k in range(52)], "b")]).assign(brick_group="G")
+    g = bt.compute(pd.concat([a, b]), sales, AS_OF, RULES, level="brick_group").set_index("brick_group").loc["G"]
+    assert g["avg_pcs_12m"] == pytest.approx(40) and g["sold_12m"] == 104
+    assert g["turn_12m"] == pytest.approx(104 * 365 / 364 / 40)          # pooled, not the mean of 5.2× and 1.7×
+
+
+def test_most_specific_ideal_wins():
+    stock = pd.concat([_stock({d: 10 for d in DATES}, "a"), _stock({d: 10 for d in DATES}, "b"),
+                       _stock({d: 10 for d in DATES}, "c").assign(item_name="D TOPS", brick_group="gc")])
+    sales = pd.concat([_sales([(AS_OF - pd.Timedelta(days=7 * k), 1) for k in range(52)], x) for x in "abc"])
+    sales.loc[sales["brick"] == "c", ["item_name", "brick_group"]] = ["D TOPS", "gc"]
+    ideals = pd.DataFrame([("item_group", "Diamond Jewellery", 3.0), ("product", "D RING", 4.0), ("brick", "a", 5.2)],
+                          columns=["level", "key", "ideal"])
+    t = bt.compute(stock, sales, AS_OF, {**RULES, "target_turn": 1.0}, ideals=ideals).set_index("brick")
+    assert t.loc["a", ["ideal_turn", "ideal_source", "status"]].tolist() == [5.2, "brick", "keep"]
+    assert t.loc["b", ["ideal_turn", "ideal_source"]].tolist() == [4.0, "product"]
+    assert t.loc["c", ["ideal_turn", "ideal_source", "status"]].tolist() == [3.0, "item_group", "increase"]

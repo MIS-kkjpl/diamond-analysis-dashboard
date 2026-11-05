@@ -242,6 +242,14 @@ rule in **Settings → Stock turn**, not a constant.
   Weight range. For diamond jewellery the weight range is the total diamond weight in
   carats (default edges 0.1 / 0.25 / 0.5 / 1 / 2 / 5 ct), the usual planning measure; gross
   weight in grams is the alternative for gold. The data has no size field.
+- **Bricks and brick groups:** bricks are tracked individually (median 2 pieces each).
+  Brick groups default to Purity – Product – Weight range and pool their bricks' stock
+  and sales. Recommendations are made per group, with its bricks as evidence; 378 groups
+  instead of about 1,000 bricks.
+- **Ideal turn per brick:** **Settings → Ideal turns** (`config.ideal_turn`). An ideal can
+  be set for a brick, a brick group, a product or an item group, and the most specific one
+  wins. The rest use the default ideal (`target_turn`). Every row shows its ideal and
+  where it was set.
 - **Windows:** the last 3, 6 and 12 months, with stock read once a fortnight (6 / 13 / 26
   fortnights; the latest snapshot in each).
   - A window is judged only if at least 60% of its fortnights have stock data. Missing
@@ -255,7 +263,7 @@ rule in **Settings → Stock turn**, not a constant.
   - 6 and 12 months → 75/25;
   - 3 and 6 months (a new product) → 75/25;
   - 3 months only → "too new".
-- **Verdict:** compared with the ideal turn (default 1.0× a year):
+- **Verdict:** compared with its own ideal turn:
   - within ±10% → keep;
   - below → reduce;
   - above → increase.

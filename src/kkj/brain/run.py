@@ -26,15 +26,26 @@ log = logging.getLogger("kkj.brain")
 
 
 def brick_turns(conn, rules, as_of, showrooms):
-    """Weighted stock turn per brick for the company and for each showroom, as of the latest stock date."""
+    """Weighted stock turn per brick and per brick group, for the company and each showroom.
+
+    Returns one DataFrame with scope ('Company' or a branch) and level ('brick' or 'group'); for groups
+    the 'brick' column holds the group key.
+    """
     dates = q.stock_dates(conn)
     grid = bt.fortnight_grid(as_of, dates.loc[dates["snapshot_date"] <= as_of, "snapshot_date"])
     stock = bt.add_brick(q.brick_stock(conn, [s for _, s in grid if s is not None]), rules)
     sales = bt.add_brick(q.brick_sales(conn, (as_of - timedelta(days=bt.FORTNIGHT * bt.WINDOWS["12m"])).date()), rules)
-    company = bt.compute(stock, sales, as_of, rules).assign(scope="Company")
-    branch = bt.compute(stock[stock["branch"].isin(showrooms)], sales[sales["branch"].isin(showrooms)], as_of, rules,
-                        keys=("brick", "branch")).rename(columns={"branch": "scope"})
-    return company, branch
+    ideals = q.ideal_turns(conn)
+    shop_stock, shop_sales = stock[stock["branch"].isin(showrooms)], sales[sales["branch"].isin(showrooms)]
+    parts = []
+    for level, name in (("brick", "brick"), ("brick_group", "group")):
+        company = bt.compute(stock, sales, as_of, rules, level=level, ideals=ideals).assign(scope="Company")
+        branch = bt.compute(shop_stock, shop_sales, as_of, rules, level=level, by=("branch",), ideals=ideals)             .rename(columns={"branch": "scope"})
+        for df in (company, branch):
+            if level == "brick_group":
+                df = df.assign(brick=df["brick_group"])
+            parts.append(df.assign(level=name))
+    return pd.concat(parts, ignore_index=True)
 
 
 def save_brick_turns(conn, table, as_of, run_id):
@@ -78,10 +89,9 @@ def candidates(conn, rules):
     card = ins.supplier_scorecard(history, long_sales, h_start, h_end, bands, rules["min_supplier_pcs"])
     actions += gen.suppliers(card, stock)
 
-    company, branch = brick_turns(conn, rules, as_of, showrooms)
-    actions += gen.stock_turn(company, branch, rules)
-    return (actions, as_of.date(), sales["sale_date"].max().date() if len(sales) else None,
-            pd.concat([company, branch], ignore_index=True))
+    turns = brick_turns(conn, rules, as_of, showrooms)
+    actions += gen.stock_turn(turns, rules)
+    return actions, as_of.date(), sales["sale_date"].max().date() if len(sales) else None, turns
 
 
 def refresh(trigger="manual"):

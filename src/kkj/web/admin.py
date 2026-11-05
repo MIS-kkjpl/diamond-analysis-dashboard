@@ -1,5 +1,6 @@
 """Settings: business rules by section, the salesperson and branch lists, and the change history."""
 import json
+import math
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
@@ -42,14 +43,77 @@ def _branches():
                           ORDER BY kind, short_name"""))
 
 
+IDEAL_LEVELS = {"item_group": "Item group", "product": "Product", "group": "Brick group", "brick": "Brick"}
+
+
+def _ideals_ctx(error=None, saved=None, level="group", key="", ideal=""):
+    """The ideal-turn table, plus the keys that exist at each level (from the latest stock turn) for the picker."""
+    rows = _plain(read("""SELECT level, key, ideal::float AS ideal, note, updated_by, updated_at AT TIME ZONE 'Asia/Kolkata' AS updated_at
+                          FROM config.ideal_turn ORDER BY CASE level WHEN 'item_group' THEN 1 WHEN 'product' THEN 2
+                          WHEN 'group' THEN 3 ELSE 4 END, key"""))
+    latest = read("""SELECT level, brick, item_name, item_class_group, blended_turn FROM brain.brick_turn
+                     WHERE scope = 'Company' AND as_of = (SELECT max(as_of) FROM brain.brick_turn)""")
+    keys = {"group": sorted(latest.loc[latest["level"] == "group", "brick"]),
+            "brick": sorted(latest.loc[latest["level"] == "brick", "brick"]),
+            "product": sorted(latest["item_name"].dropna().replace("", None).dropna().unique()),
+            "item_group": sorted(latest["item_class_group"].dropna().unique())}
+    # today's turn at each key, as a reference next to the ideal
+    now = {**latest[latest["level"] == "group"].set_index("brick")["blended_turn"].to_dict(),
+           **latest[latest["level"] == "brick"].set_index("brick")["blended_turn"].to_dict()}
+    now = {k: v for k, v in now.items() if v is not None and math.isfinite(v)}
+    return {"ideals": rows, "keys": keys, "levels": IDEAL_LEVELS, "now": now, "error": error, "saved": saved,
+            "form": {"level": level, "key": key, "ideal": ideal}}
+
+
+@router.get("/ideal-turns", response_class=HTMLResponse)
+def ideals_card(request: Request, level: str = "group", key: str = ""):
+    return templates.TemplateResponse(request, "_ideals.html", _ideals_ctx(level=level, key=key))
+
+
+@router.post("/ideal-turns", response_class=HTMLResponse)
+async def save_ideal(request: Request):
+    form = await request.form()
+    level, key, note = form.get("level", ""), (form.get("key") or "").strip(), (form.get("note") or "").strip() or None
+    delete = form.get("delete") == "1"
+    def again(error=None, saved=None):
+        return templates.TemplateResponse(request, "_ideals.html",
+                                          _ideals_ctx(error, saved, level, key, form.get("ideal", "")))
+    if level not in IDEAL_LEVELS or not key:
+        return again("Choose a level and what it applies to.")
+    by = who(request)
+    with engine().begin() as conn:
+        old = conn.execute(text("SELECT ideal::float FROM config.ideal_turn WHERE level = :l AND key = :k"),
+                           {"l": level, "k": key}).scalar()
+        if delete:
+            conn.execute(text("DELETE FROM config.ideal_turn WHERE level = :l AND key = :k"), {"l": level, "k": key})
+            new, msg = None, f"Removed the ideal for {key}; it now uses the next level up."
+        else:
+            try:
+                new = float(form.get("ideal", ""))
+                if not 0.05 <= new <= 24:
+                    raise ValueError
+            except ValueError:
+                return again("Ideal turn: a number between 0.05 and 24 (times a year).")
+            conn.execute(text("""INSERT INTO config.ideal_turn (level, key, ideal, note, updated_by) VALUES (:l, :k, :i, :n, :by)
+                                 ON CONFLICT (level, key) DO UPDATE SET ideal = EXCLUDED.ideal, note = EXCLUDED.note,
+                                 updated_at = now(), updated_by = EXCLUDED.updated_by"""),
+                         {"l": level, "k": key, "i": new, "n": note, "by": by})
+            msg = f"{IDEAL_LEVELS[level]} {key}: ideal {new:g}× a year. Verdicts update at the next refresh."
+        conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value)
+                             VALUES (:by, 'ideal_turn', :k, CAST(:old AS jsonb), CAST(:new AS jsonb))"""),
+                     {"by": by, "k": f"{level}: {key}", "old": json.dumps(old), "new": json.dumps(new)})
+    return templates.TemplateResponse(request, "_ideals.html", _ideals_ctx(saved=msg, level=level))
+
+
 @router.get("", response_class=HTMLResponse)
-def page(request: Request):
+def page(request: Request, ideal_level: str = "group", ideal_key: str = ""):
     people = _people()
     history = read("""SELECT changed_at AT TIME ZONE 'Asia/Kolkata' AS changed_at, changed_by, table_name, row_key,
                              old_value, new_value FROM config.change_log ORDER BY change_id DESC LIMIT 200""").to_dict("records")
     return render(request, "settings.html", "settings", sections=[_section_ctx(s) for s in SECTIONS], people=people,
                   to_review=sum(p["match_status"] in ("unmapped", "name_match") for p in people), branches=_branches(),
-                  person_kinds=PERSON_KINDS, branch_kinds=BRANCH_KINDS, history=history)
+                  person_kinds=PERSON_KINDS, branch_kinds=BRANCH_KINDS, history=history,
+                  ideal_level=ideal_level if ideal_level in IDEAL_LEVELS else "group", ideal_key=ideal_key)
 
 
 def _parse(rule, form):

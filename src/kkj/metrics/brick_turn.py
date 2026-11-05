@@ -6,7 +6,14 @@ A brick is a group of interchangeable pieces: Purity – Product – Variety –
 diamond weight in carats, the usual planning measure (gross metal weight is the gold-jewellery
 one); both the levels and the weight basis are business rules.
 
-For each brick, over three windows ending on the latest stock date:
+Two levels are computed. BRICKS (turn_brick_levels) are fine, for tracking. BRICK GROUPS
+(turn_group_levels, default Purity – Product – Weight range) pool their bricks' stock and sales;
+recommendations are raised per group so the list stays workable, with the bricks as evidence.
+
+The ideal turn is set per brick, group, product or item group (config.ideal_turn, edited in
+Settings); the most specific one wins, else the default ideal (the target_turn rule).
+
+For each brick or group, over three windows ending on the latest stock date:
 
   window   fortnights   needs stock data in   counts as available when
   3 months      6       >= turn_history_pct   in stock (pcs > 0) in >= turn_availability_pct
@@ -78,8 +85,13 @@ def weight_band(weights, edges, unit="ct"):
     return pd.Series(label, index=w.index), pd.Series(np.where(w.values > 0, order, -1), index=w.index)
 
 
+def _key(df, levels):
+    levels = [lv for lv in LEVELS if lv in levels]
+    return df[levels].astype(str).agg(lambda r: " · ".join(v for v in r if v), axis=1)
+
+
 def add_brick(df, rules):
-    """Adds the brick columns, weight_band/band_order and 'brick' (the display key) to stock or sales rows."""
+    """Adds the brick columns, weight_band/band_order, 'brick' and 'brick_group' (display keys) to stock or sales rows."""
     out = df.copy()
     no_metal = pd.to_numeric(out["purity"], errors="coerce").fillna(0).values <= 0
     out["purity"] = karat(out["purity"]).values
@@ -92,9 +104,27 @@ def add_brick(df, rules):
     out["weight_band"], out["band_order"] = weight_band(weight, rules["turn_weight_edges"], unit)
     for c in ("item_name", "category", "sub_category"):
         out[c] = out[c].fillna("").astype(str).str.strip()
-    levels = [lv for lv in LEVELS if lv in rules["turn_brick_levels"]]
-    out["brick"] = out[levels].astype(str).agg(lambda r: " · ".join(v for v in r if v), axis=1)
+    out["brick"] = _key(out, rules["turn_brick_levels"])
+    out["brick_group"] = _key(out, rules["turn_group_levels"])
     return out
+
+
+IDEAL_LEVELS = (("brick", "brick"), ("group", "brick_group"), ("product", "item_name"), ("item_group", "item_class_group"))
+
+
+def resolve_ideal(rows, ideals, default):
+    """(ideal turn, where it was set) per row: brick > group > product > item group > default."""
+    ideal = pd.Series(float(default), index=rows.index)
+    source = pd.Series("default", index=rows.index)
+    if ideals is None or len(ideals) == 0:
+        return ideal, source
+    for level, col in reversed(IDEAL_LEVELS):                   # most specific last, so it wins
+        if col not in rows:
+            continue
+        table = ideals[ideals["level"] == level].set_index("key")["ideal"].astype(float)
+        hit = rows[col].map(table)
+        ideal, source = ideal.where(hit.isna(), hit), source.where(hit.isna(), level)
+    return ideal, source
 
 
 def fortnight_grid(as_of, dates, periods=WINDOWS["12m"]):
@@ -123,16 +153,18 @@ def _weights(pattern, rules):
     return w / w.sum() if w.sum() > 0 else None
 
 
-def compute(stock, sales, as_of, rules, keys=("brick",)):
-    """One row per brick (per keys, e.g. ("brick", "branch")).
+def compute(stock, sales, as_of, rules, level="brick", by=(), ideals=None):
+    """One row per brick (level="brick") or brick group (level="brick_group"), per `by` (e.g. ("branch",)).
 
-    stock: brick rows (add_brick) for the grid's snapshot dates, with snapshot_date, pcs, value.
-    sales: brick rows of net sale lines (returns negative) over the last 12 months: sale_date, pcs.
+    stock: rows from add_brick for the grid's snapshot dates, with snapshot_date, pcs, value.
+    sales: rows from add_brick of net sale lines (returns negative) over the last 12 months: sale_date, pcs.
+    ideals: config.ideal_turn rows (level, key, ideal), or None for the default ideal everywhere.
     """
-    keys = list(keys)
+    keys = [level] + list(by)
+    levels = rules["turn_brick_levels"] if level == "brick" else rules["turn_group_levels"]
     stock = stock.assign(snapshot_date=pd.to_datetime(stock["snapshot_date"]))
     sales = sales.assign(sale_date=pd.to_datetime(sales["sale_date"]))
-    attrs =["item_class_group", "purity", "item_name", "category", "sub_category", "weight_band", "band_order"]
+    attrs = ["item_class_group", "purity", "item_name", "category", "sub_category", "weight_band", "band_order"]         + (["brick_group"] if level == "brick" else [])
     as_of = pd.Timestamp(as_of)
     grid = fortnight_grid(as_of, stock["snapshot_date"].unique())
 
@@ -142,6 +174,11 @@ def compute(stock, sales, as_of, rules, keys=("brick",)):
     index = pcs.index.union(sold_rows.groupby(keys).size().index)          # full outer: dead stock and lost sales
     pcs = pcs.reindex(index, fill_value=0)
     info = pd.concat([stock[keys + attrs], sales[keys + attrs]]).drop_duplicates(keys).set_index(keys).reindex(index)
+    for c in ("purity", "item_name", "category", "sub_category"):          # a group has no single value for these
+        if c not in levels:
+            info[c] = ""
+    if "weight_band" not in levels:
+        info["weight_band"], info["band_order"] = "", -1
 
     latest = stock[stock["snapshot_date"] == stock["snapshot_date"].max()]
     now = latest.groupby(keys).agg(current_pcs=("pcs", "sum"), current_value=("value", "sum")).reindex(index, fill_value=0)
@@ -166,9 +203,12 @@ def compute(stock, sales, as_of, rules, keys=("brick",)):
                                        np.where(out[f"annual_{name}"] > 0, np.inf, np.nan))
         out[f"q_{name}"] = (len(cols) >= hist_need * n) & (out[f"avail_{name}"] >= avail_need * max(len(cols), 1))
 
-    ideal, band = float(rules["target_turn"]), rules["turn_band_pct"] / 100
+    band = rules["turn_band_pct"] / 100
+    out["ideal_turn"], out["ideal_source"] = resolve_ideal(out.reset_index().set_index(out.index), ideals,
+                                                           rules["target_turn"])
     rows = []
     for key, r in out.iterrows():
+        ideal = r["ideal_turn"]
         pattern = {w for w in WINDOWS if r[f"q_{w}"]}
         w = _weights(pattern, rules)
         rec = {"pattern": "+".join(x for x in WINDOWS if x in pattern) or "none", "weights": None,
@@ -194,10 +234,9 @@ def compute(stock, sales, as_of, rules, keys=("brick",)):
         rows.append(rec)
     out = pd.concat([out, pd.DataFrame(rows, index=out.index)], axis=1)
     out = out[(out["current_pcs"] > 0) | (out["sold_12m"] > 0)]
-    out = _neighbour_check(out.reset_index(), keys)
-    out["ideal_turn"] = ideal
+    out = _neighbour_check(out.reset_index(), list(by), levels)
     out["ideal_pcs"] = np.where(out["annual_sales"].notna() & (out["annual_sales"] > 0),
-                                np.round(out["annual_sales"].clip(lower=0) / ideal), 0)
+                                np.round(out["annual_sales"].clip(lower=0) / out["ideal_turn"]), 0)
     out.loc[out["status"].isin(["new", "no_history", "hold"]), "ideal_pcs"] = out["current_pcs"]
     out["change_pcs"] = out["ideal_pcs"] - out["current_pcs"]
     out["avg_piece_value"] = np.where(out["current_pcs"] > 0, out["current_value"] / out["current_pcs"].clip(lower=1),
@@ -213,11 +252,11 @@ def _range(turn, ideal, band):
     return "keep"
 
 
-def _neighbour_check(t, keys):
-    """Resolve not-qualified, out-of-range bricks by their neighbouring weight ranges (one band down and up)."""
+def _neighbour_check(t, by, levels):
+    """Resolve not-qualified, out-of-range rows by their neighbouring weight ranges (one band down and up)."""
     t = t.copy()
     t["band_order"] = pd.to_numeric(t["band_order"], errors="coerce").fillna(-99).astype(int)
-    others = [k for k in keys if k != "brick"] + ["item_class_group", "purity", "item_name", "category", "sub_category"]
+    others = list(by) + ["item_class_group"] + [lv for lv in LEVELS if lv in levels and lv != "weight_band"]
     sig = t[others].astype(str).agg("|".join, axis=1) + "#" + t["band_order"].astype(str)
     present_all, healthy = set(sig), set(sig[t["status"] == "keep"])
     for i in t.index[t["status"].str.startswith("check_")]:

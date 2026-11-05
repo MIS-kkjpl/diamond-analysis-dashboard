@@ -271,13 +271,15 @@ def insights(request: Request, group: list[str] = Query(default=["Diamond Jewell
 
 # ── Stock turn (weighted, per brick) ──────────────────────────────────────────
 @router.get("/stock-turn", response_class=HTMLResponse)
-def stock_turn(request: Request, scope: str = "Company", group: list[str] = Query(default=[]),
+def stock_turn(request: Request, view: str = "group", scope: str = "Company", group: list[str] = Query(default=[]),
                status: list[str] = Query(default=[]), search: str = ""):
     rules = _rules()
     t = read("""SELECT * FROM brain.brick_turn WHERE as_of = (SELECT max(as_of) FROM brain.brick_turn)""")
     if t.empty:
         return render(request, "stock_turn.html", "stock_turn", empty=True, f={}, rules=rules)
     as_of = t["as_of"].iloc[0]
+    view = view if view in ("group", "brick") else "group"
+    t = t[t["level"] == view]
     scopes = ["Company"] + sorted(s for s in t["scope"].unique() if s != "Company")
     scope = scope if scope in scopes else "Company"
     t = t[t["scope"] == scope]
@@ -311,19 +313,23 @@ def stock_turn(request: Request, scope: str = "Company", group: list[str] = Quer
     shown = shown.assign(
         status_label=shown["status"].map(lambda s: bt.STATUS[s][0]),
         in_stock=shown["avail_12m"].astype(int).astype(str) + " of " + shown["data_12m"].astype(int).astype(str),
-        weights=shown["weights"].fillna("–"))
+        weights=shown["weights"].fillna("–"),
+        ideal_set=shown["ideal_source"].map({"default": "default", "item_group": "item group", "product": "product",
+                                              "group": "brick group", "brick": "brick"}).fillna("default"))
     table = charts.table(
         shown[["brick", "item_class_group", "current_pcs", "ideal_pcs", "change_pcs", "change_value", "turn_3m", "turn_6m",
-               "turn_12m", "in_stock", "weights", "blended_turn", "status_label"]],
+               "turn_12m", "in_stock", "weights", "blended_turn", "ideal_turn", "ideal_set", "status_label"]],
         {"current_pcs": "num", "ideal_pcs": "num", "change_pcs": "num", "change_value": "money", "turn_3m": "dec",
-         "turn_6m": "dec", "turn_12m": "dec", "blended_turn": "dec"},
-        {"item_class_group": "group", "current_pcs": "now (pcs)", "ideal_pcs": "ideal (pcs)", "change_pcs": "change",
+         "turn_6m": "dec", "turn_12m": "dec", "blended_turn": "dec", "ideal_turn": "dec"},
+        {"brick": "brick group" if view == "group" else "brick", "item_class_group": "item group", "current_pcs": "now (pcs)", "ideal_pcs": "ideal (pcs)", "change_pcs": "change",
          "change_value": "change (₹)", "turn_3m": "3 m", "turn_6m": "6 m", "turn_12m": "12 m",
          "in_stock": "in stock (fortnights, 12 m)", "weights": "blend 3/6/12", "blended_turn": "blended turn",
-         "status_label": "status"})
+         "ideal_turn": "ideal turn", "ideal_set": "ideal set for", "status_label": "verdict"})
     return render(request, "stock_turn.html", "stock_turn", empty=False, rules=rules, as_of=as_of, kpis=kpis,
-                  scopes=scopes, groups=groups, statuses=bt.STATUS, f={"scope": scope, "group": group, "status": status, "search": search},
+                  scopes=scopes, groups=groups, statuses=bt.STATUS, f={"view": view, "scope": scope, "group": group, "status": status, "search": search},
                   fig=charts.hbar(chart["label"], chart["value"] / 1e7, np.c_[chart["bricks"], chart["pcs"]],
                                   "<br>%{customdata[0]:,.0f} bricks · %{customdata[1]:,.0f} pcs"),
                   t=table, n_shown=len(shown), n_total=len(t[t["status"].isin(status)] if status else t),
-                  levels=" – ".join(bt.LEVEL_LABELS[lv] for lv in bt.LEVELS if lv in rules["turn_brick_levels"]))
+                  levels=" – ".join(bt.LEVEL_LABELS[lv] for lv in bt.LEVELS
+                                    if lv in rules["turn_brick_levels" if view == "brick" else "turn_group_levels"]),
+                  n_ideals=int(read("SELECT count(*) AS n FROM config.ideal_turn")["n"].iloc[0]))

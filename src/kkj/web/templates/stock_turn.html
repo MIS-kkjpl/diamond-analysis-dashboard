@@ -13,6 +13,12 @@
   <p class="empty-subtitle text-secondary">Stock turn is worked out with each recommendation refresh.</p></div>
 {% else %}
 {% call flt.form("/stock-turn") %}
+  <div class="btn-group" role="group">
+    <input type="radio" class="btn-check" name="view" id="view-group" value="group" {% if f.view == "group" %}checked{% endif %}>
+    <label class="btn btn-sm" for="view-group" title="Where recommendations are made">Brick groups</label>
+    <input type="radio" class="btn-check" name="view" id="view-brick" value="brick" {% if f.view == "brick" %}checked{% endif %}>
+    <label class="btn btn-sm" for="view-brick" title="Fine tracking">Bricks</label>
+  </div>
   <select name="scope" class="form-select form-select-sm" style="width: auto">
     {% for s in scopes %}<option value="{{ s }}" {% if s == f.scope %}selected{% endif %}>{{ s | short if s != "Company" else "Whole company" }}</option>{% endfor %}
   </select>
@@ -29,8 +35,10 @@
 {% endcall %}
 
 <div class="row row-cards mb-2">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
-<div class="small text-secondary mb-3">As of {{ as_of | date }} · brick = {{ levels }} · ideal turn {{ rules.target_turn }}× a year,
-  kept within ±{{ rules.turn_band_pct | num }}% · change these in Settings → Stock turn</div>
+<div class="small text-secondary mb-3">As of {{ as_of | date }} · {{ "brick group" if f.view == "group" else "brick" }} = {{ levels }} ·
+  default ideal {{ rules.target_turn }}× a year, {{ n_ideals }} specific ideal{{ "" if n_ideals == 1 else "s" }} set
+  (<a href="/settings#tab-ideals">Settings → Ideal turns</a>), kept within ±{{ rules.turn_band_pct | num }}% ·
+  recommendations are made per brick group</div>
 
 <div class="row row-cards mb-3">
   <div class="col-lg-5">{{ ui.chart("c-status", fig, "Stock value by verdict", "₹ Cr held now") }}</div>
@@ -55,7 +63,7 @@
   </div>
 </div>
 
-<div class="mb-3">{{ ui.table_card("Bricks: biggest changes first", t,
+<div class="mb-3">{{ ui.table_card(("Brick groups" if f.view == "group" else "Bricks") ~ ": biggest changes first", t,
      sub=("Top " ~ n_shown ~ " of " ~ n_total ~ ". ") if n_total > n_shown else "", icon="ti-stack-2") }}</div>
 {% endif %}
 </div>

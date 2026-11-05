@@ -1,5 +1,7 @@
 """Web app routes against the real database (read-only, except one decision and some settings that are undone,
 and temporary pytest accounts that are removed)."""
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -91,7 +93,8 @@ def test_response_needs_sign_in_then_records_and_is_undone():
                                   "/sales", "/sales?start=2026-10-01&end=2026-10-31&group=Diamond+Jewellery",
                                   "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings",
                                   "/stock-turn", "/stock-turn?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
-                                  "/stock-turn?group=Diamond+Jewellery&group=", "/recommendations?group=stock_level"])
+                                  "/stock-turn?group=Diamond+Jewellery&group=", "/stock-turn?view=brick&search=D+RING",
+                                  "/settings/ideal-turns", "/recommendations?group=stock_level"])
 def test_analytics_and_settings_pages_render(path):
     r = client.get(path)
     assert r.status_code == 200, r.text[-800:]
@@ -248,3 +251,21 @@ def test_users_tab_adds_resets_disables_and_forces_a_new_password():
     assert logged == 4
     with settings.etl_engine().begin() as c:
         c.execute(text("DELETE FROM config.change_log WHERE table_name = 'user' AND row_key LIKE 'pytest%'"))
+
+
+def test_ideal_turn_save_validate_and_remove():
+    key = "D RING"
+    try:
+        assert "between 0.05 and 24" in client.post("/settings/ideal-turns", data={"level": "product", "key": key,
+                                                                                    "ideal": "0"}).text
+        r = client.post("/settings/ideal-turns", data={"level": "product", "key": key, "ideal": "0.8", "note": "pytest"})
+        assert "ideal 0.8× a year" in r.text and "pytest" in r.text
+        with settings.app_engine().connect() as c:
+            assert c.execute(text("SELECT ideal FROM config.ideal_turn WHERE level = 'product' AND key = :k"),
+                             {"k": key}).scalar() == Decimal("0.80")
+        assert "Removed" in client.post("/settings/ideal-turns", data={"level": "product", "key": key, "delete": "1"}).text
+    finally:
+        with settings.etl_engine().begin() as c:
+            c.execute(text("DELETE FROM config.ideal_turn WHERE note = 'pytest' OR (level = 'product' AND key = :k "
+                           "AND updated_by = 'pytest')"), {"k": key})
+            c.execute(text("DELETE FROM config.change_log WHERE table_name = 'ideal_turn' AND changed_by = 'pytest'"))

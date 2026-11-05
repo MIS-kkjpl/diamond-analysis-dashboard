@@ -292,12 +292,19 @@ def _turn(x):
     return "–" if x is None or pd.isna(x) else "∞" if np.isinf(x) else f"{x:.2f}×"
 
 
-def stock_turn(company, by_branch, rules):
-    """Increase / reduce / phase out a brick, from kkj.metrics.brick_turn (company level; branch split as evidence)."""
-    ideal, min_change = rules["target_turn"], rules["turn_min_change_pcs"]
+def stock_turn(turns, rules):
+    """Increase / reduce / phase out per brick GROUP (company level), from kkj.brain.run.brick_turns.
+
+    The group's own pooled turn decides; its bricks (with their own verdicts and ideals) and the split by
+    branch are the evidence.
+    """
+    min_change = rules["turn_min_change_pcs"]
+    groups = turns[(turns["level"] == "group") & (turns["scope"] == "Company")]
+    bricks = turns[(turns["level"] == "brick") & (turns["scope"] == "Company")]
+    by_branch = turns[(turns["level"] == "group") & (turns["scope"] != "Company")]
     actions = []
-    for _, r in company.iterrows():
-        status, change = r["status"], r["change_pcs"]
+    for _, r in groups.iterrows():
+        status, change, ideal = r["status"], r["change_pcs"], r["ideal_turn"]
         buy = r["item_class_group"] not in rules["no_buy_groups"]
         if status in ("increase", "stock_up") and change >= min_change and buy:
             kind, title = "turn_increase", f"Increase {r['brick']} to {r['ideal_pcs']:.0f} pcs"
@@ -312,29 +319,38 @@ def stock_turn(company, by_branch, rules):
             impact, label = r["current_value"], f"{money(r['current_value'])} held ({r['current_pcs']:.0f} pcs)"
         else:
             continue
+        set_at = {"default": "default", "item_group": "item group", "product": "product", "group": "this group"}
+        target = f"{ideal:g}× ({set_at.get(r['ideal_source'], r['ideal_source'])} ideal)"
         if status in ("increase", "reduce"):
-            summary = (f"Turns {_turn(r['blended_turn'])} a year (blend {r['weights']} of 3/6/12 months) against an ideal "
-                       f"of {ideal:g}×. Holding {r['current_pcs']:.0f} pcs, selling about {r['annual_sales']:.0f} a year.")
+            summary = (f"Turns {_turn(r['blended_turn'])} a year (blend {r['weights']} of 3/6/12 months) against "
+                       f"{target}. Holding {r['current_pcs']:.0f} pcs, selling about {r['annual_sales']:.0f} a year.")
         elif status == "stock_up":
             summary = (f"In stock in only {r['avail_12m']:.0f} of {r['data_12m']:.0f} fortnights, yet sold "
-                       f"{r['sold_12m']:.0f} pcs in 12 months. Its neighbouring weight ranges don't turn at the ideal "
-                       f"rate either, so stock it properly or accept the lost sales.")
+                       f"{r['sold_12m']:.0f} pcs in 12 months, and its neighbouring weight ranges are out of range too: "
+                       f"stock it properly or accept the lost sales.")
         else:
-            summary = (f"Turns {_turn(r['blended_turn'])} a year against an ideal of {ideal:g}× on thin data (in stock in "
+            summary = (f"Turns {_turn(r['blended_turn'])} a year against {target} on thin data (in stock in "
                        f"{r['avail_12m']:.0f} of {r['data_12m']:.0f} fortnights), and its neighbouring weight ranges "
                        f"are out of range too.")
+        inside = bricks[bricks["brick_group"] == r["brick"]].copy()
+        inside["size"] = inside["change_pcs"].abs()
         branches = by_branch[by_branch["brick"] == r["brick"]]
         evidence = {
             "turn": {w: _turn(r[f"turn_{w}"]) for w in ("3m", "6m", "12m")},
             "in stock (fortnights)": {w: f"{r[f'avail_{w}']:.0f} of {r[f'data_{w}']:.0f}" for w in ("3m", "6m", "12m")},
             "sold (pcs)": {w: float(r[f"sold_{w}"]) for w in ("3m", "6m", "12m")},
             "qualifying windows": r["pattern"], "weights 3/6/12": r["weights"] or "–",
-            "blended turn": _turn(r["blended_turn"]), "ideal turn": f"{ideal:g}×",
+            "blended turn": _turn(r["blended_turn"]), "ideal turn": target,
             "now (pcs)": float(r["current_pcs"]), "ideal (pcs)": float(r["ideal_pcs"]),
-            "by branch": {short(b["scope"]): f"{b['current_pcs']:.0f} pcs held, {b['sold_12m']:.0f} sold in 12 months"
+            "bricks in this group": {
+                b["brick"]: f"{b['current_pcs']:.0f} → {b['ideal_pcs']:.0f} pcs, turn {_turn(b['blended_turn'])} "
+                            f"vs {b['ideal_turn']:g}×, {b['status'].replace('_', ' ')}"
+                for _, b in inside.sort_values("size", ascending=False).head(15).iterrows()},
+            "by branch": {short(b["scope"]): f"{b['current_pcs']:.0f} pcs held, {b['sold_12m']:.0f} sold in 12 months, "
+                                             f"{b['status'].replace('_', ' ')}"
                           for _, b in branches.sort_values("current_pcs", ascending=False).iterrows()}}
         actions.append(_action(kind, r["brick"], title, summary, impact, label, confidence(r["sold_12m"]), evidence,
-                               subject={"brick": r["brick"], "item": r["item_name"], "group": r["item_class_group"]}))
+                               subject={"group": r["brick"], "item": r["item_name"], "item_group": r["item_class_group"]}))
     return actions
 
 
