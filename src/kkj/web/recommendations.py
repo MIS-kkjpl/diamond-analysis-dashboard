@@ -41,6 +41,10 @@ EVENTS = {"created": "Raised", "approved": "Approved", "rejected": "Dismissed", 
 ACTIONS = {"approve": "approve", "dismiss": "reject", "snooze": "snooze", "complete": "done", "reopen": "reopen",
            "comment": "comment"}             # URL verb -> kkj.brain.store decision
 PAGE = 25
+SORTS = {"priority": ("Most important first", "priority DESC, impact_value DESC"),
+         "money": ("Most money first", "impact_value DESC NULLS LAST"),
+         "newest": ("Newest first", "first_seen_at DESC"),
+         "branch": ("By branch", "split_part(coalesce(branch, 'zz'), ' / ', 1), priority DESC")}
 COLUMNS = """action_id, kind, title, summary, branch, impact_value, impact_label, first_impact, confidence,
              evidence, pieces, status, times_seen, decided_by, decision_note, snoozed_until,
              decided_at AT TIME ZONE 'Asia/Kolkata' AS decided_at,
@@ -49,7 +53,7 @@ COLUMNS = """action_id, kind, title, summary, branch, impact_value, impact_label
 templates.env.globals.update(STATUS=STATUS, EVENTS=EVENTS)
 
 
-def items(view="open", group="all", branch="", q="", limit=PAGE, offset=0):
+def items(view="open", group="all", branch="", q="", limit=PAGE, offset=0, sort="priority"):
     """Recommendations matching the filters, best first, plus the total count."""
     statuses = VIEWS.get(view, VIEWS["open"])[1]
     kinds = GROUPS.get(group, GROUPS["all"])[1]
@@ -63,13 +67,15 @@ def items(view="open", group="all", branch="", q="", limit=PAGE, offset=0):
     cond = " AND ".join(where)
     total = int(read(f"SELECT count(*) AS n FROM brain.action WHERE {cond}", **params)["n"].iloc[0])
     rows = read(f"""SELECT {COLUMNS} FROM brain.action WHERE {cond}
-                    ORDER BY priority DESC, impact_value DESC LIMIT :limit OFFSET :offset""",
+                    ORDER BY {SORTS.get(sort, SORTS["priority"])[1]} LIMIT :limit OFFSET :offset""",
                 limit=limit, offset=offset, **params)
     return [_prep(r) for r in rows.to_dict("records")], total
 
 
 def _prep(a):
     a["label"], a["icon"], a["colour"] = KINDS.get(a["kind"], (a["kind"], "ti-bolt", "secondary"))
+    if not isinstance(a.get("branch"), str) or not a["branch"].strip():     # company-wide cards have no branch
+        a["branch"] = None
     for f in ("evidence", "pieces"):
         if isinstance(a[f], str):
             a[f] = json.loads(a[f])
@@ -96,20 +102,22 @@ def branches():
 
 
 @router.get("/recommendations", response_class=HTMLResponse)
-def inbox(request: Request, view: str = "open", group: str = "all", branch: str = "", q: str = ""):
-    found, total = items(view, group, branch, q)
+def inbox(request: Request, view: str = "open", group: str = "all", branch: str = "", q: str = "",
+          sort: str = "priority"):
+    found, total = items(view, group, branch, q, sort=sort)
     return render(request, "recommendations.html", "recommendations", items=found, total=total, summary=summary(),
                   groups=GROUPS, views=VIEWS, branches=branches(),
-                  f={"view": view, "group": group, "branch": branch, "q": q}, page=PAGE)
+                  f={"view": view, "group": group, "branch": branch, "q": q, "sort": sort}, page=PAGE, sorts=SORTS)
 
 
 @router.get("/recommendations/feed", response_class=HTMLResponse)
-def feed(request: Request, view: str = "open", group: str = "all", branch: str = "", q: str = "", offset: int = 0):
+def feed(request: Request, view: str = "open", group: str = "all", branch: str = "", q: str = "", offset: int = 0,
+         sort: str = "priority"):
     """The list only (filters and 'show more' swap this part of the page)."""
-    found, total = items(view, group, branch, q, offset=offset)
+    found, total = items(view, group, branch, q, offset=offset, sort=sort)
     return templates.TemplateResponse(request, "_feed.html", {
         "items": found, "total": total, "offset": offset, "page": PAGE, "who": who(request),
-        "f": {"view": view, "group": group, "branch": branch, "q": q}})
+        "f": {"view": view, "group": group, "branch": branch, "q": q, "sort": sort}})
 
 
 @router.get("/recommendations/summary", response_class=HTMLResponse)

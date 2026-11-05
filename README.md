@@ -225,6 +225,19 @@ passwords. The same can be done from the command line:
 
 All filters are plain URL parameters, so a filtered view can be shared as a link.
 
+**Finding your way:**
+- **Look up** (the search box in the top bar):
+  - a barcode shows where the piece is, where it has been, its sales and the
+    recommendations naming it;
+  - a product shows its stock by branch, the last 12 months, when it sells and its
+    brick groups;
+  - it also finds salespeople, brick groups and recommendations.
+- **Tables** can be searched, sorted by clicking a column and downloaded as CSV. They
+  show 25 rows at a time (`static/app.js`).
+- **Filters** are searchable dropdowns: pick several, or none for all. Sales can be
+  filtered by salesperson; Recommendations can be sorted by importance, money,
+  newest or branch.
+
 **Refreshing recommendations:** `python -m kkj.brain.run` re-runs every rule on
 the latest data. A recommendation keeps its identity across refreshes:
 - it reopens if its issue comes back;

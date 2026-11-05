@@ -65,7 +65,7 @@ def _cell(value, kind):
     if value is None or (isinstance(value, float) and (math.isnan(value) or math.isinf(value))):
         return "–"
     if kind == "money":
-        return money(value)
+        return "−" + money(-value) if value < 0 else money(value)
     if kind == "pct":
         return f"{100 * value:.1f}%"
     if kind == "num":

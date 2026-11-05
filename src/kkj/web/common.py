@@ -102,7 +102,13 @@ def flatten(value, prefix=""):
 templates = Jinja2Templates(directory=HERE / "templates")
 templates.env.filters.update(money=money, pct=pct, num=_num, date=_date, ago=_ago,
                              short=lambda b: str(b).split(" / ")[0] if b else "All branches")
-templates.env.globals.update(flatten=flatten)
+# readable names for coded options in Settings (the stored value stays the code)
+CHOICE_LABELS = {"item_class_group": "item group", "item_name": "product", "category": "variety (category)",
+                 "sub_category": "type (sub-category)", "price_band": "price band", "ct_band": "diamond weight band",
+                 "karat": "purity (karat)", "supplier": "supplier", "purity": "purity", "weight_band": "weight range",
+                 "diamond_ct": "total diamond weight (carats)", "gross_wt": "gross weight (grams)",
+                 "oldest": "oldest pieces first", "lowest_value": "lowest value first", "highest_value": "highest value first"}
+templates.env.globals.update(flatten=flatten, choice_label=lambda c: CHOICE_LABELS.get(str(c), str(c)))
 
 
 def status():

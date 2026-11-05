@@ -1,21 +1,25 @@
 {# Filter form: any change re-fetches this page and swaps only #page; the URL keeps the filters (shareable). #}
 {% macro form(action) -%}
-<form class="card card-body py-2 mb-3" action="{{ action }}" method="get"
+<form class="card card-body py-2 mb-3 filter-bar" action="{{ action }}" method="get"
       hx-get="{{ action }}" hx-target="#page" hx-select="#page" hx-swap="outerHTML" hx-push-url="true"
       hx-trigger="change" hx-indicator="#filter-spin">
-  <div class="d-flex flex-wrap align-items-center gap-3">
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <span class="text-secondary small d-none d-md-inline"><i class="ti ti-filter"></i></span>
     {{ caller() }}
-    <span id="filter-spin" class="spinner-border spinner-border-sm htmx-indicator ms-auto"></span>
+    <a href="{{ action }}" class="btn btn-sm btn-ghost-secondary ms-md-auto" title="Clear all filters"><i class="ti ti-x"></i> Clear</a>
+    <span id="filter-spin" class="spinner-border spinner-border-sm htmx-indicator"></span>
   </div>
 </form>
 {%- endmacro %}
 
-{% macro toggles(name, options, selected, short=False) -%}
-<div class="btn-group flex-wrap" role="group">
-  {% for o in options %}
-  <input type="checkbox" class="btn-check" name="{{ name }}" id="{{ name }}-{{ loop.index }}" value="{{ o }}"
-         {% if o in selected %}checked{% endif %}>
-  <label class="btn btn-sm" for="{{ name }}-{{ loop.index }}">{{ o.split(" / ")[0] if short else o }}</label>
-  {% endfor %}
+{# A compact multi-pick (searchable dropdown). Nothing picked = all. The hidden empty value tells the page that
+   "nothing picked" was chosen on purpose (pages drop empty values). #}
+{% macro toggles(name, options, selected, short=False, placeholder=None) -%}
+<input type="hidden" name="{{ name }}" value="">
+<div class="filter-pick">
+  <select name="{{ name }}" multiple class="form-select form-select-sm js-multi"
+          data-placeholder="{{ placeholder or ('All branches' if short else 'All ' ~ name ~ 's') }}">
+    {% for o in options %}<option value="{{ o }}" {% if o in selected %}selected{% endif %}>{{ o.split(" / ")[0] if short else o }}</option>{% endfor %}
+  </select>
 </div>
 {%- endmacro %}

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Look up · Stockwise{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
+{% block pretitle %}Look up{% endblock %}
+{% block page_title %}{{ query or "Find anything" }}{% endblock %}
+{% block intro %}Find a piece, a product, a salesperson or a recommendation.{% endblock %}
+{% block content %}
+<form action="/lookup" method="get" class="card card-body py-2 mb-3">
+  <div class="input-icon">
+    <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+    <input name="q" value="{{ query }}" class="form-control" autofocus
+           placeholder="A barcode (DRN21585), a product (D RING), a salesperson, a brick group (14KT · D TOPS) or a word from a recommendation">
+  </div>
+</form>
+
+{% if not query %}
+<div class="text-secondary">Type a barcode to see where a piece is, where it has been and what happened to it; a product for its
+  stock, sales and season; a salesperson; or any part of a brick group or recommendation.</div>
+{% elif nothing %}
+<div class="empty"><p class="empty-title">Nothing found for "{{ query }}"</p>
+  <p class="empty-subtitle text-secondary">Try part of a barcode or name, e.g. "DRN215" or "TOPS".</p></div>
+{% endif %}
+
+{% if piece %}{% set p = piece %}
+<div class="card mb-3">
+  <div class="card-header"><h3 class="card-title"><i class="ti ti-tag me-2"></i>Piece {{ p.barcode }}</h3>
+    {% if p.now %}<span class="badge bg-green-lt ms-2">In stock</span>{% elif p.sold %}<span class="badge bg-blue-lt ms-2">Sold</span>
+    {% else %}<span class="badge bg-secondary-lt ms-2">Not in stock now</span>{% endif %}</div>
+  <div class="card-body">
+    {% if p.now %}{% set n = p.now %}
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3"><div class="subheader">Item</div>{{ n.item_name }} · {{ n.category or "–" }}</div>
+      <div class="col-6 col-md-3"><div class="subheader">Where</div>{{ n.branch | short }} · {{ n.location }}</div>
+      <div class="col-6 col-md-2"><div class="subheader">Value</div>{{ n.value | money }}</div>
+      <div class="col-6 col-md-2"><div class="subheader">Age</div>{{ n.age_days | num }} days</div>
+      <div class="col-6 col-md-2"><div class="subheader">Weight</div>{{ n.gross_wt }} g · {{ n.dia_wt }} ct</div>
+      <div class="col-6 col-md-3"><div class="subheader">Group</div>{{ n.item_class_group }}</div>
+      <div class="col-6 col-md-3"><div class="subheader">Supplier</div>{{ n.supplier or "–" }}</div>
+      <div class="col-6 col-md-2"><div class="subheader">Labelled</div>{{ n.label_date | date }}</div>
+      {% if n.order_no and n.order_no.strip() %}<div class="col-6 col-md-2"><div class="subheader">Order</div>{{ n.order_no }}</div>{% endif %}
+    </div>
+    {% endif %}
+    {% if p.moves %}
+    <div class="subheader mb-1">Where it has been (from the stock snapshots we hold)</div>
+    <ul class="list-unstyled small mb-3">
+      {% for mv in p.moves %}<li><i class="ti ti-map-pin text-secondary"></i> {{ mv.where[0] | short }} · {{ mv.where[1] }}
+        <span class="text-secondary">— {{ mv.from | date }}{% if mv.to != mv.from %} to {{ mv.to | date }}{% endif %}</span></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if p.sold %}
+    <div class="subheader mb-1">Sales</div>
+    <ul class="list-unstyled small mb-3">
+      {% for s in p.sold %}<li><i class="ti ti-receipt text-secondary"></i> {{ s.sale_date | date }} · bill {{ s.bill_no }} · {{ s.branch | short }}
+        · {{ s.salesman or "–" }} · {{ (s.taxable_amount if s.taxable_amount == s.taxable_amount and s.taxable_amount is not none else s.item_amt) | money }}
+        {% if s.pcs < 0 %}<span class="badge bg-orange-lt">return</span>{% endif %}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if p.recs %}
+    <div class="subheader mb-1">Recommendations that include it</div>
+    <ul class="mb-0">{% for r in p.recs %}<li><a href="/recommendations/{{ r.action_id }}">{{ r.title }}</a>
+      <span class="text-secondary small">({{ r.status }})</span></li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if product %}{% set pr = product %}
+<div class="card mb-3">
+  <div class="card-header"><div><h3 class="card-title"><i class="ti ti-diamond me-2"></i>{{ pr.item }}</h3>
+    <div class="card-subtitle small text-secondary">{{ pr.group }} · {{ pr.pieces | num }} pieces in stock, {{ pr.value | money }} ·
+      {{ pr.sold_12m | num }} sold in the last 12 months</div></div></div>
+  <div class="card-body">
+    <div class="row row-cards">
+      <div class="col-lg-6">{{ ui.table_card("Stock by branch", pr.t_branch, icon="ti-building-store") }}</div>
+      <div class="col-lg-6">{% if pr.t_month %}{{ ui.table_card("Net sales by month (last 12 months)", pr.t_month, icon="ti-receipt") }}{% endif %}</div>
+      {% if pr.fig_season %}<div class="col-lg-6">{{ ui.chart("c-season", pr.fig_season, "When it sells", "1.0× = an average month, from five years of sales") }}</div>{% endif %}
+      {% if pr.t_groups %}<div class="col-lg-6">{{ ui.table_card("Brick groups (stock turn)", pr.t_groups, icon="ti-refresh") }}</div>{% endif %}
+    </div>
+    {% if pr.recs %}
+    <div class="subheader mt-3 mb-1">Open recommendations</div>
+    <ul class="mb-0">{% for r in pr.recs %}<li><a href="/recommendations/{{ r.action_id }}">{{ r.title }}</a></li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="row row-cards">
+  {% if products and not product %}
+  <div class="col-md-6"><div class="card"><div class="card-header"><h3 class="card-title">Products</h3></div>
+    <div class="list-group list-group-flush">{% for r in products %}
+      <a class="list-group-item list-group-item-action d-flex justify-content-between" href="/lookup?q={{ r.item_name | urlencode }}">
+        <span>{{ r.item_name }}</span><span class="text-secondary small">{{ r.labels }} labels</span></a>{% endfor %}</div></div></div>
+  {% endif %}
+  {% if people %}
+  <div class="col-md-6"><div class="card"><div class="card-header"><h3 class="card-title">Salespeople</h3></div>
+    <div class="list-group list-group-flush">{% for r in people %}
+      <a class="list-group-item list-group-item-action d-flex justify-content-between" href="/sales?salesperson={{ r.sales_code | urlencode }}">
+        <span>{{ r.name }} <span class="text-secondary small">{{ r.sales_code }}</span>{% if not r.active %} <span class="badge bg-secondary-lt">inactive</span>{% endif %}</span>
+        <span class="text-secondary small">{{ r.branch | short if r.branch else "" }}</span></a>{% endfor %}</div></div></div>
+  {% endif %}
+  {% if groups %}
+  <div class="col-md-6"><div class="card"><div class="card-header"><h3 class="card-title">Bricks and brick groups</h3></div>
+    <div class="list-group list-group-flush">{% for r in groups %}
+      <a class="list-group-item list-group-item-action d-flex justify-content-between"
+         href="/stock-turn?view={{ r.level }}&search={{ r.brick | urlencode }}">
+        <span>{{ r.brick }} <span class="text-secondary small">{{ "group" if r.level == "group" else "brick" }}</span></span>
+        <span class="text-secondary small">{{ r.current_pcs | num }} pcs · {{ r.status | replace("_", " ") }}</span></a>{% endfor %}</div></div></div>
+  {% endif %}
+  {% if recs %}
+  <div class="col-md-6"><div class="card"><div class="card-header"><h3 class="card-title">Recommendations</h3></div>
+    <div class="list-group list-group-flush">{% for r in recs %}
+      <a class="list-group-item list-group-item-action" href="/recommendations/{{ r.action_id }}">{{ r.title }}
+        <span class="text-secondary small">({{ r.status }})</span></a>{% endfor %}</div></div></div>
+  {% endif %}
+</div>
+{% endblock %}

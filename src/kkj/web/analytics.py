@@ -30,6 +30,7 @@ def _short(b):
 @router.get("/inventory", response_class=HTMLResponse)
 def inventory(request: Request, branch: list[str] = Query(default=[]), group: list[str] = Query(default=[]),
               old_days: int = 365):
+    branch, group = [b for b in branch if b], [g for g in group if g]
     stock = m.company_stock(cached(q.stock_latest)).copy()
     all_branches = sorted(stock["branch"].dropna().unique())
     all_groups = sorted(stock["item_class_group"].dropna().unique())
@@ -86,7 +87,8 @@ def inventory(request: Request, branch: list[str] = Query(default=[]), group: li
 # ── Sales ─────────────────────────────────────────────────────────────────────
 @router.get("/sales", response_class=HTMLResponse)
 def sales(request: Request, start: str = "", end: str = "", branch: list[str] = Query(default=[]),
-          group: list[str] = Query(default=[])):
+          group: list[str] = Query(default=[]), salesperson: str = ""):
+    branch, group = [b for b in branch if b], [g for g in group if g]
     today = pd.Timestamp.today().normalize()
     start_d = pd.Timestamp(start) if start else fy_start(today)
     end_d = pd.Timestamp(end) if end else today
@@ -98,8 +100,16 @@ def sales(request: Request, start: str = "", end: str = "", branch: list[str] = 
         lines = lines[lines["branch"].isin(branch)]
     if group:
         lines = lines[lines["item_class_group"].isin(group)]
-    ctx = {"f": {"start": start_d.date().isoformat(), "end": end_d.date().isoformat(), "branch": branch, "group": group},
-           "branches": all_branches, "groups": all_groups}
+    from kkj.salespeople import split_salesman
+    codes = lines["salesman"].fillna("").map(lambda v: split_salesman(v)[0] if v else "")
+    with engine().connect() as conn:
+        named = q.salespeople(conn).set_index("sales_code")["name"]
+    seller_options = sorted({(c, named.get(c, c)) for c in codes.unique() if c}, key=lambda x: x[1])
+    if salesperson:
+        lines = lines[codes == salesperson]
+    ctx = {"f": {"start": start_d.date().isoformat(), "end": end_d.date().isoformat(), "branch": branch, "group": group,
+                 "salesperson": salesperson},
+           "branches": all_branches, "groups": all_groups, "sellers": seller_options}
     if lines.empty:
         return render(request, "sales.html", "sales", empty=True, **ctx)
     sold, back = lines[lines["pcs"] > 0], lines[lines["pcs"] < 0]
@@ -310,21 +320,20 @@ def stock_turn(request: Request, view: str = "group", scope: str = "Company", gr
     shown = t[t["status"].isin(status)] if status else t
     shown = shown.assign(order=shown["change_value"].abs().where(shown["status"] != "phase_out", shown["current_value"]))
     shown = shown.sort_values("order", ascending=False).head(300)
+    def turns(r):
+        return " · ".join("–" if pd.isna(r[c]) else ("∞" if np.isinf(r[c]) else f"{r[c]:.2f}") for c in ("turn_3m", "turn_6m", "turn_12m"))
+    set_for = {"default": "default", "item_group": "item group", "product": "product", "group": "brick group", "brick": "brick"}
     shown = shown.assign(
         status_label=shown["status"].map(lambda s: bt.STATUS[s][0]),
-        in_stock=shown["avail_12m"].astype(int).astype(str) + " of " + shown["data_12m"].astype(int).astype(str),
-        weights=shown["weights"].fillna("–"),
-        ideal_set=shown["ideal_source"].map({"default": "default", "item_group": "item group", "product": "product",
-                                              "group": "brick group", "brick": "brick"}).fillna("default"))
+        windows=shown.apply(turns, axis=1),
+        ideal=shown.apply(lambda r: f"{r['ideal_turn']:g}× ({set_for.get(r['ideal_source'], 'default')})", axis=1))
     table = charts.table(
-        shown[["brick", "item_class_group", "current_pcs", "ideal_pcs", "change_pcs", "change_value", "turn_3m", "turn_6m",
-               "turn_12m", "in_stock", "weights", "blended_turn", "ideal_turn", "ideal_set", "status_label"]],
-        {"current_pcs": "num", "ideal_pcs": "num", "change_pcs": "num", "change_value": "money", "turn_3m": "dec",
-         "turn_6m": "dec", "turn_12m": "dec", "blended_turn": "dec", "ideal_turn": "dec"},
-        {"brick": "brick group" if view == "group" else "brick", "item_class_group": "item group", "current_pcs": "now (pcs)", "ideal_pcs": "ideal (pcs)", "change_pcs": "change",
-         "change_value": "change (₹)", "turn_3m": "3 m", "turn_6m": "6 m", "turn_12m": "12 m",
-         "in_stock": "in stock (fortnights, 12 m)", "weights": "blend 3/6/12", "blended_turn": "blended turn",
-         "ideal_turn": "ideal turn", "ideal_set": "ideal set for", "status_label": "verdict"})
+        shown[["brick", "current_pcs", "ideal_pcs", "change_pcs", "change_value", "blended_turn", "ideal", "windows",
+               "status_label"]],
+        {"current_pcs": "num", "ideal_pcs": "num", "change_pcs": "num", "change_value": "money", "blended_turn": "dec"},
+        {"brick": "brick group" if view == "group" else "brick", "current_pcs": "now (pcs)", "ideal_pcs": "ideal (pcs)",
+         "change_pcs": "change (pcs)", "change_value": "change (₹)", "blended_turn": "turn (× a year)",
+         "ideal": "ideal turn", "windows": "turn 3 · 6 · 12 months", "status_label": "verdict"})
     return render(request, "stock_turn.html", "stock_turn", empty=False, rules=rules, as_of=as_of, kpis=kpis,
                   scopes=scopes, groups=groups, statuses=bt.STATUS, f={"view": view, "scope": scope, "group": group, "status": status, "search": search},
                   fig=charts.hbar(chart["label"], chart["value"] / 1e7, np.c_[chart["bricks"], chart["pcs"]],

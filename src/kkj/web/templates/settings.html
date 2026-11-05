@@ -2,6 +2,7 @@
 {% block title %}Settings · Stockwise{% endblock %}
 {% block pretitle %}Admin{% endblock %}
 {% block page_title %}Settings{% endblock %}
+{% block intro %}The business rules every recommendation uses, plus salespeople, branches, ideal turns, festivals and users. Changes are recorded in Change history.{% endblock %}
 {% block content %}
 
 <ul class="nav nav-tabs mb-3" data-bs-toggle="tabs">
@@ -19,6 +20,10 @@
   <div class="tab-pane active show" id="tab-rules">
     <div class="small text-secondary mb-3">The rules every recommendation is calculated from. Defaults are starting points:
       tune them to how the business wants to run.</div>
+    <div class="d-flex flex-wrap gap-1 mb-3 small">
+      <span class="text-secondary me-1">Jump to:</span>
+      {% for s in sections %}<a class="badge bg-blue-lt text-decoration-none" href="#rules-{{ s.section | lower | replace(' ', '-') }}">{{ s.section }}</a>{% endfor %}
+    </div>
     {% for s in sections %}{% include "_rule_section.html" %}{% endfor %}
   </div>
 

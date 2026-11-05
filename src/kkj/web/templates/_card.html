@@ -6,7 +6,7 @@
       <div class="col">
         <div class="d-flex flex-wrap align-items-center gap-2 small text-secondary mb-1">
           <span class="badge bg-{{ a.colour }}-lt"><i class="ti {{ a.icon }} me-1"></i>{{ a.label }}</span>
-          <span><i class="ti ti-building-store"></i> {{ a.branch | short }}</span>
+          <span><i class="ti ti-building-store"></i> {{ a.branch | short if a.branch else "Whole company" }}</span>
           <span><i class="ti {{ conf_icon.get(a.confidence, 'ti-antenna-bars-1') }}"></i> {{ a.confidence }} confidence</span>
           <span><i class="ti ti-clock"></i> raised {{ a.first_seen | ago }}</span>
           <span>updated {{ a.times_seen }}×</span>

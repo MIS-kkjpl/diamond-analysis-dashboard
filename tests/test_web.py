@@ -94,7 +94,8 @@ def test_response_needs_sign_in_then_records_and_is_undone():
                                   "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings",
                                   "/stock-turn", "/stock-turn?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
                                   "/stock-turn?group=Diamond+Jewellery&group=", "/stock-turn?view=brick&search=D+RING",
-                                  "/settings/ideal-turns", "/seasonality", "/seasonality?group=Gold", "/settings/festivals",
+                                  "/settings/ideal-turns", "/seasonality", "/seasonality?group=Gold", "/recommendations?sort=money", "/recommendations/feed?sort=newest&offset=25", "/lookup", "/lookup?q=D+RING", "/lookup?q=DRN21585", "/lookup?q=zzqqxx",
+                                  "/lookup?q=Kothari", "/sales?salesperson=K0057&branch=&group=", "/settings/festivals",
                                   "/recommendations?group=festival", "/recommendations?group=purchasing"])
 def test_analytics_and_settings_pages_render(path):
     r = client.get(path)
@@ -316,3 +317,19 @@ def test_festival_date_save_and_remove():
         with settings.etl_engine().begin() as c:
             c.execute(text("DELETE FROM config.festival WHERE name = 'pytest fest'"))
             c.execute(text("DELETE FROM config.change_log WHERE table_name = 'festival' AND changed_by = 'pytest'"))
+
+
+def test_lookup_finds_a_piece_and_a_product():
+    r = client.get("/lookup", params={"q": "DRN21585"})
+    assert "Piece DRN21585" in r.text and "Where it has been" in r.text
+    assert "Stock by branch" in client.get("/lookup", params={"q": "D RING"}).text
+    assert "Nothing found" in client.get("/lookup", params={"q": "zzqqxx"}).text
+    assert ">nan<" not in client.get("/recommendations").text
+
+
+def test_stock_turn_shows_its_table_when_calculated():
+    with settings.app_engine().connect() as c:
+        calculated = c.execute(text("SELECT count(*) FROM brain.brick_turn")).scalar() > 0
+    r = client.get("/stock-turn")
+    if calculated:
+        assert "Not calculated yet" not in r.text and "biggest changes first" in r.text

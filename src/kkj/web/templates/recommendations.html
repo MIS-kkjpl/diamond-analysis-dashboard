@@ -18,6 +18,7 @@
 </button>
 {% endblock %}
 
+{% block intro %}What to do next, ranked by the money involved. Approve what you'll act on, dismiss what doesn't apply, snooze what can wait. Each card's Details link shows the numbers behind it.{% endblock %}
 {% block content %}
 {% set oob = False %}{% include "_summary.html" %}
 
@@ -39,6 +40,9 @@
     <select name="branch" class="form-select form-select-sm w-auto">
       <option value="">All branches</option>
       {% for b in branches %}<option value="{{ b }}" {% if f.branch == b %}selected{% endif %}>{{ b }}</option>{% endfor %}
+    </select>
+    <select name="sort" class="form-select form-select-sm w-auto" title="Order">
+      {% for key, so in sorts.items() %}<option value="{{ key }}" {% if f.sort == key %}selected{% endif %}>{{ so[0] }}</option>{% endfor %}
     </select>
     <div class="input-icon ms-md-auto">
       <span class="input-icon-addon"><i class="ti ti-search"></i></span>

@@ -6,6 +6,7 @@
 {% block pretitle %}Analytics{% endblock %}
 {% block page_title %}Stock turn{% endblock %}
 {% block actions %}<a href="/settings#tab-rules" class="btn btn-outline-secondary btn-sm"><i class="ti ti-adjustments"></i> Rules</a>{% endblock %}
+{% block intro %}How fast each group of similar pieces sells compared with its ideal. Increase = sells faster than we stock it; Reduce = more stock than its sales need.{% endblock %}
 {% block content %}
 <div id="page">
 {% if empty %}
@@ -22,16 +23,15 @@
   <select name="scope" class="form-select form-select-sm" style="width: auto">
     {% for s in scopes %}<option value="{{ s }}" {% if s == f.scope %}selected{% endif %}>{{ s | short if s != "Company" else "Whole company" }}</option>{% endfor %}
   </select>
-  {{ flt.toggles("group", groups, f.group) }}
-  <div class="btn-group flex-wrap" role="group">
-    {% for key, st in statuses.items() %}
-    <input type="checkbox" class="btn-check" name="status" id="status-{{ key }}" value="{{ key }}" {% if key in f.status %}checked{% endif %}>
-    <label class="btn btn-sm" for="status-{{ key }}" title="{{ st[2] }}">{{ st[0] }}</label>
-    {% endfor %}
+  {{ flt.toggles("group", groups, f.group, placeholder="All item groups") }}
+  <input type="hidden" name="status" value="">
+  <div class="filter-pick">
+    <select name="status" multiple class="form-select form-select-sm js-multi" data-placeholder="Any verdict">
+      {% for key, st in statuses.items() %}<option value="{{ key }}" {% if key in f.status %}selected{% endif %}>{{ st[0] }}</option>{% endfor %}
+    </select>
   </div>
   <input type="search" name="search" value="{{ f.search }}" placeholder="Find a brick, e.g. D RING" class="form-control form-control-sm"
          style="width: 14rem">
-  <input type="hidden" name="group" value=""><input type="hidden" name="status" value="">
 {% endcall %}
 
 <div class="row row-cards mb-2">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>

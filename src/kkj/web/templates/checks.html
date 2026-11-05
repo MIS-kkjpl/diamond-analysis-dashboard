@@ -2,13 +2,14 @@
 {% block title %}Data quality · Stockwise{% endblock %}
 {% block pretitle %}Admin{% endblock %}
 {% block page_title %}Data quality{% endblock %}
+{% block intro %}Can the numbers be trusted? Every load is checked against the ERP, and the accuracy audit follows every piece from one stock snapshot to the next.{% endblock %}
 {% block content %}
 {% macro table(title, icon, rows, note="") -%}
 <div class="col-12">
   <div class="card">
     <div class="card-header"><h3 class="card-title"><i class="ti {{ icon }} me-2"></i>{{ title }}</h3></div>
     <div class="table-responsive">
-      <table class="table table-sm table-vcenter card-table">
+      <table class="table table-sm table-vcenter card-table js-table">
         {% if rows %}
         <thead><tr>{% for k in rows[0].keys() %}<th>{{ k | replace("_", " ") }}</th>{% endfor %}</tr></thead>
         <tbody>

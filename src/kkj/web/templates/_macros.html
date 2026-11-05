@@ -2,7 +2,7 @@
 
 {% macro data_table(t, limit=None) -%}
 <div class="table-responsive">
-  <table class="table table-sm table-vcenter card-table table-striped">
+  <table class="table table-sm table-vcenter card-table table-striped js-table">
     <thead><tr>{% for c in t.columns %}<th {% if c in t.numeric %}class="text-end"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for r in (t.rows[:limit] if limit else t.rows) %}
@@ -28,7 +28,7 @@
 {%- endmacro %}
 
 {% macro kpi(label, value, sub="", icon="ti-chart-bar", colour="blue") -%}
-<div class="col-sm-6 col-lg">
+<div class="col-6 col-lg">
   <div class="card card-sm h-100"><div class="card-body">
     <div class="d-flex align-items-center mb-1">
       <span class="avatar avatar-sm bg-{{ colour }}-lt me-2"><i class="ti {{ icon }}"></i></span>

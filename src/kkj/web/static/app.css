@@ -37,3 +37,28 @@
   .topbar .container-xl { row-gap: .4rem; }
   .decision-title { font-size: .95rem; }
 }
+
+/* ── tables: search, sort, paging (static/app.js) ── */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable::after { content: "↕"; opacity: .25; margin-left: .25rem; font-size: .75em; }
+th.sorted-asc::after { content: "↑"; opacity: .8; }
+th.sorted-desc::after { content: "↓"; opacity: .8; }
+.card-table td { vertical-align: middle; }
+
+/* ── filters: compact searchable pickers ── */
+.filter-bar .filter-pick { min-width: 12rem; max-width: 22rem; flex: 1 1 12rem; }
+.filter-bar .ts-wrapper.form-select { padding-top: .1rem; padding-bottom: .1rem; min-height: calc(1.5em + .5rem + 2px); }
+.filter-bar .ts-control { font-size: .8125rem; }
+
+/* ── top bar lookup ── */
+.lookup-box { width: 22rem; max-width: 100%; }
+.page-intro { color: var(--tblr-secondary); font-size: .875rem; max-width: 60rem; margin-top: .25rem; }
+
+@media (max-width: 575.98px) {
+  .filter-bar .filter-pick { min-width: 100%; max-width: 100%; }
+  .lookup-box { width: 100%; }
+}
+@media (max-width: 575.98px) {
+  .card-sm .h1 { font-size: 1.25rem; }
+  .card-sm .subheader { font-size: .65rem; }
+}

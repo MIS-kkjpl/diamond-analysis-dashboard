@@ -1,6 +1,7 @@
 {# One section of business rules; saving swaps just this card. #}
-<div class="card mb-3" id="rules-{{ s.section | lower }}">
-  <form hx-post="/settings/rules/{{ s.section }}" hx-target="#rules-{{ s.section | lower }}" hx-swap="outerHTML"
+{% set slug = "rules-" ~ (s.section | lower | replace(" ", "-")) %}
+<div class="card mb-3" id="{{ slug }}">
+  <form hx-post="/settings/rules/{{ s.section }}" hx-target="#{{ slug }}" hx-swap="outerHTML"
         hx-disabled-elt="find button">
     <div class="card-header"><h3 class="card-title">{{ s.section }}</h3>
       <div class="card-actions">
@@ -25,14 +26,14 @@
                    {% if r.max is not none %}max="{{ r.max }}"{% endif %} style="max-width: 12rem">
           {% elif r.kind == "choice" %}
             <select class="form-select form-select-sm" name="{{ r.key }}" style="max-width: 16rem">
-              {% for c in r.choices %}<option value="{{ c }}" {% if c == v %}selected{% endif %}>{{ c | replace("_", " ") }}</option>{% endfor %}
+              {% for c in r.choices %}<option value="{{ c }}" {% if c == v %}selected{% endif %}>{{ choice_label(c) }}</option>{% endfor %}
             </select>
           {% elif r.choices or r.key == "transfer_excluded_branches" %}
             <div class="d-flex flex-wrap gap-2">
               {% for c in (r.choices if r.choices else s.branch_names) %}
               <label class="form-check form-check-inline mb-0">
                 <input class="form-check-input" type="checkbox" name="{{ r.key }}" value="{{ c }}" {% if c in v %}checked{% endif %}>
-                <span class="form-check-label small">{{ c | replace("_", " ") }}</span></label>
+                <span class="form-check-label small">{{ choice_label(c) }}</span></label>
               {% endfor %}
             </div>
           {% else %}
