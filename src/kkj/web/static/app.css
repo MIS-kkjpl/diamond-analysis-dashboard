@@ -134,3 +134,37 @@ th.sorted-desc::after { content: "↓"; opacity: .8; }
 .rec-detail .rec-summary { display: block; -webkit-line-clamp: unset; overflow: visible; }
 /* tables stay one line per row (wide tables scroll sideways) */
 .card-table.js-table td, .card-table.js-table th { white-space: nowrap; }
+
+/* ── Tom Select (searchable pickers) ──
+   Its Bootstrap 5 theme reads Bootstrap's --bs-* variables; Tabler names them --tblr-*, so without these
+   the pickers and their open lists are transparent. */
+:root {
+  --bs-body-bg: var(--tblr-bg-surface, #fff);
+  --bs-body-color: var(--tblr-body-color, #1d2433);
+  --bs-secondary-bg: #eef1f6;
+  --bs-tertiary-bg: #f6f8fb;
+  --bs-border-color: var(--tblr-border-color, #dadfe5);
+  --bs-border-color-translucent: rgba(4, 32, 69, .14);
+  --bs-border-width: 1px;
+  --bs-border-radius: var(--tblr-border-radius, 6px);
+  --bs-border-radius-sm: 4px;
+  --bs-border-radius-lg: 8px;
+  --bs-box-shadow-inset: inset 0 1px 2px rgba(0, 0, 0, .075);
+  --bs-form-valid-color: var(--tblr-green, #2fb344);
+  --bs-form-invalid-color: var(--tblr-red, #d63939);
+}
+.ts-wrapper .ts-control, .ts-wrapper.single.input-active .ts-control { background: #fff; }
+.ts-dropdown, .ts-dropdown.form-control, .ts-dropdown.form-select {
+  background: #fff; color: #1d2433; border: 1px solid #dfe3ea; border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(20, 26, 38, .12); z-index: 1060; margin-top: 4px; }
+.ts-dropdown .ts-dropdown-content { max-height: 18rem; }
+.ts-dropdown .option { padding: .45rem .75rem; font-size: .85rem; }
+.ts-dropdown .option.active, .ts-dropdown .option:hover { background: #eef3fc; color: #1b5bc5; }
+.ts-dropdown .option.selected { font-weight: 600; }
+.ts-wrapper.multi .ts-control > .item { background: #eef3fc; color: #1b5bc5; border: 0; border-radius: 6px;
+                                        padding: .05rem .4rem; font-size: .8rem; }
+.ts-wrapper.multi .ts-control > .item .remove { border-left-color: rgba(27, 91, 197, .2); }
+.ts-wrapper.focus .ts-control { border-color: #9cc0f0; box-shadow: 0 0 0 3px rgba(42, 120, 214, .12); }
+
+/* other pop-up lists keep a solid surface too */
+.dropdown-menu { background: #fff; border: 1px solid #dfe3ea; border-radius: 10px; box-shadow: 0 10px 30px rgba(20, 26, 38, .12); }
