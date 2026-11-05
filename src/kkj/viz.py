@@ -53,7 +53,7 @@ def style(fig, height=300, legend=True):
     fig.update_layout(
         height=height, margin=dict(l=8, r=8, t=30 if legend else 10, b=8),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family='system-ui, -apple-system, "Segoe UI", sans-serif', size=12, color=INK),
+        font=dict(family='Inter, system-ui, -apple-system, "Segoe UI", sans-serif', size=12, color=INK),
         hoverlabel=dict(bgcolor="white", bordercolor=GRID, font=dict(color=INK)),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, title_text="",
                     font=dict(color=INK_2)),

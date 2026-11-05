@@ -15,6 +15,7 @@
 {% else %}
 <div class="small text-secondary mb-3">{{ period }} · in pieces · the exports leave out sales of order-booked pieces</div>
 
+{{ ui.section("The yearly pattern") }}
 <div class="row row-cards mb-3">
   <div class="col-lg-7">{{ ui.chart("c-groups", fig_groups, "When each item group sells",
        "1.0× = an average month; April to March", t=t_groups) }}</div>
@@ -41,6 +42,7 @@
   </div>
 </div>
 
+{{ ui.section("What's coming", "festivals and the next 90 days") }}
 <div class="card mb-3"><div class="card-body">
   <h3 class="card-title">Festival stock: the next {{ rules.festival_lead_days }} days</h3>
   <div class="small text-secondary mb-2">Expected = the product's average sales around that festival in past years × this year's pace
@@ -54,6 +56,7 @@
   sub="Seasonal demand at this year's pace vs stock held today (as of " ~ (as_of | date) ~ "); low months of cover = buy, high = hold",
   icon="ti-calendar-time") }}{% endif %}</div>
 
+{{ ui.section("Product by product") }}
 {% call flt.form("/seasonality") %}
   <span class="small text-secondary">Products in</span>
   <select name="group" class="form-select form-select-sm" style="width: auto">

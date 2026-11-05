@@ -1,48 +1,43 @@
-{% set conf_icon = {"high": "ti-antenna-bars-5", "medium": "ti-antenna-bars-3", "low": "ti-antenna-bars-1"} %}
+{% set conf_text = {"high": "High confidence", "medium": "Medium confidence", "low": "Low confidence"} %}
 {% set status_badge = {"approved": "green", "rejected": "red", "snoozed": "yellow", "done": "secondary", "resolved": "secondary"} %}
-<div class="card decision-card status-{{ a.status }} mb-2" id="card-{{ a.action_id }}">
-  <div class="card-body py-3">
-    <div class="row g-3 align-items-start">
+{% set post = 'hx-target="#card-' ~ a.action_id ~ '" hx-swap="outerHTML" hx-disabled-elt="this"' %}
+<div class="card rec status-{{ a.status }} mb-2" id="card-{{ a.action_id }}" style="--rec-colour: var(--tblr-{{ a.colour }})">
+  <div class="card-body">
+    <div class="row g-2 align-items-start">
       <div class="col">
-        <div class="d-flex flex-wrap align-items-center gap-2 small text-secondary mb-1">
-          <span class="badge bg-{{ a.colour }}-lt"><i class="ti {{ a.icon }} me-1"></i>{{ a.label }}</span>
+        <div class="rec-meta">
+          <span class="rec-type"><i class="ti {{ a.icon }} me-1"></i>{{ a.label }}</span>
           <span><i class="ti ti-building-store"></i> {{ a.branch | short if a.branch else "Whole company" }}</span>
-          <span><i class="ti {{ conf_icon.get(a.confidence, 'ti-antenna-bars-1') }}"></i> {{ a.confidence }} confidence</span>
-          <span><i class="ti ti-clock"></i> raised {{ a.first_seen | ago }}</span>
-          <span>updated {{ a.times_seen }}×</span>
+          <span>{{ conf_text.get(a.confidence, a.confidence) }}</span>
+          <span>raised {{ a.first_seen | ago }}</span>
           {% if a.status != "open" %}
-          <span class="badge bg-{{ status_badge.get(a.status, 'secondary') }}-lt text-uppercase">{{ STATUS.get(a.status, a.status) }}
+          <span class="badge bg-{{ status_badge.get(a.status, 'secondary') }}-lt">{{ STATUS.get(a.status, a.status) }}
             {%- if a.status == "snoozed" %} until {{ a.snoozed_until | date("%d %b") }}{% endif %}</span>
           {% endif %}
         </div>
-        <a href="/recommendations/{{ a.action_id }}" class="decision-title">{{ a.title }}</a>
-        <div class="text-secondary small mt-1">{{ a.summary }}</div>
+        <a href="/recommendations/{{ a.action_id }}" class="rec-title">{{ a.title }}</a>
+        <div class="rec-summary" title="{{ a.summary }}">{{ a.summary }}</div>
         {% if a.decided_by %}
-        <div class="small mt-1"><i class="ti ti-user-check"></i> {{ STATUS.get(a.status, a.status) }} by {{ a.decided_by }} {{ a.decided_at | ago }}
-          {%- if a.decision_note %} · “{{ a.decision_note }}”{% endif %}</div>
+        <div class="small mt-1 text-secondary"><i class="ti ti-user-check"></i> {{ STATUS.get(a.status, a.status) }} by {{ a.decided_by }}
+          {{ a.decided_at | ago }}{% if a.decision_note %} · “{{ a.decision_note }}”{% endif %}</div>
         {% endif %}
       </div>
-      <div class="col-12 col-sm-auto text-sm-end impact-col">
-        <div class="impact">{{ a.impact_value | money }}</div>
-        <div class="small text-secondary">{{ a.impact_label }}</div>
+      <div class="col-12 col-sm-auto rec-money">
+        <div class="amount">{{ a.impact_value | money }}</div>
+        <div class="what">{{ a.impact_label }}</div>
         {% if a.change and (a.change > 1 or a.change < -1) %}
-        <div class="small {{ 'text-orange' if a.change > 0 else 'text-green' }}">
+        <div class="what {{ 'text-orange' if a.change > 0 else 'text-green' }}">
           {{ '▲' if a.change > 0 else '▼' }} {{ (a.change if a.change > 0 else -a.change) | money }} since raised</div>
         {% endif %}
       </div>
     </div>
 
-    <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
-      {% set post = 'hx-target="#card-' ~ a.action_id ~ '" hx-swap="outerHTML" hx-disabled-elt="this"' %}
+    <div class="rec-actions">
       {% if a.status in ("open", "snoozed") %}
         <button class="btn btn-sm btn-success" {% if not who %}disabled{% endif %}
                 hx-post="/recommendations/{{ a.action_id }}/approve" {{ post | safe }}><i class="ti ti-check"></i> Approve</button>
-        <button class="btn btn-sm btn-outline-danger" {% if not who %}disabled{% endif %}
-                hx-post="/recommendations/{{ a.action_id }}/dismiss" {{ post | safe }}><i class="ti ti-x"></i> Dismiss</button>
-        {% if a.status == "open" %}
         <button class="btn btn-sm btn-outline-secondary" {% if not who %}disabled{% endif %}
-                hx-post="/recommendations/{{ a.action_id }}/snooze" {{ post | safe }}><i class="ti ti-zzz"></i> Snooze 7 d</button>
-        {% endif %}
+                hx-post="/recommendations/{{ a.action_id }}/dismiss" {{ post | safe }}><i class="ti ti-x"></i> Dismiss</button>
       {% elif a.status == "approved" %}
         <button class="btn btn-sm btn-primary" {% if not who %}disabled{% endif %}
                 hx-post="/recommendations/{{ a.action_id }}/complete" {{ post | safe }}><i class="ti ti-circle-check"></i> Mark complete</button>
@@ -50,15 +45,21 @@
         <button class="btn btn-sm btn-outline-secondary" {% if not who %}disabled{% endif %}
                 hx-post="/recommendations/{{ a.action_id }}/reopen" {{ post | safe }}><i class="ti ti-arrow-back-up"></i> Reopen</button>
       {% endif %}
-      <details class="note-box">
-        <summary class="btn btn-sm btn-ghost-secondary {% if not who %}disabled{% endif %}"><i class="ti ti-message"></i> Note</summary>
-        <form class="mt-2 d-flex gap-2" hx-post="/recommendations/{{ a.action_id }}/comment" {{ post | safe }}>
-          <input name="note" class="form-control form-control-sm" placeholder="Why, or what was done" required>
-          <button class="btn btn-sm btn-primary" {% if not who %}disabled{% endif %}>Save</button>
-        </form>
-      </details>
+      <div class="dropdown">
+        <button class="btn btn-sm btn-ghost-secondary" data-bs-toggle="dropdown" {% if not who %}disabled{% endif %}>
+          More <i class="ti ti-chevron-down"></i></button>
+        <div class="dropdown-menu">
+          {% if a.status == "open" %}
+          <button class="dropdown-item" hx-post="/recommendations/{{ a.action_id }}/snooze" {{ post | safe }}>
+            <i class="ti ti-zzz me-2"></i>Snooze for 7 days</button>
+          {% endif %}
+          <a class="dropdown-item" href="/recommendations/{{ a.action_id }}#note"><i class="ti ti-message me-2"></i>Add a note</a>
+          {% if a.pieces %}<a class="dropdown-item" href="/exports/recommendation/{{ a.action_id }}.xlsx">
+            <i class="ti ti-download me-2"></i>Download its {{ a.pieces | length }} pieces</a>{% endif %}
+        </div>
+      </div>
       {% if a.pieces %}<span class="small text-secondary"><i class="ti ti-diamond"></i> {{ a.pieces | length }} pieces</span>{% endif %}
-      <a class="small ms-auto" href="/recommendations/{{ a.action_id }}">Details <i class="ti ti-arrow-right"></i></a>
+      <a class="btn btn-sm btn-ghost-primary ms-auto" href="/recommendations/{{ a.action_id }}">Details <i class="ti ti-arrow-right"></i></a>
       {% if not who %}<span class="small text-secondary">Sign in to respond</span>{% endif %}
     </div>
     {% if just_acted %}<div class="small text-green mt-2"><i class="ti ti-check"></i> Recorded</div>{% endif %}

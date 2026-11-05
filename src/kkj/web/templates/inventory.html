@@ -21,14 +21,18 @@
 {% if empty %}
 <div class="empty"><p class="empty-title">No stock for these filters</p></div>
 {% else %}
+{{ ui.section("At a glance") }}
 <div class="row row-cards mb-3">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 <div class="small text-secondary mb-3">As of {{ as_of | date }} · value = taxable amount before GST · customers' own items left out · age = days since the label date</div>
 
+{{ ui.section("Where the stock is", "by branch and by age") }}
 <div class="row row-cards mb-3">
   <div class="col-lg-6">{{ ui.chart("c-branch", fig_branch, "Value by branch", t=t_branch) }}</div>
   <div class="col-lg-6">{{ ui.chart("c-age", fig_age, "Value by age since labelling", t=t_age) }}</div>
 </div>
+{{ ui.section("What it is and how old") }}
 <div class="mb-3">{{ ui.table_card("Value by item group and age", t_pivot, icon="ti-layout-grid") }}</div>
+{{ ui.section("Pieces to act on", "old stock, and stock away from a counter") }}
 <div class="mb-3">{{ ui.table_card("Oldest stock: over " ~ f.old_days ~ " days, highest value first", t_oldest,
                                     sub="Top 200", icon="ti-hourglass") }}</div>
 <div class="mb-3">{{ ui.table_card("Not on a counter", t_away, sub="On approval, in transit or in repair; longest days since branch-in",

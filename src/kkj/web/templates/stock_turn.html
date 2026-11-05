@@ -34,12 +34,14 @@
          style="width: 14rem">
 {% endcall %}
 
+{{ ui.section("At a glance") }}
 <div class="row row-cards mb-2">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 <div class="small text-secondary mb-3">As of {{ as_of | date }} · {{ "brick group" if f.view == "group" else "brick" }} = {{ levels }} ·
   default ideal {{ rules.target_turn }}× a year, {{ n_ideals }} specific ideal{{ "" if n_ideals == 1 else "s" }} set
   (<a href="/settings#tab-ideals">Settings → Ideal turns</a>), kept within ±{{ rules.turn_band_pct | num }}% ·
   recommendations are made per brick group</div>
 
+{{ ui.section("How it breaks down", "and how a verdict is reached") }}
 <div class="row row-cards mb-3">
   <div class="col-lg-5">{{ ui.chart("c-status", fig, "Stock value by verdict", "₹ Cr held now") }}</div>
   <div class="col-lg-7">
@@ -63,6 +65,7 @@
   </div>
 </div>
 
+{{ ui.section("Group by group", "biggest changes first; search, sort or download") }}
 <div class="mb-3">{{ ui.table_card(("Brick groups" if f.view == "group" else "Bricks") ~ ": biggest changes first", t,
      sub=("Top " ~ n_shown ~ " of " ~ n_total ~ ". ") if n_total > n_shown else "", icon="ti-stack-2") }}</div>
 {% endif %}

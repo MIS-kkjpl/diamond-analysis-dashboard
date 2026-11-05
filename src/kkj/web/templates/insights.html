@@ -11,9 +11,11 @@
 {% call flt.form("/insights") %}
   {{ flt.toggles("group", groups, f.group, placeholder="All item groups") }}
 {% endcall %}
+{{ ui.section("At a glance") }}
 <div class="row row-cards mb-2">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 <div class="small text-secondary mb-3">{{ period }} · change the period in Settings → Insights</div>
 
+{{ ui.section("What the data shows", "each with a recommended action") }}
 <div class="card mb-3"><div class="card-body">
   <h3 class="card-title">1 · Selling speed falls the longer a piece sits</h3>
   {{ ui.chart("c-age", fig_age, "Share of pieces sold each month, by age", t=t_age) }}

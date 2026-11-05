@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Stockwise{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">
@@ -14,7 +16,7 @@
 <body>
 <div class="page">
   {# ── sidebar ── #}
-  <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+  <aside class="navbar navbar-vertical navbar-expand-lg sw-sidebar">
     <div class="container-fluid">
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu">
         <span class="navbar-toggler-icon"></span>
@@ -79,9 +81,8 @@
 
     {% if notice %}
     <div class="container-xl mt-3">
-      <div class="alert alert-warning mb-0 d-flex gap-2 align-items-start" role="alert">
-        <i class="ti ti-alert-triangle fs-2"></i><div><b>Data notice:</b> {{ notice }}
-          <a href="/checks" class="ms-1">Data quality</a></div>
+      <div class="sw-notice" role="status">
+        <i class="ti ti-info-circle"></i><div><b>Data notice:</b> {{ notice }} <a href="/checks" class="ms-1">Details</a></div>
       </div>
     </div>
     {% endif %}

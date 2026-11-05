@@ -6,7 +6,18 @@
 {% if a.pieces %}<a class="btn btn-outline-secondary" href="/exports/recommendation/{{ a.action_id }}.xlsx"><i class="ti ti-download"></i> Pieces (Excel)</a>{% endif %}
 {% endblock %}
 {% block content %}
-{% include "_card.html" %}
+<div class="rec-detail">{% include "_card.html" %}</div>
+<div class="card mb-3" id="note">
+  <div class="card-body py-2">
+    <form class="d-flex flex-wrap gap-2 align-items-center" hx-post="/recommendations/{{ a.action_id }}/comment"
+          hx-target="#card-{{ a.action_id }}" hx-swap="outerHTML" hx-on::after-request="this.reset()">
+      <i class="ti ti-message text-secondary"></i>
+      <input name="note" class="form-control form-control-sm flex-grow-1" style="max-width: 36rem"
+             placeholder="Add a note: why, or what was done (recorded with your name)" required>
+      <button class="btn btn-sm btn-primary" {% if not who %}disabled{% endif %}>Save note</button>
+    </form>
+  </div>
+</div>
 <div class="row row-cards mt-1">
   <div class="col-lg-6">
     <div class="card">

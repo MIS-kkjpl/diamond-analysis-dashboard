@@ -1,20 +1,16 @@
 <div id="summary" class="row row-cards mb-3" {% if oob %}hx-swap-oob="true"{% endif %}
      hx-get="/recommendations/summary" hx-trigger="every 60s" hx-swap="outerHTML">
-  {% macro stat(icon, colour, value, label, sub) -%}
+  {% macro stat(colour, value, label, sub) -%}
   <div class="col-6 col-lg-3">
-    <div class="card card-sm">
-      <div class="card-body d-flex align-items-center gap-3">
-        <span class="avatar bg-{{ colour }}-lt"><i class="ti {{ icon }}"></i></span>
-        <div>
-          <div class="h2 mb-0">{{ value }}</div>
-          <div class="text-secondary small">{{ label }}{% if sub %} · {{ sub }}{% endif %}</div>
-        </div>
-      </div>
+    <div class="card sw-kpi" style="--sw-accent: var(--tblr-{{ colour }})">
+      <div class="sw-kpi-label">{{ label }}</div>
+      <div class="sw-kpi-value">{{ value }}</div>
+      {% if sub %}<div class="sw-kpi-sub">{{ sub }}</div>{% endif %}
     </div>
   </div>
   {%- endmacro %}
-  {{ stat("ti-inbox", "blue", summary.open, "to review", summary.open_high ~ " high confidence") }}
-  {{ stat("ti-sparkles", "purple", summary.new_24h, "new in the last 24 h", "") }}
-  {{ stat("ti-player-play", "green", summary.approved, "approved, in progress", summary.snoozed ~ " snoozed") }}
-  {{ stat("ti-circle-check", "secondary", summary.closed_7d, "closed this week", "completed or resolved") }}
+  {{ stat("blue", summary.open, "To review", summary.open_high ~ " with high confidence") }}
+  {{ stat("purple", summary.new_24h, "New today", "raised in the last 24 hours") }}
+  {{ stat("green", summary.approved, "Approved, in progress", summary.snoozed ~ " snoozed") }}
+  {{ stat("secondary", summary.closed_7d, "Closed this week", "completed or resolved") }}
 </div>

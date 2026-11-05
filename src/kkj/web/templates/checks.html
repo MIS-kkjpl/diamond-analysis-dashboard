@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block title %}Data quality · Stockwise{% endblock %}
 {% block pretitle %}Admin{% endblock %}
 {% block page_title %}Data quality{% endblock %}
@@ -28,6 +29,7 @@
   </div>
 </div>
 {%- endmacro %}
+{{ ui.section("Accuracy", "is what we hold the same as the ERP?") }}
 <div class="card mb-3">
   <div class="card-header">
     <div><h3 class="card-title"><i class="ti ti-shield-check me-2"></i>Accuracy audit</h3>
@@ -68,6 +70,7 @@
   {% endif %}
 </div>
 
+{{ ui.section("Run history", "every load and refresh") }}
 <div class="row row-cards">
   {{ table("Recommendation refreshes", "ti-refresh", brain_runs, "Each refresh re-runs every rule on the latest stock and sales and updates the recommendations.") }}
   {{ table("Stock pipeline runs", "ti-packages", stock_runs) }}

@@ -25,15 +25,19 @@
 {% if empty %}
 <div class="empty"><p class="empty-title">No sales for these filters</p></div>
 {% else %}
+{{ ui.section("At a glance") }}
 <div class="row row-cards mb-3">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 <div class="small text-secondary mb-3">Value = taxable amount (before GST); a return is valued at the sale it reverses and
   counted in the month it came back.{% if legacy %} Part of this period comes from the legacy file (label value, no returns).{% endif %}</div>
 
+{{ ui.section("Month by month") }}
 <div class="mb-3">{{ ui.chart("c-monthly", fig_monthly, "Net sales by month and item group", t=t_monthly) }}</div>
+{{ ui.section("Where and what", "branches and items") }}
 <div class="row row-cards mb-3">
   <div class="col-lg-6">{{ ui.chart("c-branch", fig_branch, "By branch", t=t_branch) }}</div>
   <div class="col-lg-6">{{ ui.chart("c-items", fig_items, "Top 10 items", t=t_items) }}</div>
 </div>
+{{ ui.section("Speed and people", "how long pieces took to sell, salespeople, returns") }}
 <div class="mb-3">{{ ui.chart("c-age", fig_age, "How long items took to sell", "Pieces sold, by days from label date to sale") }}</div>
 <div class="mb-3">{{ ui.table_card("Salespeople", t_team, sub="Owners and generic accounts left out (Settings → Salespeople); discount given = 1 − billed ÷ label value", icon="ti-users") }}</div>
 {% if t_returns.rows %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block title %}Overview · Stockwise{% endblock %}
 {% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
 {% block pretitle %}Analytics{% endblock %}
@@ -8,18 +9,8 @@
 {% if not h %}
 <div class="empty"><p class="empty-title">No stock snapshot yet</p></div>
 {% else %}
-{% macro kpi(label, value, sub, icon, colour) -%}
-<div class="col-sm-6 col-lg">
-  <div class="card card-sm"><div class="card-body">
-    <div class="d-flex align-items-center mb-1">
-      <span class="avatar avatar-sm bg-{{ colour }}-lt me-2"><i class="ti {{ icon }}"></i></span>
-      <div class="subheader">{{ label }}</div>
-    </div>
-    <div class="h1 mb-0">{{ value }}</div>
-    <div class="text-secondary small">{{ sub }}</div>
-  </div></div>
-</div>
-{%- endmacro %}
+{% macro kpi(label, value, sub, icon, colour) -%}{{ ui.kpi(label, value, sub, icon, colour) }}{%- endmacro %}
+{{ ui.section("Headline numbers") }}
 <div class="row row-cards mb-3">
   {{ kpi("Stock value", h.stock_value | money,
          (("▲ " if h.change_7d > 0 else "▼ ") ~ ((h.change_7d if h.change_7d > 0 else -h.change_7d) | money) ~ " vs " ~ (h.change_vs | date("%d %b"))) if h.change_7d is not none else "",
@@ -34,6 +25,7 @@
   value = taxable amount before GST; returns valued at the sale they reverse; turn = net sales ÷ time-weighted
   average stock over {{ h.fy_days }} days ({{ h.snapshots_in_fy }} snapshots); retail value on both sides (no cost data).</div>
 
+{{ ui.section("Trends", "sales by month and stock over time") }}
 <div class="row row-cards">
   <div class="col-lg-7">
     <div class="card">

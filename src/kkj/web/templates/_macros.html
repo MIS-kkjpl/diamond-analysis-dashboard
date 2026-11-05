@@ -29,15 +29,16 @@
 
 {% macro kpi(label, value, sub="", icon="ti-chart-bar", colour="blue") -%}
 <div class="col-6 col-lg">
-  <div class="card card-sm h-100"><div class="card-body">
-    <div class="d-flex align-items-center mb-1">
-      <span class="avatar avatar-sm bg-{{ colour }}-lt me-2"><i class="ti {{ icon }}"></i></span>
-      <div class="subheader">{{ label }}</div>
-    </div>
-    <div class="h1 mb-0">{{ value }}</div>
-    {% if sub %}<div class="text-secondary small">{{ sub }}</div>{% endif %}
-  </div></div>
+  <div class="card sw-kpi" style="--sw-accent: var(--tblr-{{ colour }})">
+    <div class="sw-kpi-label">{{ label }}</div>
+    <div class="sw-kpi-value">{{ value }}</div>
+    {% if sub %}<div class="sw-kpi-sub">{{ sub }}</div>{% endif %}
+  </div>
 </div>
+{%- endmacro %}
+
+{% macro section(title, sub="") -%}
+<div class="sw-section"><h2>{{ title }}</h2>{% if sub %}<span class="sw-section-sub">{{ sub }}</span>{% endif %}</div>
 {%- endmacro %}
 
 {% macro action(text) -%}
