@@ -60,14 +60,22 @@ def karat(purity):
     return pd.Series(np.where(p > 0, kt.astype(str) + "KT", ""), index=p.index)
 
 
+NO_WEIGHT = "weight not recorded"
+
+
 def weight_band(weights, edges, unit="ct"):
-    """Band labels and their order: 0.3 with edges [0.1, 0.25, 0.5] -> ('0.25–0.5ct', 2)."""
+    """Band labels and their order: 0.3 with edges [0.1, 0.25, 0.5] -> ('0.25–0.5ct', 2).
+
+    A missing or zero weight is its own band (order -1, no neighbours): about 8% of diamond labels
+    have no diamond weight in the ERP, and they must not pass for the lightest range.
+    """
     edges = [float(e) for e in edges]
     labels = [f"< {edges[0]:g}{unit}"] + [f"{a:g}–{b:g}{unit}" for a, b in zip(edges[:-1], edges[1:])] \
         + [f"{edges[-1]:g}{unit} +"]
     w = pd.to_numeric(pd.Series(weights), errors="coerce").abs().fillna(0)
     order = np.searchsorted(edges, w.values, side="right")
-    return pd.Series(np.array(labels)[order], index=w.index), pd.Series(order, index=w.index)
+    label = np.where(w.values > 0, np.array(labels)[order], NO_WEIGHT)
+    return pd.Series(label, index=w.index), pd.Series(np.where(w.values > 0, order, -1), index=w.index)
 
 
 def add_brick(df, rules):
@@ -214,7 +222,8 @@ def _neighbour_check(t, keys):
     present_all, healthy = set(sig), set(sig[t["status"] == "keep"])
     for i in t.index[t["status"].str.startswith("check_")]:
         base, b = sig[i].rsplit("#", 1)[0], int(t.at[i, "band_order"])
-        present = [n for n in (f"{base}#{b - 1}", f"{base}#{b + 1}") if n in present_all]
+        near = [] if b < 0 else [f"{base}#{o}" for o in (b - 1, b + 1) if o >= 0]   # no-weight band has no neighbours
+        present = [n for n in near if n in present_all]
         if present and all(n in healthy for n in present):
             t.at[i, "status"] = "hold"
         else:

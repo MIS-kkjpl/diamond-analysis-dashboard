@@ -13,9 +13,9 @@ DATES = [AS_OF - pd.Timedelta(days=14 * k) for k in range(26)]       # one snaps
 
 def test_karat_and_weight_band():
     assert bt.karat([58.3, 75, 91.6, 0, None]).tolist() == ["14KT", "18KT", "22KT", "", ""]
-    labels, order = bt.weight_band([0.05, 0.3, -0.3, 7], [0.1, 0.25, 0.5, 1, 2, 5])
-    assert labels.tolist() == ["< 0.1ct", "0.25–0.5ct", "0.25–0.5ct", "5ct +"]      # returns carry negative weights
-    assert order.tolist() == [0, 2, 2, 6]
+    labels, order = bt.weight_band([0.05, 0.3, -0.3, 7, 0, None], [0.1, 0.25, 0.5, 1, 2, 5])
+    assert labels.tolist() == ["< 0.1ct", "0.25–0.5ct", "0.25–0.5ct", "5ct +", bt.NO_WEIGHT, bt.NO_WEIGHT]
+    assert order.tolist() == [0, 2, 2, 6, -1, -1]                             # returns carry negative weights
 
 
 def test_brick_key_and_loose_diamond_carats_from_gross_weight():
