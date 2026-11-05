@@ -108,6 +108,12 @@ CHOICE_LABELS = {"item_class_group": "item group", "item_name": "product", "cate
                  "karat": "purity (karat)", "supplier": "supplier", "purity": "purity", "weight_band": "weight range",
                  "diamond_ct": "total diamond weight (carats)", "gross_wt": "gross weight (grams)",
                  "oldest": "oldest pieces first", "lowest_value": "lowest value first", "highest_value": "highest value first"}
+def asset_version():
+    """Changes whenever app.js / app.css change, so browsers fetch the new copy instead of a saved one."""
+    return int(max((HERE / "static" / f).stat().st_mtime for f in ("app.js", "app.css")))
+
+
+templates.env.globals.update(asset_version=asset_version)
 templates.env.globals.update(flatten=flatten, choice_label=lambda c: CHOICE_LABELS.get(str(c), str(c)))
 
 
