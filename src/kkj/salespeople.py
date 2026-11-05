@@ -12,6 +12,7 @@ Run:  python -m kkj.salespeople --hr-file <users.xlsx>   (columns Ecode, Display
 import argparse
 import re
 import sys
+from pathlib import Path
 from difflib import SequenceMatcher
 
 import pandas as pd
@@ -97,10 +98,163 @@ def seed(conn, people, added_by="seed"):
     return added
 
 
+# ── reconciliation with the HR employee list ──────────────────────────────────
+SYSTEM_EDITORS = ("seed", "default", "employee list")    # rows changed by anyone else are a person's edits: kept
+LOCATION_ALIASES = {"MUMBAI OFFICE": "Mumbai Branch"}
+LEFT_AFTER_DAYS = 90       # not on the active list and no sale for this long -> switched off
+
+
+def read_employee_file(path):
+    """The HR employee list (active staff): code, name, status, designation, department, location, joined."""
+    hr = pd.read_excel(path, dtype=str)
+    hr = hr[hr["Emp. Code"].str.strip().str.match(r"^[Kk]?\d+$", na=False)]
+    return pd.DataFrame({"code": hr["Emp. Code"].str.strip().map(normalise_code), "name": hr["Name"].str.strip(),
+                         "status": hr["CURRENT STATUS"].str.strip(), "designation": hr["Designation"].str.strip(),
+                         "department": hr["Department"].str.strip(), "location": hr["Location"].str.strip(),
+                         "joined": pd.to_datetime(hr["DOJ"], errors="coerce").dt.date}).reset_index(drop=True)
+
+
+def branch_for_location(location, branches):
+    """'ITWARI (KJ3)' -> 'KJ3 / Branch Itwari' by config.branch place names; None when not a branch."""
+    loc = str(location or "").strip().upper()
+    if loc in LOCATION_ALIASES:
+        return LOCATION_ALIASES[loc]
+    for b in branches.itertuples():
+        if b.place and str(b.place).upper() in loc:
+            return b.erp_branch
+    return None
+
+
+def _code_number(code):
+    m = re.fullmatch(r"K(\d+)", str(code))
+    return int(m.group(1)) if m else -1
+
+
+def _value(v):
+    return None if v is None or (not isinstance(v, str) and pd.isna(v)) else v
+
+
+def reconcile(people, hr, sales, branches, today):
+    """Proposed values per salesperson, why, and anything a person should check.
+
+    people: config.salesperson rows; hr: read_employee_file(); sales: per salesperson and branch
+    (sales_code, branch, lines, last_sale, recent).
+    """
+    hr_by_code = hr.drop_duplicates("code").set_index("code")
+    # the list is an export of active staff on some date: anyone with a newer code joined after it
+    newest_code = max(_code_number(c) for c in hr["code"])
+    last = sales.groupby("sales_code")["last_sale"].max()
+    sold_at = (sales[sales["recent"]].sort_values("lines", ascending=False).drop_duplicates("sales_code")
+               .set_index("sales_code")["branch"])
+    out = []
+    for p in people.itertuples():
+        new = {"employee_code": _value(p.employee_code), "name": p.name, "branch": _value(p.branch),
+               "active": bool(p.active), "match_status": p.match_status, "note": _value(p.note)}
+        why, check, h, code = [], "", None, None
+        if p.sales_code in hr_by_code.index:
+            cand = hr_by_code.loc[p.sales_code]
+            if similarity(p.name, cand["name"]) >= NAME_AGREES:
+                h, code = cand, p.sales_code
+            else:
+                check = f"code {p.sales_code} is {cand['name'].title()} in the employee list but {p.name} in sales"
+        elif p.kind == "salesperson":
+            scores = hr.assign(score=hr["name"].map(lambda n: similarity(p.name, n))).sort_values("score")
+            if len(scores) and scores.iloc[-1]["score"] >= NAME_MATCH:
+                h, code = scores.iloc[-1], scores.iloc[-1]["code"]
+                why.append(f"found by name, employee code {code}")
+        last_sale = last.get(p.sales_code)
+        if h is not None:
+            home = branch_for_location(h["location"], branches)
+            new.update(employee_code=code, name=h["name"].title(), active=True,
+                       match_status="matched" if code == p.sales_code else "name_match")
+            if home:
+                new["branch"] = home
+            joined = f", joined {h['joined']:%b %Y}" if pd.notna(h["joined"]) else ""
+            new["note"] = f"HR: {str(h['designation']).title()}, {str(h['department']).title()}, {h['location']}{joined}"
+            why.append("on the employee list")
+            if p.sales_code in sold_at.index and home and sold_at[p.sales_code] != home:
+                check = f"employee list says {h['location']}, but sells mostly at {str(sold_at[p.sales_code]).split(' / ')[0]}"
+        elif p.kind == "salesperson" and not check and _code_number(p.sales_code) < 0:
+            check = f"'{p.sales_code}' is not an employee code (a counter login?): mark it generic in Settings if so"
+        elif p.kind == "salesperson" and not check and _code_number(p.sales_code) > newest_code:
+            why.append(f"joined after the employee list was made (its newest code is K{newest_code:04d}); not judged")
+        elif p.kind == "salesperson" and not check:
+            if last_sale is not None and pd.notna(last_sale) and (today - last_sale).days <= LEFT_AFTER_DAYS:
+                check = f"not on the active employee list, but sold on {last_sale:%d %b %Y}"
+            else:
+                new["active"] = False
+                new["note"] = (f"Not on the active employee list ({today:%d %b %Y}); last sale "
+                               + (f"{last_sale:%d %b %Y}" if last_sale is not None and pd.notna(last_sale) else "none"))
+                why.append(f"not on the employee list, no sale in {LEFT_AFTER_DAYS} days")
+        if check:
+            new["note"] = f"CHECK: {check}"
+        changes = {k: (_value(getattr(p, k)), v) for k, v in new.items() if _value(getattr(p, k)) != v}
+        out.append({"sales_code": p.sales_code, "name_in_sales": p.name, "kind": p.kind,
+                    "edited_by_person": p.updated_by not in SYSTEM_EDITORS, "last_sale": last_sale,
+                    "why": "; ".join(why), "check": check, "changes": changes,
+                    **{f"new_{k}": v for k, v in new.items()}})
+    return pd.DataFrame(out)
+
+
+def apply(conn, plan, by):
+    """Write the proposed values (never to rows a person edited); each change goes into config.change_log."""
+    import json
+    n = 0
+    for r in plan.itertuples():
+        if r.edited_by_person or not r.changes:
+            continue
+        sets = {k: v for k, (_, v) in r.changes.items()}
+        conn.execute(text("UPDATE config.salesperson SET " + ", ".join(f"{k} = :{k}" for k in sets)
+                          + ", updated_at = now(), updated_by = 'employee list' WHERE sales_code = :code"),
+                     {**sets, "code": r.sales_code})
+        conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value, note)
+                             VALUES (:by, 'salesperson', :k, CAST(:o AS jsonb), CAST(:n AS jsonb), :note)"""),
+                     {"by": by, "k": r.sales_code, "n": json.dumps(sets, default=str),
+                      "o": json.dumps({k: o for k, (o, _) in r.changes.items()}, default=str),
+                      "note": r.why or r.check or None})
+        n += 1
+    return n
+
+
+def run_reconcile(path, dry_run=False):
+    from datetime import date, datetime
+    today = date.today()
+    hr = read_employee_file(path)
+    with settings.app_engine().begin() as conn:
+        people = pd.read_sql(text("SELECT * FROM config.salesperson ORDER BY sales_code"), conn)
+        branches = pd.read_sql(text("SELECT erp_branch, place FROM config.branch"), conn)
+        sales = pd.read_sql(text("""SELECT salesman, branch, count(*) AS lines, max(sale_date) AS last_sale,
+                                           bool_or(sale_date >= current_date - 180) AS recent
+                                    FROM sales.v_sales_line WHERE salesman IS NOT NULL GROUP BY 1, 2"""), conn)
+        sales["sales_code"] = sales["salesman"].map(lambda v: split_salesman(v)[0])
+        plan = reconcile(people, hr, sales, branches, today)
+        written = 0 if dry_run else apply(conn, plan, f"Employee list ({Path(path).stem})")
+    out_dir = settings.PROJECT_DIR / "data" / "reconcile"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    xlsx = out_dir / f"salespeople_vs_employees_{datetime.now():%Y%m%d_%H%M}.xlsx"
+    sheet = plan.assign(changes=plan["changes"].map(lambda c: "; ".join(f"{k}: {o} -> {n}" for k, (o, n) in c.items())))
+    with pd.ExcelWriter(xlsx) as w:
+        sheet[sheet["check"] != ""].to_excel(w, sheet_name="To check", index=False)
+        sheet.to_excel(w, sheet_name="All salespeople", index=False)
+        hr.to_excel(w, sheet_name="Employee list", index=False)
+    print(f"{len(plan)} salespeople: {int((plan['changes'].map(len) > 0).sum())} with changes "
+          f"({'dry run, nothing written' if dry_run else f'{written} written'}), "
+          f"{int((plan['check'] != '').sum())} to check, {int(plan['edited_by_person'].sum())} edited by a person "
+          f"(left alone). Review: {xlsx}")
+    return 0
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Add salespeople seen in sales to config.salesperson.")
-    ap.add_argument("--hr-file", required=True, help="HR user list .xlsx (columns Ecode, Display name)")
+    ap = argparse.ArgumentParser(description="Add salespeople seen in sales to config.salesperson, or reconcile "
+                                             "them with the HR employee list.")
+    ap.add_argument("--hr-file", help="HR user list .xlsx (columns Ecode, Display name): add new salespeople")
+    ap.add_argument("--employee-file", help="HR employee list .xlsx (Emp. Code, Name, Location, ...): reconcile")
+    ap.add_argument("--dry-run", action="store_true", help="with --employee-file: write the review sheet only")
     args = ap.parse_args(argv)
+    if args.employee_file:
+        sys.exit(run_reconcile(args.employee_file, args.dry_run))
+    if not args.hr_file:
+        ap.error("give --hr-file or --employee-file")
     engine = settings.app_engine()
     with engine.begin() as conn:
         sales = pd.read_sql(text("""SELECT salesman, branch, count(*) AS lines FROM sales.sales_line

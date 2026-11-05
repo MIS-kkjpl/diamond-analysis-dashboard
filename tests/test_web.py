@@ -105,7 +105,9 @@ def test_settings_save_rule_and_row_then_revert():
     me = client
     with settings.app_engine().connect() as c:
         aged = c.execute(text("SELECT value FROM config.setting WHERE key = 'aged_days'")).scalar()
-        person = c.execute(text("SELECT sales_code, name, note FROM config.salesperson LIMIT 1")).one()
+        # a plain salesperson, and the whole row kept so every column is put back afterwards
+        person = c.execute(text("SELECT * FROM config.salesperson WHERE kind = 'salesperson' "
+                                "ORDER BY sales_code LIMIT 1")).one()
     targets = {"target_turn": "1.0", "overstock_days": "365", "understock_days": "60", "aged_days": "400",
                "max_offer_discount_pct": "15"}
     try:
@@ -127,13 +129,15 @@ def test_settings_save_rule_and_row_then_revert():
         assert "smallest to largest" in bad.text and "Saved:" not in bad.text
         assert "enter a value" in me.post("/settings/rules/Demand", data={}).text
         r = me.post(f"/settings/salesperson/{person.sales_code}",
-                    data={"name": person.name, "kind": "salesperson", "active": "on", "note": "pytest note"})
+                    data={"name": person.name, "kind": person.kind, "active": "on", "note": "pytest note"})
         assert r.status_code == 200 and "pytest note" in r.text
     finally:
         with settings.etl_engine().begin() as c:
             c.execute(text("UPDATE config.setting SET value = CAST(:v AS jsonb), updated_by = 'default' WHERE key = 'aged_days'"),
                       {"v": str(aged)})
-            c.execute(text("UPDATE config.salesperson SET note = :n WHERE sales_code = :c"), {"n": person.note, "c": person.sales_code})
+            row = person._asdict()
+            c.execute(text("UPDATE config.salesperson SET " + ", ".join(f"{k} = :{k}" for k in row if k != "sales_code")
+                           + " WHERE sales_code = :sales_code"), row)
             c.execute(text("DELETE FROM config.change_log WHERE changed_by = 'pytest'"))
 
 

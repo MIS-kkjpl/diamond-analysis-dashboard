@@ -238,6 +238,24 @@ price-band cards, which could contradict it. The product-wide view is now contex
 inside each card. The earlier Streamlit dashboard has been removed; it is in git
 history.
 
+### Salespeople and the employee list
+
+```
+.venv\Scripts\python -m kkj.salespeople --employee-file "<Employee Data.xlsx>" [--dry-run]
+```
+
+This reconciles every salesperson with HR's employee list:
+- **Matching:** by employee code (with the name checked), or by name if the code
+  differs.
+- **Home branch:** set from the list's location.
+- **Switched off:** someone missing from the list who has made no sale in 90 days.
+- **Not judged:** codes newer than the list's newest (people who joined after
+  the export).
+
+Anything doubtful is noted "CHECK: …" for review in Settings → Salespeople. Rows
+someone edited by hand are never changed, and every change goes into the change
+history. The review workbook is written to `data/reconcile/`.
+
 ## Weighted stock turn (`kkj/metrics/brick_turn.py`)
 
 The Stock_ETL requirement, rebuilt on the clean data. Every rule below is a business
