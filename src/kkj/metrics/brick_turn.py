@@ -73,10 +73,15 @@ def weight_band(weights, edges, unit="ct"):
 def add_brick(df, rules):
     """Adds the brick columns, weight_band/band_order and 'brick' (the display key) to stock or sales rows."""
     out = df.copy()
+    no_metal = pd.to_numeric(out["purity"], errors="coerce").fillna(0).values <= 0
     out["purity"] = karat(out["purity"]).values
-    basis = "dia_wt" if rules["turn_weight_basis"] == "diamond_ct" else "gross_wt"
-    unit = "ct" if basis == "dia_wt" else "g"
-    out["weight_band"], out["band_order"] = weight_band(out[basis], rules["turn_weight_edges"], unit)
+    if rules["turn_weight_basis"] == "diamond_ct":
+        # loose diamonds carry their carats in gross weight (diamond weight is 0 and there is no metal)
+        dia = pd.to_numeric(out["dia_wt"], errors="coerce").fillna(0)
+        weight, unit = dia.where((dia != 0) | ~no_metal, out["gross_wt"]), "ct"
+    else:
+        weight, unit = out["gross_wt"], "g"
+    out["weight_band"], out["band_order"] = weight_band(weight, rules["turn_weight_edges"], unit)
     for c in ("item_name", "category", "sub_category"):
         out[c] = out[c].fillna("").astype(str).str.strip()
     levels = [lv for lv in LEVELS if lv in rules["turn_brick_levels"]]

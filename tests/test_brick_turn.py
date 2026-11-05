@@ -18,6 +18,15 @@ def test_karat_and_weight_band():
     assert order.tolist() == [0, 2, 2, 6]
 
 
+def test_brick_key_and_loose_diamond_carats_from_gross_weight():
+    df = pd.DataFrame({"purity": [75.0, 0.0], "item_name": ["D RING", "LOOSE DIAMOND"], "category": ["MICRO", None],
+                       "sub_category": [None, None], "dia_wt": [0.3, 0.0], "gross_wt": [4.2, 1.05]})
+    b = bt.add_brick(df, RULES)
+    assert b["brick"].tolist() == ["18KT · D RING · MICRO · 0.25–0.5ct", "LOOSE DIAMOND · 1–2ct"]
+    g = bt.add_brick(df, {**RULES, "turn_weight_basis": "gross_wt", "turn_weight_edges": [2, 5]})
+    assert g["weight_band"].tolist() == ["2–5g", "< 2g"]
+
+
 def test_grid_takes_the_latest_snapshot_in_each_fortnight_and_leaves_gaps():
     grid = bt.fortnight_grid(AS_OF, [AS_OF, AS_OF - pd.Timedelta(days=3), AS_OF - pd.Timedelta(days=30)], periods=4)
     assert [s for _, s in grid] == [AS_OF, None, AS_OF - pd.Timedelta(days=30), None]
