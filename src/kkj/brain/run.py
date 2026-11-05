@@ -76,7 +76,6 @@ def candidates(conn, rules):
     moving = {p["barcode"] for a in actions if a["kind"] == "transfer" for p in a["pieces"]}
     actions += gen.offers(stock, sales, rules, showrooms, exclude_barcodes=moving)
     actions += gen.liquidation(stock, rules)
-    actions += gen.buying(stock, sales, rules)
     actions += gen.discounts(stock, sales, rules, people)
 
     # suppliers: judged over the longer insight period, price-band adjusted

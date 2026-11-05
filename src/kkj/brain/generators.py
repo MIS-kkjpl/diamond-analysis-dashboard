@@ -1,5 +1,7 @@
 """
 Decision generators: current stock + recent sales + business rules -> candidate decisions.
+Purchasing is decided per brick group by stock_turn() (it replaced the earlier per-product "hold purchases"
+and price-band signals, which could contradict it).
 
 Pure functions. Each returns a list of dicts ready for kkj.brain.store (action_key, kind,
 title, summary, branch, subject, impact_value, impact_label, confidence, evidence, pieces).
@@ -246,47 +248,6 @@ def suppliers(scorecard, stock):
 
 
 # ── buying direction ──────────────────────────────────────────────────────────
-def buying(stock, sales, rules):
-    window = rules["demand_window_days"]
-    months = window / 30.44
-    stock = stock[~stock["item_class_group"].isin(rules["no_buy_groups"])]
-    sales = sales[~sales["item_class_group"].isin(rules["no_buy_groups"])]
-    held = stock.groupby("item_name").agg(pcs=("pcs", "sum"), value=("value", "sum"))
-    sold = sales.groupby("item_name")["pcs"].sum().rename("sold_pcs")
-    t = held.join(sold, how="left").fillna(0)
-    t["months_of_stock"] = np.where(t["sold_pcs"] > 0, t["pcs"] / (t["sold_pcs"] / months), np.inf)
-    limit = rules["overstock_days"] / 30.44
-    actions = []
-    for item, r in t[(t["months_of_stock"] > limit) & (t["pcs"] >= 20)].iterrows():
-        excess_pcs = r["pcs"] - (r["sold_pcs"] / months) * limit
-        excess = excess_pcs * r["value"] / r["pcs"]
-        actions.append(_action(
-            "pause_buying", item, f"Hold purchases of {item}",
-            f"Holding {r['pcs']:.0f} pieces against {r['sold_pcs']:.0f} sold in {window} days: "
-            f"{'no sales' if np.isinf(r['months_of_stock']) else f'{r.months_of_stock:.0f} months of stock'} "
-            f"(limit {limit:.0f}).", excess, f"≈{money(excess)} more than {limit:.0f} months needs",
-            confidence(r["sold_pcs"]), {"pcs": r["pcs"], "sold_pcs": r["sold_pcs"], "months_of_stock": r["months_of_stock"]},
-            subject={"item": item}))
-    # price bands: where sales outgrow stock
-    edges = rules["price_band_edges"]
-    s_band = _band(stock["value"], edges, band_money)
-    sa_band = _band(sales["item_amt"], edges, band_money)
-    share = pd.DataFrame({"stock": stock.groupby(s_band.values)["pcs"].sum() / stock["pcs"].sum(),
-                          "sales": sales.groupby(sa_band.values)["pcs"].sum() / max(sales["pcs"].sum(), 1)}).fillna(0)
-    share["gap"] = share["sales"] - share["stock"]
-    under = share[share["gap"] > 0.03].sort_values("gap", ascending=False)
-    if len(under):
-        over = share[share["gap"] < -0.03]
-        over_value = stock[s_band.isin(over.index).values]["value"].sum()
-        actions.append(_action(
-            "buy_band", "price_bands", f"Rebalance purchasing towards {', '.join(under.index)}",
-            "; ".join(f"{b}: {100 * r['sales']:.0f}% of sales vs {100 * r['stock']:.0f}% of stock" for b, r in under.iterrows())
-            + (f". Over-held: {', '.join(over.index)}." if len(over) else ""),
-            over_value, f"{money(over_value)} sits in price bands that sell less than their share",
-            confidence(sales["pcs"].sum()), share.round(3).to_dict("index"), subject={"bands": list(under.index)}))
-    return actions
-
-
 # ── weighted stock turn per brick ─────────────────────────────────────────────
 def _turn(x):
     return "–" if x is None or pd.isna(x) else "∞" if np.isinf(x) else f"{x:.2f}×"
@@ -332,6 +293,8 @@ def stock_turn(turns, rules):
             summary = (f"Turns {_turn(r['blended_turn'])} a year against {target} on thin data (in stock in "
                        f"{r['avail_12m']:.0f} of {r['data_12m']:.0f} fortnights), and its neighbouring weight ranges "
                        f"are out of range too.")
+        product = bricks[(bricks["item_name"] == r["item_name"]) & (bricks["purity"] == r["purity"])]
+        p_held, p_sold, p_avg = product["current_pcs"].sum(), product["sold_12m"].sum(), product["avg_pcs_12m"].sum()
         inside = bricks[bricks["brick_group"] == r["brick"]].copy()
         inside["size"] = inside["change_pcs"].abs()
         branches = by_branch[by_branch["brick"] == r["brick"]]
@@ -342,6 +305,10 @@ def stock_turn(turns, rules):
             "qualifying windows": r["pattern"], "weights 3/6/12": r["weights"] or "–",
             "blended turn": _turn(r["blended_turn"]), "ideal turn": target,
             "now (pcs)": float(r["current_pcs"]), "ideal (pcs)": float(r["ideal_pcs"]),
+            f"{r['purity']} {r['item_name']} overall (all weight ranges)".strip(): (
+                f"{p_held:.0f} pcs held ({money(product['current_value'].sum())}), {p_sold:.0f} sold in 12 months, "
+                f"turn {_turn(p_sold / p_avg if p_avg else float('nan'))}, "
+                + (f"{p_held / (p_sold / 12):.0f} months of stock" if p_sold > 0 else "no sales")),
             "bricks in this group": {
                 b["brick"]: f"{b['current_pcs']:.0f} → {b['ideal_pcs']:.0f} pcs, turn {_turn(b['blended_turn'])} "
                             f"vs {b['ideal_turn']:g}×, {b['status'].replace('_', ' ')}"

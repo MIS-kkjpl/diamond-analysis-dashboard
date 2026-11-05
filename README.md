@@ -27,7 +27,9 @@ This repo replaces two earlier projects, kept locally in `archive/` for referenc
 | `src/kkj/erp/` | ERP login/session (`client.py`) and one module per report (`stock_report.py`) |
 | `src/kkj/db/` | database setup and loaders |
 | `src/kkj/pipelines/` | runnable pipelines: fetch → clean → validate → load |
-| `src/kkj/metrics/`, `checks/`, `dashboard/` | metric library, data checks, web dashboard (to come) |
+| `src/kkj/metrics/`, `checks/` | metric library (incl. weighted stock turn), data checks and the accuracy audit |
+| `src/kkj/brain/` | recommendation generators, lifecycle and refresh |
+| `src/kkj/web/` | the Stockwise web app (FastAPI + templates) |
 | `config/stock_payload.json` | stock report filters, captured from the ERP screen |
 | `sql/schema.sql` | schema `erp` in database `kkj_erp_stock` (tables, views, grants) |
 | `scripts/probes/` | one-off investigation scripts from planning (ERP sales chain, data-quality checks) |
@@ -230,8 +232,11 @@ the latest data. A recommendation keeps its identity across refreshes:
 
 It runs after the overnight load and from the **Refresh recommendations** button.
 
-The earlier Streamlit dashboard (`src/kkj/dashboard`) is superseded by the web
-app and no longer run.
+**Purchasing** is one signal per brick group (Increase / Reduce / Phase out, from
+the weighted stock turn). It replaced the earlier per-product "Hold purchases" and
+price-band cards, which could contradict it. The product-wide view is now context
+inside each card. The earlier Streamlit dashboard has been removed; it is in git
+history.
 
 ## Weighted stock turn (`kkj/metrics/brick_turn.py`)
 

@@ -19,15 +19,14 @@ KINDS = {  # kind -> (label, Tabler icon, badge colour)
     "pause_buying": ("Purchasing", "ti-shopping-cart-off", "cyan"),
     "buy_band": ("Purchasing", "ti-shopping-cart", "cyan"),
     "discount": ("Discount control", "ti-discount", "pink"),
-    "turn_increase": ("Stock level", "ti-trending-up", "green"),
-    "turn_reduce": ("Stock level", "ti-trending-down", "orange"),
-    "turn_phase_out": ("Stock level", "ti-trash", "red"),
+    "turn_increase": ("Purchasing", "ti-trending-up", "green"),
+    "turn_reduce": ("Purchasing", "ti-trending-down", "orange"),
+    "turn_phase_out": ("Purchasing", "ti-trash", "red"),
 }
 GROUPS = {"all": ("All", None), "transfer": ("Transfers", ["transfer"]), "replenish": ("Replenishment", ["understock"]),
           "markdown": ("Markdowns", ["offer"]), "clearance": ("Clearance", ["liquidate"]),
           "supplier": ("Suppliers", ["supplier_slow", "supplier_fast"]),
-          "purchasing": ("Purchasing", ["pause_buying", "buy_band"]),
-          "stock_level": ("Stock levels", ["turn_increase", "turn_reduce", "turn_phase_out"]),
+          "purchasing": ("Purchasing", ["turn_increase", "turn_reduce", "turn_phase_out"]),
           "discount": ("Discounts", ["discount"])}
 VIEWS = {"open": ("To review", ["open"]), "approved": ("Approved", ["approved"]), "snoozed": ("Snoozed", ["snoozed"]),
          "dismissed": ("Dismissed", ["rejected"]), "closed": ("Closed", ["done", "resolved"])}

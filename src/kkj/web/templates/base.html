@@ -29,12 +29,11 @@
       </h1>
       <div class="collapse navbar-collapse" id="sidebar-menu">
         <ul class="navbar-nav pt-lg-3">
-          {% macro item(key, href, icon, label, classic=False) -%}
+          {% macro item(key, href, icon, label) -%}
           <li class="nav-item {% if active == key %}active{% endif %}">
-            <a class="nav-link" href="{{ href }}" {% if classic %}target="_blank"{% endif %}>
+            <a class="nav-link" href="{{ href }}">
               <span class="nav-link-icon"><i class="ti {{ icon }}"></i></span>
               <span class="nav-link-title">{{ label }}</span>
-              {% if classic %}<span class="badge badge-sm bg-secondary-lt ms-auto">classic</span>{% endif %}
             </a>
           </li>
           {%- endmacro %}

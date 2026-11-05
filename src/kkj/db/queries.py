@@ -1,5 +1,5 @@
 """
-Read queries shared by the dashboard (cached in kkj.dashboard.data) and the decision
+Read queries shared by the web app (cached in kkj.web.common) and the recommendation
 engine (kkj.brain.run). Each takes an open SQLAlchemy connection and returns a DataFrame.
 """
 import pandas as pd

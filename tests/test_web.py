@@ -94,7 +94,7 @@ def test_response_needs_sign_in_then_records_and_is_undone():
                                   "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings",
                                   "/stock-turn", "/stock-turn?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
                                   "/stock-turn?group=Diamond+Jewellery&group=", "/stock-turn?view=brick&search=D+RING",
-                                  "/settings/ideal-turns", "/recommendations?group=stock_level"])
+                                  "/settings/ideal-turns", "/recommendations?group=purchasing"])
 def test_analytics_and_settings_pages_render(path):
     r = client.get(path)
     assert r.status_code == 200, r.text[-800:]

@@ -17,7 +17,6 @@ from kkj import settings
 from kkj.viz import indian, money, pct
 
 HERE = Path(__file__).resolve().parent
-CLASSIC_URL = "http://{host}:8501"          # the Streamlit app, for pages not moved yet
 
 
 @lru_cache
@@ -122,7 +121,6 @@ def data_notice():
 
 
 def render(request: Request, template, active, **context):
-    host = request.url.hostname or "localhost"
     return templates.TemplateResponse(request, template, {
         "who": who(request), "active": active, "status": status(), "notice": data_notice(),
-        "classic": CLASSIC_URL.format(host=host), **context})
+        **context})

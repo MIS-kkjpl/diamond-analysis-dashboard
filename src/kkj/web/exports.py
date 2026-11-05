@@ -67,9 +67,17 @@ def buying(status: str = "both"):
     s = STATUS.get(status, STATUS["both"])
     q = """SELECT action_id AS recommendation, status, kind, title, summary, impact_label, confidence
            FROM brain.action WHERE kind = ANY(:k) AND status = ANY(:s) ORDER BY priority DESC"""
-    return _xlsx({"Replenishment": read(q, k=["understock"], s=s),
-                  "Hold purchases": read(q, k=["pause_buying"], s=s),
-                  "Price bands": read(q, k=["buy_band"], s=s),
+    groups = read("""SELECT brick AS brick_group, item_class_group, current_pcs AS now_pcs, ideal_pcs, change_pcs,
+                             round(change_pcs * avg_piece_value) AS change_value, blended_turn, ideal_turn, ideal_source,
+                             sold_12m, status AS verdict
+                      FROM brain.brick_turn WHERE scope = 'Company' AND level = 'group'
+                        AND as_of = (SELECT max(as_of) FROM brain.brick_turn)
+                      ORDER BY abs(change_pcs * coalesce(avg_piece_value, 0)) DESC""")
+    return _xlsx({"Increase": read(q, k=["turn_increase"], s=s),
+                  "Reduce": read(q, k=["turn_reduce"], s=s),
+                  "Phase out": read(q, k=["turn_phase_out"], s=s),
+                  "All brick groups": groups,
+                  "Replenishment": read(q, k=["understock"], s=s),
                   "Suppliers": read(q, k=["supplier_slow", "supplier_fast"], s=s)}, "purchasing_list")
 
 
