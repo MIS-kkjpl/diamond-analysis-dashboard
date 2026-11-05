@@ -93,6 +93,16 @@ CREATE TABLE IF NOT EXISTS brain.brick_turn (
     PRIMARY KEY (as_of, scope, brick)
 );
 
+-- Accuracy audits (kkj.checks.audit), one row per run; exception lists stay in the workbook on disk
+CREATE TABLE IF NOT EXISTS brain.audit_run (
+    audit_id     serial PRIMARY KEY,
+    at           timestamptz NOT NULL DEFAULT now(),
+    passed       int, failed int, info int,
+    results      jsonb,                          -- every check: layer, check, scope, expected, actual, result, note
+    exceptions   jsonb,                          -- sheet name -> rows
+    report_file  text                            -- the .xlsx, relative to the project folder
+);
+
 -- Added after: rows for brick groups too (level), each brick's group, and where its ideal turn was set
 ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS level text NOT NULL DEFAULT 'brick';
 ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS brick_group text;

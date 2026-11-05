@@ -1,11 +1,14 @@
 """Overview and Data checks pages."""
+import json
+
 import plotly.graph_objects as go
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from kkj import rules as rules_mod
 from kkj.metrics.summary import headline
 from kkj.viz import MUTED_SERIES, SERIES, style
+from kkj import settings
 from kkj.web.common import engine, read, render
 
 router = APIRouter()
@@ -44,10 +47,40 @@ def overview(request: Request):
     return render(request, "overview.html", "overview", h=h, charts=charts)
 
 
+def _latest_audit():
+    a = read("""SELECT audit_id, at AT TIME ZONE 'Asia/Kolkata' AS at, passed, failed, info, results, exceptions, report_file
+                FROM brain.audit_run ORDER BY audit_id DESC LIMIT 1""")
+    if a.empty:
+        return None
+    a = a.iloc[0].to_dict()
+    for k in ("results", "exceptions"):
+        if isinstance(a[k], str):
+            a[k] = json.loads(a[k])
+    a["issues"] = [r for r in a["results"] if r["result"] != "PASS"]
+    a["layers"] = {}
+    for r in a["results"]:
+        a["layers"].setdefault(r["layer"], {"PASS": 0, "FAIL": 0, "INFO": 0})[r["result"]] += 1
+    return a
+
+
+@router.get("/checks/audit.xlsx")
+def audit_workbook():
+    """The latest audit's exception lists."""
+    a = read("SELECT report_file FROM brain.audit_run ORDER BY audit_id DESC LIMIT 1")
+    if a.empty:
+        return Response("No audit yet", status_code=404)
+    path = (settings.PROJECT_DIR / a["report_file"].iloc[0]).resolve()
+    audit_dir = (settings.PROJECT_DIR / "data" / "audit").resolve()
+    if audit_dir not in path.parents or not path.exists():
+        return Response("Report not found", status_code=404)
+    return FileResponse(path, filename=path.name,
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 @router.get("/checks", response_class=HTMLResponse)
 def checks(request: Request):
     return render(
-        request, "checks.html", "checks",
+        request, "checks.html", "checks", audit=_latest_audit(),
         stock_runs=read("""SELECT run_id, started_at AT TIME ZONE 'Asia/Kolkata' AS started, source, status,
                                   record_count, rows_loaded, error FROM erp.etl_run_log ORDER BY run_id DESC LIMIT 20"""
                         ).to_dict("records"),

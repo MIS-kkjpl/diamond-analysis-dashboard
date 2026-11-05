@@ -27,6 +27,46 @@
   </div>
 </div>
 {%- endmacro %}
+<div class="card mb-3">
+  <div class="card-header">
+    <div><h3 class="card-title"><i class="ti ti-shield-check me-2"></i>Accuracy audit</h3>
+      <div class="card-subtitle small text-secondary">Every stock and sales load re-checked against the ERP's own totals (exact), the
+        sources compared on the same dates, and every label followed from one stock snapshot to the next. Runs after every refresh.</div></div>
+    {% if audit %}<div class="card-actions"><a href="/checks/audit.xlsx" class="btn btn-sm btn-outline-secondary">
+      <i class="ti ti-download"></i> Exceptions (Excel)</a></div>{% endif %}
+  </div>
+  {% if not audit %}
+  <div class="card-body text-secondary">No audit has run yet.</div>
+  {% else %}
+  <div class="card-body pb-0">
+    <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
+      <span class="text-secondary small">{{ audit.at | date("%d %b %Y %H:%M") }}</span>
+      <span class="badge bg-green-lt fs-5">{{ audit.passed }} passed</span>
+      <span class="badge bg-{{ 'red' if audit.failed else 'green' }}-lt fs-5">{{ audit.failed }} failed</span>
+      <span class="badge bg-blue-lt fs-5">{{ audit.info }} for information</span>
+      {% set names = {1: "Database vs ERP", 2: "Sources vs each other", 3: "Stock-flow continuity"} %}
+      {% for layer, c in audit.layers | dictsort %}
+        <span class="small text-secondary">Layer {{ layer }} · {{ names.get(layer, "") }}: {{ c.PASS }} ✓ {{ c.FAIL }} ✗ {{ c.INFO }} i</span>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-vcenter card-table">
+      <thead><tr><th>Result</th><th>Layer</th><th>Check</th><th>Scope</th><th class="text-end">Expected</th>
+        <th class="text-end">Actual</th><th>Note</th></tr></thead>
+      <tbody>
+      {% for r in audit.issues %}
+        <tr><td><span class="badge bg-{{ 'red' if r.result == 'FAIL' else 'blue' }}-lt">{{ r.result }}</span></td>
+          <td>{{ r.layer }}</td><td>{{ r.check }}</td><td class="small">{{ r.scope }}</td>
+          <td class="text-end">{{ r.expected }}</td><td class="text-end">{{ r.actual }}</td>
+          <td class="small text-secondary">{{ r.note | truncate(220) }}</td></tr>
+      {% else %}<tr><td colspan="7" class="text-green">Every check passed.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
 <div class="row row-cards">
   {{ table("Recommendation refreshes", "ti-refresh", brain_runs, "Each refresh re-runs every rule on the latest stock and sales and updates the recommendations.") }}
   {{ table("Stock pipeline runs", "ti-packages", stock_runs) }}

@@ -269,3 +269,32 @@ def test_ideal_turn_save_validate_and_remove():
             c.execute(text("DELETE FROM config.ideal_turn WHERE note = 'pytest' OR (level = 'product' AND key = :k "
                            "AND updated_by = 'pytest')"), {"k": key})
             c.execute(text("DELETE FROM config.change_log WHERE table_name = 'ideal_turn' AND changed_by = 'pytest'"))
+
+
+def test_data_quality_shows_the_audit_and_its_workbook():
+    r = client.get("/checks")
+    assert r.status_code == 200 and "Accuracy audit" in r.text
+    with settings.app_engine().connect() as c:
+        has_audit = c.execute(text("SELECT count(*) FROM brain.audit_run")).scalar() > 0
+    if has_audit:
+        x = client.get("/checks/audit.xlsx")
+        assert x.status_code == 200 and x.content[:2] == b"PK"
+
+
+def test_data_notice_appears_on_every_page_when_set():
+    from kkj import notice
+    with settings.app_engine().connect() as c:
+        before = notice.get(c)
+    try:
+        with settings.app_engine().begin() as c:
+            notice.set_notice(c, "pytest notice text", "pytest")
+        assert "pytest notice text" in client.get("/overview").text
+        with settings.app_engine().begin() as c:
+            notice.clear(c, "pytest")
+        assert "Data notice" not in client.get("/overview").text
+    finally:
+        with settings.app_engine().begin() as c:
+            if before:
+                notice.set_notice(c, before["text"], "restored")
+            else:
+                notice.clear(c, "restored")

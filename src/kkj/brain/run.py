@@ -3,7 +3,8 @@ Refresh the decisions: read the latest stock, recent sales and the business rule
 generator, and merge the result into brain.action (kkj.brain.store lifecycle). Logged in
 brain.run_log. Runs after each data load, and from the dashboard's "Refresh decisions".
 
-Run:  python -m kkj.brain.run [--trigger manual|pipeline|dashboard]
+Run:  python -m kkj.brain.run [--trigger manual|pipeline|dashboard] [--no-audit]
+      (the accuracy audit runs after the refresh unless --no-audit)
 """
 import argparse
 import logging
@@ -124,11 +125,19 @@ def refresh(trigger="manual"):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Refresh the decisions (brain.action).")
     ap.add_argument("--trigger", default="manual", choices=["manual", "pipeline", "dashboard"])
+    ap.add_argument("--no-audit", action="store_true", help="skip the accuracy audit after the refresh")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     result = refresh(args.trigger)
     print(f"Run {result['run_id']}: {result['candidates']} candidates; created {result['created']}, "
           f"updated {result['updated']}, reopened {result['reopened']}, resolved {result['resolved']}")
+    if not args.no_audit:              # a failed audit is reported, never fails the refresh
+        try:
+            from kkj.checks.audit import audit_and_save
+            _, _, counts = audit_and_save()
+            print(f"Audit: {counts.get('PASS', 0)} passed, {counts.get('FAIL', 0)} failed, {counts.get('INFO', 0)} info")
+        except Exception as e:
+            print(f"Audit could not run: {type(e).__name__}: {e}")
     sys.exit(0)
 
 

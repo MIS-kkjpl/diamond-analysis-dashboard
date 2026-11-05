@@ -24,6 +24,7 @@ from kkj.metrics.core import location_type
 ap = argparse.ArgumentParser()
 ap.add_argument("--n", type=int, default=200)
 ap.add_argument("--pause", type=float, default=3)
+ap.add_argument("--since", help="only exits on or after this date (YYYY-MM-DD); the ERP login sees the current FY only")
 args = ap.parse_args()
 
 out_dir = settings.PROJECT_DIR / "data" / "audit" / "label_status"
@@ -36,6 +37,8 @@ with settings.etl_engine().connect() as c:
 gone["kind"] = gone["branch"].map(kinds).fillna("other")
 gone["where"] = location_type(gone["location"])
 gone = gone.drop_duplicates("barcode", keep="last")
+if args.since:
+    gone = gone[gone["missing_from"] >= pd.Timestamp(args.since)]
 
 # stratified: every (branch kind, location type) group gets a share of the sample, at least 5 where possible
 groups = gone.groupby(["kind", "where"])
@@ -66,7 +69,7 @@ for i, r in enumerate(sample.itertuples()):
                  "out_voucher": outs["voucherMaster"].iloc[-1] if len(outs) else ("(no history)" if h.empty else "(no Out voucher)"),
                  "out_location": outs["locationName"].iloc[-1] if len(outs) else "",
                  "out_doc": outs["docNo"].iloc[-1] if len(outs) else "",
-                 "vouchers_in_window": " > ".join(window["voucherMaster"]) if len(h) else "",
+                 "vouchers_in_window": " > ".join(map(str, window["voucherMaster"])) if len(h) else "",
                  "came_back_later": bool(len(later) and (later["transactionType"] == "In").any()),
                  "last_voucher": h["voucherMaster"].iloc[-1] if len(h) else "",
                  "last_location": h["locationName"].iloc[-1] if len(h) else ""})
@@ -74,7 +77,7 @@ for i, r in enumerate(sample.itertuples()):
         print(f"  {i + 1}/{len(sample)}")
 
 res = pd.DataFrame(rows)
-res.to_csv(out_dir.parent / "label_history_sample.csv", index=False)
+res.to_csv(out_dir.parent / f"label_history_sample{'_since_' + args.since if args.since else ''}.csv", index=False)
 pd.set_option("display.width", 220)
 print("\nVoucher that took the label out, by where it was:")
 print(pd.crosstab(res["out_voucher"], [res["kind"], res["where"]], margins=True).to_string())

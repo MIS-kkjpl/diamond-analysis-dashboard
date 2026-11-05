@@ -113,8 +113,16 @@ def status():
     return run.iloc[0].to_dict() if len(run) else None
 
 
+def data_notice():
+    """The data notice shown on every page, if one is set (kkj.notice)."""
+    from kkj import notice
+    with engine().connect() as conn:
+        value = notice.get(conn)
+    return value.get("text") if isinstance(value, dict) else None
+
+
 def render(request: Request, template, active, **context):
     host = request.url.hostname or "localhost"
     return templates.TemplateResponse(request, template, {
-        "who": who(request), "active": active, "status": status(),
+        "who": who(request), "active": active, "status": status(), "notice": data_notice(),
         "classic": CLASSIC_URL.format(host=host), **context})

@@ -31,5 +31,6 @@ def history(rows):
     if df.empty:
         return df
     df["docDate"] = pd.to_datetime(df["docDate"], format="%d/%m/%Y", errors="coerce")
-    df["voucherMaster"] = df["voucherMaster"].astype(str).str.strip()
+    df["voucherMaster"] = df["voucherMaster"].fillna("").astype(str).str.strip().replace("", "(unnamed)")
+    df["locationName"] = df["locationName"].fillna("").astype(str)
     return df.reset_index(names="seq").sort_values(["docDate", "seq"]).reset_index(drop=True)

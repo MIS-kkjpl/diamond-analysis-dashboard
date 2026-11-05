@@ -126,6 +126,12 @@ def sales_loads(a, conn):
         if ld["source"] == "csv_legacy":
             a.check(1, "Legacy sales: rows vs lines imported", scope, int(ld["record_count"]), int(r["n"]))
             continue
+        later = loads[(loads["load_id"] > ld["load_id"]) & (loads["status"] == "success") & (loads["source"] == "erp")
+                      & (loads["date_from"] <= ld["date_to"]) & (loads["date_to"] >= ld["date_from"])]
+        if len(later):          # its rows for the overlapping dates were replaced; the later load is checked itself
+            a.info(1, "ERP sales load partly replaced by a later load", scope, int(r["n"]),
+                   note=f"rows still held; replaced by load {', '.join(map(str, later['load_id']))}, which is checked on its own")
+            continue
         erp = {}
         for c in ld["validation"] or []:
             m = re.match(r"Sum (\w+) == serverTotal", c["check"])
@@ -133,8 +139,7 @@ def sales_loads(a, conn):
                 erp[m.group(1)] = _num(c["detail"])[1]
             if c["check"].startswith("Rows == step A recordCount"):
                 erp["rows"] = _num(c["detail"])[1]
-        a.check(1, "ERP sales vs ERP totals: rows", scope, int(erp.get("rows", -1)), int(r["n"]),
-                note="rows still held from this load; a later load of an overlapping range replaces its rows")
+        a.check(1, "ERP sales vs ERP totals: rows", scope, int(erp.get("rows", -1)), int(r["n"]))
         for col, dec in SALES_SUMS.items():
             if col in erp:
                 a.check(1, f"ERP sales vs ERP totals: sum {col}", scope, round(erp[col], dec), round(float(r[col] or 0), dec))
@@ -420,9 +425,28 @@ def write(a, out_dir=None):
     return xlsx, md, counts
 
 
-def main():
+def save(a, xlsx, counts):
+    """Record the run in brain.audit_run (shown on the Data quality page)."""
+    import json
+    exceptions = {k: int(len(v)) for k, v in a.exceptions.items()}
+    results = pd.DataFrame(a.results).astype({"expected": str, "actual": str}).to_dict("records")
+    with settings.app_engine().begin() as conn:
+        conn.execute(text("""INSERT INTO brain.audit_run (passed, failed, info, results, exceptions, report_file)
+                             VALUES (:p, :f, :i, CAST(:r AS jsonb), CAST(:e AS jsonb), :x)"""),
+                     {"p": counts.get("PASS", 0), "f": counts.get("FAIL", 0), "i": counts.get("INFO", 0),
+                      "r": json.dumps(results, default=str), "e": json.dumps(exceptions),
+                      "x": str(xlsx.relative_to(settings.PROJECT_DIR))})
+
+
+def audit_and_save():
     a = run()
     xlsx, md, counts = write(a)
+    save(a, xlsx, counts)
+    return xlsx, md, counts
+
+
+def main():
+    xlsx, md, counts = audit_and_save()
     print(f"{counts.get('PASS', 0)} passed, {counts.get('FAIL', 0)} failed, {counts.get('INFO', 0)} info")
     print(f"Report: {md}\nExceptions: {xlsx}")
     sys.exit(0)
