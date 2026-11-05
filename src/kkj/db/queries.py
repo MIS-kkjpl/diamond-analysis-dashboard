@@ -145,6 +145,26 @@ def sales_lines(conn, date_from):
     return df
 
 
+def hist_daily(conn):
+    """Pieces sold per day, item group and product over the five-year history (sales.hist_line)."""
+    df = read(conn, """SELECT sale_date, item_class_group, item_name, sum(pcs) AS pcs, sum(item_amt) AS value
+                       FROM sales.hist_line GROUP BY 1, 2, 3""")
+    df["sale_date"] = pd.to_datetime(df["sale_date"])
+    # the exports spell some names differently by year ('GOLD' / 'Gold'): one spelling per name, the commonest
+    for col in ("item_class_group", "item_name"):
+        key = df[col].fillna("").str.strip().str.casefold()
+        commonest = df.assign(k=key).groupby(["k", col])["pcs"].sum().reset_index() \
+            .sort_values("pcs", ascending=False).drop_duplicates("k").set_index("k")[col]
+        df[col] = key.map(commonest)
+    return df.groupby(["sale_date", "item_class_group", "item_name"], as_index=False)[["pcs", "value"]].sum()
+
+
+def festivals(conn):
+    df = read(conn, "SELECT name, day, note FROM config.festival ORDER BY day")
+    df["day"] = pd.to_datetime(df["day"])
+    return df
+
+
 def ideal_turns(conn):
     """config.ideal_turn: (level, key, ideal) set in Settings -> Ideal turns."""
     return read(conn, "SELECT level, key, ideal::float AS ideal, note, updated_at, updated_by FROM config.ideal_turn")

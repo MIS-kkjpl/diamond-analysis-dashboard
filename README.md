@@ -217,6 +217,7 @@ passwords. The same can be done from the command line:
 | Analytics | **Overview** | Headline numbers (stock, FY net sales, turn, ageing), monthly sales, stock over time |
 | | **Inventory health** | Value by branch and age, group × age, oldest stock, stock not on a counter |
 | | **Sales** | By month and group, branch, items, days to sell, salespeople (named from Settings), returns |
+| | **Seasonality** | Monthly patterns and festival lift from five years of sales; festival stock and the next 90 days by product |
 | | **Stock turn** | Weighted stock turn per brick against the ideal turn: increase, reduce, keep, phase out (see below) |
 | | **Insights** | Sell rate by age, price-adjusted supplier performance, stock vs sales by price band and item, exhibitions vs showrooms, clearance candidates; each with a recommended action |
 | Admin | **Data quality** | Recommendation refreshes, stock runs, sales loads, past-date snapshot verdicts |
@@ -306,6 +307,39 @@ rule in **Settings → Stock turn**, not a constant.
   - It raises **Stock levels** recommendations: Increase / Reduce / Phase out at company
     level, with the split by branch as evidence.
   - It needs the fortnightly history, which the past-date stock pulls provide.
+
+## Seasonality (`kkj/metrics/seasonality.py`)
+
+```
+.venv\Scripts\python -m kkj.pipelines.history_import [--check-only]
+```
+
+This loads five years of sales (FY 2021-22 to January 2026) from the ERP's
+Criteria-wise Sales Search exports into `sales.hist_line`. All product groups are
+included: diamond, gold and silver. Each file loads only if its rows and its sums
+of pieces, gross weight and value match its own totals row exactly. The exports
+carry label value only, and they leave out sales of order-booked pieces, so
+everything is measured in pieces.
+
+- **Monthly index:** 12 × the average share of a financial year's pieces in each
+  month, from complete years only (1.0 = an average month). It is computed per item
+  group and per product; a product selling fewer than 100 pieces a year uses its
+  group's pattern.
+- **Festival lift:** sales per day in a window around each festival (21 days before
+  to 3 after) against that year's average day. Each year is aligned to that year's
+  date, because festivals move between months. The dates live in
+  **Settings → Festivals** (`config.festival`); add next year's when the calendar
+  is out.
+- **Seasonally adjusted stock turn** (rule *Adjust stock turn for the season*, on by
+  default): each window's sales are annualised by the share of a typical year it
+  covers, not by its length. A 3-month window over Diwali is no longer read as a
+  quarter of a year.
+- **Festival recommendations:** from 90 to 7 days before a festival, a product
+  holding less than 2× its expected festival sales gets a *Stock up … for …* card.
+  Expected sales = past festival sales × this year's pace.
+- **Seasonality page:** when each group sells, the festival lift, the coming
+  festivals with festival stock by product, the next 90 days by product (demand vs
+  stock), and each product's monthly pattern.
 
 ## Tests
 

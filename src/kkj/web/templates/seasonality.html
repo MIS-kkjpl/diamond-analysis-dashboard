@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% import "_filters.html" as flt %}
+{% block title %}Seasonality · Stockwise{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
+{% block pretitle %}Analytics{% endblock %}
+{% block page_title %}Seasonality{% endblock %}
+{% block actions %}<a href="/settings#tab-festivals" class="btn btn-outline-secondary btn-sm"><i class="ti ti-calendar-event"></i> Festival dates</a>{% endblock %}
+{% block content %}
+<div id="page">
+{% if empty %}
+<div class="empty"><p class="empty-title">No sales history loaded</p>
+  <p class="empty-subtitle text-secondary">Run python -m kkj.pipelines.history_import to load the five yearly sales exports.</p></div>
+{% else %}
+<div class="small text-secondary mb-3">{{ period }} · in pieces · the exports leave out sales of order-booked pieces</div>
+
+<div class="row row-cards mb-3">
+  <div class="col-lg-7">{{ ui.chart("c-groups", fig_groups, "When each item group sells",
+       "1.0× = an average month; April to March", t=t_groups) }}</div>
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header"><div><h3 class="card-title"><i class="ti ti-calendar-event me-2"></i>Coming up</h3>
+        <div class="card-subtitle small text-secondary">From Settings → Festivals</div></div></div>
+      <div class="list-group list-group-flush">
+        {% for u in upcoming %}
+        <div class="list-group-item d-flex justify-content-between">
+          <span><b>{{ u.name }}</b>{% if u.note %} <span class="badge bg-yellow-lt">{{ u.note }}</span>{% endif %}</span>
+          <span class="text-secondary">{{ u.day | date("%a %d %b %Y") }} · {{ "today" if u.days_away == 0 else "in " ~ u.days_away ~ " days" }}</span>
+        </div>
+        {% else %}<div class="list-group-item text-secondary">No festival dates ahead: add them in Settings → Festivals.</div>{% endfor %}
+      </div>
+      {% if t_lift %}
+      <div class="card-body border-top">
+        <div class="small text-secondary mb-1">Sales per day around each festival ({{ rules.festival_days_before }} days before to
+          {{ rules.festival_days_after }} after), × that year's average day:</div>
+        {{ ui.data_table(t_lift) }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3"><div class="card-body">
+  <h3 class="card-title">Festival stock: the next {{ rules.festival_lead_days }} days</h3>
+  <div class="small text-secondary mb-2">Expected = the product's average sales around that festival in past years × this year's pace
+    (last 12 months ÷ its average year). Target = {{ rules.festival_stock_cover }}× expected, so customers have choice.
+    Products short of target get a Festival recommendation (from 7 days ahead it is too late to buy).</div>
+  {% if t_outlook %}{{ ui.data_table(t_outlook) }}{% else %}<div class="text-secondary">No festival in the next {{ rules.festival_lead_days }} days
+    with enough sales history.</div>{% endif %}
+</div></div>
+
+<div class="mb-3">{% if t_ahead %}{{ ui.table_card("The next 90 days by product", t_ahead,
+  sub="Seasonal demand at this year's pace vs stock held today (as of " ~ (as_of | date) ~ "); low months of cover = buy, high = hold",
+  icon="ti-calendar-time") }}{% endif %}</div>
+
+{% call flt.form("/seasonality") %}
+  <span class="small text-secondary">Products in</span>
+  <select name="group" class="form-select form-select-sm" style="width: auto">
+    {% for g in groups %}<option value="{{ g }}" {% if g == f.group %}selected{% endif %}>{{ g }}</option>{% endfor %}
+  </select>
+{% endcall %}
+<div class="mb-3">{{ ui.table_card("Monthly pattern by product: " ~ f.group, t_products,
+  sub="1.0× = an average month; products selling fewer than " ~ rules.season_min_year_pcs ~ " pieces a year use their group's pattern",
+  icon="ti-chart-dots") }}</div>
+{% endif %}
+</div>
+{% endblock %}

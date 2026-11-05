@@ -86,3 +86,18 @@ CREATE TABLE IF NOT EXISTS config.ideal_turn (
 GRANT SELECT ON config.ideal_turn TO powerbi_reader, dashboard_app;
 GRANT INSERT, UPDATE, DELETE ON config.ideal_turn TO dashboard_app;
 RESET ROLE;
+
+-- Festival dates (added after the first version): the jewellery-buying days seasonality is aligned to,
+-- because they move between months year to year. Edited in Settings -> Festivals.
+SET ROLE erp_etl;
+CREATE TABLE IF NOT EXISTS config.festival (
+    name        text NOT NULL,              -- e.g. 'Dhanteras'
+    day         date NOT NULL,
+    note        text,
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    updated_by  text,
+    PRIMARY KEY (name, day)
+);
+GRANT SELECT ON config.festival TO powerbi_reader, dashboard_app;
+GRANT INSERT, UPDATE, DELETE ON config.festival TO dashboard_app;
+RESET ROLE;

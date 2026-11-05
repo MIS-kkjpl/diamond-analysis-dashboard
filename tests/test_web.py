@@ -94,7 +94,8 @@ def test_response_needs_sign_in_then_records_and_is_undone():
                                   "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings",
                                   "/stock-turn", "/stock-turn?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
                                   "/stock-turn?group=Diamond+Jewellery&group=", "/stock-turn?view=brick&search=D+RING",
-                                  "/settings/ideal-turns", "/recommendations?group=purchasing"])
+                                  "/settings/ideal-turns", "/seasonality", "/seasonality?group=Gold", "/settings/festivals",
+                                  "/recommendations?group=festival", "/recommendations?group=purchasing"])
 def test_analytics_and_settings_pages_render(path):
     r = client.get(path)
     assert r.status_code == 200, r.text[-800:]
@@ -302,3 +303,16 @@ def test_data_notice_appears_on_every_page_when_set():
                 notice.set_notice(c, before["text"], "restored")
             else:
                 notice.clear(c, "restored")
+
+
+def test_festival_date_save_and_remove():
+    try:
+        r = client.post("/settings/festivals", data={"name": "pytest fest", "day": "2027-01-15", "note": "pytest"})
+        assert "Saved pytest fest" in r.text and "pytest fest" in r.text
+        assert "Enter a festival name" in client.post("/settings/festivals", data={"name": "", "day": ""}).text
+        r = client.post("/settings/festivals", data={"name": "pytest fest", "day": "2027-01-15", "delete": "1"})
+        assert "Removed pytest fest" in r.text
+    finally:
+        with settings.etl_engine().begin() as c:
+            c.execute(text("DELETE FROM config.festival WHERE name = 'pytest fest'"))
+            c.execute(text("DELETE FROM config.change_log WHERE table_name = 'festival' AND changed_by = 'pytest'"))

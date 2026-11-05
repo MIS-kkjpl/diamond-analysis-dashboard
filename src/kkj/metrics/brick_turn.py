@@ -153,12 +153,15 @@ def _weights(pattern, rules):
     return w / w.sum() if w.sum() > 0 else None
 
 
-def compute(stock, sales, as_of, rules, level="brick", by=(), ideals=None):
+def compute(stock, sales, as_of, rules, level="brick", by=(), ideals=None, season=None):
     """One row per brick (level="brick") or brick group (level="brick_group"), per `by` (e.g. ("branch",)).
 
     stock: rows from add_brick for the grid's snapshot dates, with snapshot_date, pcs, value.
     sales: rows from add_brick of net sale lines (returns negative) over the last 12 months: sale_date, pcs.
     ideals: config.ideal_turn rows (level, key, ideal), or None for the default ideal everywhere.
+    season: {"product": {item_name: {"3m": share, ...}}, "group": {item_class_group: {...}}} from
+            kkj.metrics.seasonality: a window's sales are annualised by the share of a typical year it
+            covers (its season) instead of by its length. None = by length.
     """
     keys = [level] + list(by)
     levels = rules["turn_brick_levels"] if level == "brick" else rules["turn_group_levels"]
@@ -197,7 +200,13 @@ def compute(stock, sales, as_of, rules, level="brick", by=(), ideals=None):
         out[f"avail_{name}"] = (held > 0).sum(axis=1) if cols else 0
         out[f"avg_pcs_{name}"] = held.mean(axis=1) if cols else np.nan
         out[f"sold_{name}"] = sold
-        out[f"annual_{name}"] = sold * 365 / days
+        share = pd.Series(days / 365, index=index, dtype=float)
+        if season:
+            prod = info["item_name"].map(lambda n: season["product"].get(n, {}).get(name))
+            grp = info["item_class_group"].map(lambda g: season["group"].get(g, {}).get(name))
+            share = prod.fillna(grp).fillna(days / 365).astype(float).where(lambda s: s > 0, days / 365)
+        out[f"season_{name}"] = share                     # share of a typical year in this window
+        out[f"annual_{name}"] = sold / share
         avg = out[f"avg_pcs_{name}"]
         out[f"turn_{name}"] = np.where(avg > 0, out[f"annual_{name}"] / avg.where(avg > 0),
                                        np.where(out[f"annual_{name}"] > 0, np.inf, np.nan))

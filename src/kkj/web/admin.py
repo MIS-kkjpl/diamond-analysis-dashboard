@@ -2,6 +2,7 @@
 import json
 import math
 
+import pandas as pd
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import text
@@ -103,6 +104,44 @@ async def save_ideal(request: Request):
                              VALUES (:by, 'ideal_turn', :k, CAST(:old AS jsonb), CAST(:new AS jsonb))"""),
                      {"by": by, "k": f"{level}: {key}", "old": json.dumps(old), "new": json.dumps(new)})
     return templates.TemplateResponse(request, "_ideals.html", _ideals_ctx(saved=msg, level=level))
+
+
+def _festivals_ctx(error=None, saved=None):
+    rows = _plain(read("""SELECT name, day, note, updated_by FROM config.festival ORDER BY day DESC"""))
+    names = sorted({r["name"] for r in rows})
+    return {"festivals": rows, "names": names, "error": error, "saved": saved, "today": pd.Timestamp.today().date()}
+
+
+@router.get("/festivals", response_class=HTMLResponse)
+def festivals_card(request: Request):
+    return templates.TemplateResponse(request, "_festivals.html", _festivals_ctx())
+
+
+@router.post("/festivals", response_class=HTMLResponse)
+async def save_festival(request: Request):
+    form = await request.form()
+    name = " ".join((form.get("name") or "").split())
+    note = (form.get("note") or "").strip() or None
+    try:
+        day = pd.Timestamp(form.get("day") or "").date()
+    except ValueError:
+        day = None
+    if not name or day is None:
+        return templates.TemplateResponse(request, "_festivals.html", _festivals_ctx(error="Enter a festival name and a date."))
+    by = who(request)
+    with engine().begin() as conn:
+        if form.get("delete") == "1":
+            conn.execute(text("DELETE FROM config.festival WHERE name = :n AND day = :d"), {"n": name, "d": day})
+            msg, new = f"Removed {name} on {day:%d %b %Y}.", None
+        else:
+            conn.execute(text("""INSERT INTO config.festival (name, day, note, updated_by) VALUES (:n, :d, :note, :by)
+                                 ON CONFLICT (name, day) DO UPDATE SET note = EXCLUDED.note, updated_at = now(),
+                                 updated_by = EXCLUDED.updated_by"""), {"n": name, "d": day, "note": note, "by": by})
+            msg, new = f"Saved {name} on {day:%d %b %Y}. Seasonality uses it from the next refresh.", str(day)
+        conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value)
+                             VALUES (:by, 'festival', :k, NULL, CAST(:new AS jsonb))"""),
+                     {"by": by, "k": f"{name} {day}", "new": json.dumps(new)})
+    return templates.TemplateResponse(request, "_festivals.html", _festivals_ctx(saved=msg))
 
 
 @router.get("", response_class=HTMLResponse)

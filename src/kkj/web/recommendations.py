@@ -22,11 +22,13 @@ KINDS = {  # kind -> (label, Tabler icon, badge colour)
     "turn_increase": ("Purchasing", "ti-trending-up", "green"),
     "turn_reduce": ("Purchasing", "ti-trending-down", "orange"),
     "turn_phase_out": ("Purchasing", "ti-trash", "red"),
+    "festival": ("Festival", "ti-calendar-event", "yellow"),
 }
 GROUPS = {"all": ("All", None), "transfer": ("Transfers", ["transfer"]), "replenish": ("Replenishment", ["understock"]),
           "markdown": ("Markdowns", ["offer"]), "clearance": ("Clearance", ["liquidate"]),
           "supplier": ("Suppliers", ["supplier_slow", "supplier_fast"]),
           "purchasing": ("Purchasing", ["turn_increase", "turn_reduce", "turn_phase_out"]),
+          "festival": ("Festivals", ["festival"]),
           "discount": ("Discounts", ["discount"])}
 VIEWS = {"open": ("To review", ["open"]), "approved": ("Approved", ["approved"]), "snoozed": ("Snoozed", ["snoozed"]),
          "dismissed": ("Dismissed", ["rejected"]), "closed": ("Closed", ["done", "resolved"])}

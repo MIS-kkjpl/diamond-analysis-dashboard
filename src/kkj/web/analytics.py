@@ -333,3 +333,91 @@ def stock_turn(request: Request, view: str = "group", scope: str = "Company", gr
                   levels=" – ".join(bt.LEVEL_LABELS[lv] for lv in bt.LEVELS
                                     if lv in rules["turn_brick_levels" if view == "brick" else "turn_group_levels"]),
                   n_ideals=int(read("SELECT count(*) AS n FROM config.ideal_turn")["n"].iloc[0]))
+
+
+# ── Seasonality ───────────────────────────────────────────────────────────────
+MONTH_NAMES = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"]
+
+
+@router.get("/seasonality", response_class=HTMLResponse)
+def seasonality(request: Request, group: str = "Diamond Jewellery"):
+    from kkj.brain.run import festival_outlook
+    from kkj.metrics import seasonality as sn
+    rules = _rules()
+    daily = cached(q.hist_daily)
+    if daily.empty:
+        return render(request, "seasonality.html", "seasonality", empty=True, rules=rules)
+    fests = cached(q.festivals)
+    by_group = sn.monthly_index(daily, "item_class_group", rules["season_min_year_pcs"])
+    by_group = by_group.sort_values("avg_year_pcs", ascending=False)
+    groups = by_group["item_class_group"].tolist()
+    group = group if group in groups else groups[0]
+    cols = [f"index_{m}" for m in sn.MONTHS]
+    top = by_group.head(4)
+    fig_groups = charts.season_lines(MONTH_NAMES, {r["item_class_group"]: [r[c] for c in cols]
+                                                   for r in top.to_dict("records")})
+    t_groups = charts.table(by_group[["item_class_group", "avg_year_pcs", "years"] + cols].rename(
+        columns=dict(zip(cols, MONTH_NAMES))), {**{m: "dec" for m in MONTH_NAMES}, "avg_year_pcs": "num"},
+        {"item_class_group": "item group", "avg_year_pcs": "pieces a year"})
+
+    in_group = daily[daily["item_class_group"] == group]
+    by_product = sn.monthly_index(in_group, "item_name", rules["season_min_year_pcs"]).sort_values("avg_year_pcs",
+                                                                                                    ascending=False)
+    t_products = charts.table(by_product[["item_name", "avg_year_pcs", "years"] + cols].rename(
+        columns=dict(zip(cols, MONTH_NAMES))), {**{m: "dec" for m in MONTH_NAMES}, "avg_year_pcs": "num"},
+        {"item_name": "product", "avg_year_pcs": "pieces a year"})
+
+    lift = sn.festival_lift(daily, fests, "item_class_group", rules["festival_days_before"],
+                            rules["festival_days_after"], rules["season_min_year_pcs"])
+    lift = lift[lift["item_class_group"].isin(groups[:6])]
+    t_lift = charts.table(lift.pivot_table(index="festival", columns="item_class_group", values="lift").reset_index(),
+                          {g: "dec" for g in groups}) if len(lift) else None
+
+    today = pd.Timestamp.today().normalize()
+    upcoming = fests[(fests["day"] >= today)].head(8).assign(days_away=lambda d: (d["day"] - today).dt.days)
+    latest = m.company_stock(cached(q.stock_latest))
+    latest = latest.assign(value=m.value(latest))
+    as_of = pd.Timestamp(latest["snapshot_date"].iloc[0])
+    with engine().connect() as conn:
+        outlook = festival_outlook(conn, rules, as_of, latest)
+    t_outlook = None
+    if len(outlook):
+        outlook = outlook.assign(target=lambda d: (rules["festival_stock_cover"] * d["expected_pcs"]).round(),
+                                 day=lambda d: pd.to_datetime(d["day"]).dt.strftime("%d %b %Y"))
+        outlook["short"] = (outlook["target"] - outlook["held_pcs"]).clip(lower=0)
+        t_outlook = charts.table(outlook.sort_values(["day", "short"], ascending=[True, False])[
+            ["festival", "day", "days_away", "item_name", "years", "past_window_pcs", "growth", "expected_pcs",
+             "held_pcs", "target", "short"]],
+            {"past_window_pcs": "dec", "growth": "dec", "expected_pcs": "dec", "held_pcs": "num", "target": "num",
+             "short": "num", "days_away": "num"},
+            {"item_name": "product", "past_window_pcs": "past festival sales (avg pcs)", "growth": "this year ×",
+             "expected_pcs": "expected", "held_pcs": "held", "target": f"target ({rules['festival_stock_cover']:g}×)",
+             "days_away": "days away"})
+
+    # the next 90 days for each diamond product: seasonal demand at this year's pace vs stock held
+    idx = sn.monthly_index(daily, "item_name", rules["season_min_year_pcs"]).set_index("item_name")
+    with engine().connect() as conn:
+        recent = q.brick_sales(conn, (as_of - pd.Timedelta(days=365)).date())
+    recent = recent[recent["sale_date"] <= as_of].groupby("item_name")["pcs"].sum()
+    held = latest.groupby("item_name").agg(held=("pcs", "sum"), group=("item_class_group", "first"))
+    rows = []
+    for item, h in held.iterrows():
+        if item not in idx.index or recent.get(item, 0) <= 0:
+            continue
+        share = sn.window_share(idx.loc[item], as_of + pd.Timedelta(days=1), as_of + pd.Timedelta(days=90))
+        exp = recent[item] * share
+        rows.append({"product": item, "group": h["group"], "sold_last_12m": recent[item], "next_90_days_share": share,
+                     "expected_next_90_days": exp, "held": h["held"],
+                     "months_of_cover": h["held"] / (exp / 3) if exp > 0 else np.nan})
+    ahead = pd.DataFrame(rows).sort_values("expected_next_90_days", ascending=False) if rows else pd.DataFrame()
+    t_ahead = charts.table(ahead, {"sold_last_12m": "num", "next_90_days_share": "pct", "expected_next_90_days": "dec",
+                                   "held": "num", "months_of_cover": "dec"},
+                           {"next_90_days_share": "share of a year in the next 90 days"}) if len(ahead) else None
+
+    years = sorted(set(sn.complete_years(daily)))
+    period = (f"{daily['sale_date'].min():%b %Y} to {daily['sale_date'].max():%b %Y} · complete financial years used: "
+              + ", ".join(f"{y}-{str(y + 1)[2:]}" for y in years) + f" · {daily['pcs'].sum():,.0f} pieces, all product groups")
+    return render(request, "seasonality.html", "seasonality", empty=False, rules=rules, period=period,
+                  fig_groups=fig_groups, t_groups=t_groups, groups=groups, f={"group": group}, t_products=t_products,
+                  t_lift=t_lift, upcoming=upcoming.to_dict("records"), t_outlook=t_outlook, t_ahead=t_ahead,
+                  as_of=as_of)

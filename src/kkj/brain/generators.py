@@ -24,7 +24,7 @@ from kkj.metrics import core as m
 
 KIND_WEIGHT = {"understock": 1.0, "transfer": 1.0, "discount": 0.9, "offer": 0.8, "liquidate": 0.7,
                "supplier_slow": 0.6, "pause_buying": 0.6, "supplier_fast": 0.5, "buy_band": 0.5,
-               "turn_increase": 0.9, "turn_reduce": 0.7, "turn_phase_out": 0.6}
+               "turn_increase": 0.9, "turn_reduce": 0.7, "turn_phase_out": 0.6, "festival": 0.95}
 
 
 # ── groups of similar pieces ──────────────────────────────────────────────────
@@ -318,6 +318,50 @@ def stock_turn(turns, rules):
                           for _, b in branches.sort_values("current_pcs", ascending=False).iterrows()}}
         actions.append(_action(kind, r["brick"], title, summary, impact, label, confidence(r["sold_12m"]), evidence,
                                subject={"group": r["brick"], "item": r["item_name"], "item_group": r["item_class_group"]}))
+    return actions
+
+
+# ── festivals ─────────────────────────────────────────────────────────────────
+def festival_stock(outlook, rules):
+    """Stock up a product ahead of a festival when it holds less than cover × its expected festival sales.
+
+    outlook: kkj.brain.run.festival_outlook (festival, day, days_away, item_name, group, lift, years,
+    past_window_pcs, growth, expected_pcs, held_pcs, held_value). Festivals within 10 days of each other
+    (Dhanteras and Diwali) count once per product: the one with the most expected sales.
+    """
+    cover = rules["festival_stock_cover"]
+    o = outlook[(outlook["days_away"] >= 7) & ~outlook["group"].isin(rules["no_buy_groups"])].sort_values("day")
+    actions = []
+    for item, g in o.groupby("item_name"):
+        kept, last_day = [], None
+        for r in g.sort_values(["day", "expected_pcs"], ascending=[True, False]).itertuples():
+            if last_day is not None and (pd.Timestamp(r.day) - pd.Timestamp(last_day)).days <= 10:
+                if r.expected_pcs > kept[-1].expected_pcs:
+                    kept[-1] = r
+                continue
+            kept.append(r)
+            last_day = r.day
+        for r in kept:
+            need = int(np.ceil(cover * r.expected_pcs))
+            short = need - r.held_pcs
+            if r.expected_pcs < 3 or short <= 0:
+                continue
+            per_piece = r.held_value / r.held_pcs if r.held_pcs else 0
+            impact = short * per_piece
+            title = f"Stock up {item} for {r.festival} ({pd.Timestamp(r.day):%d %b})"
+            summary = (f"Over the last {r.years} years {item} sold about {r.past_window_pcs:.0f} pieces around "
+                       f"{r.festival} ({r.lift:.1f}× a normal day); at this year's pace (×{r.growth:.2f}) expect about "
+                       f"{r.expected_pcs:.0f}. Holding {r.held_pcs:.0f}; hold at least {cover:g}× = {need} for choice. "
+                       f"{r.days_away} days to go.")
+            evidence = {"festival": f"{r.festival}, {pd.Timestamp(r.day):%d %b %Y}", "days away": int(r.days_away),
+                        "past festival sales (pcs, average)": round(float(r.past_window_pcs), 1),
+                        "years of history": int(r.years), "sales lift around the festival": f"{r.lift:.1f}×",
+                        "this year vs average year": f"×{r.growth:.2f}", "expected (pcs)": round(float(r.expected_pcs), 1),
+                        "held (pcs)": float(r.held_pcs), "target (pcs)": need}
+            conf = "high" if r.years >= 3 and r.expected_pcs >= 10 else "medium" if r.years >= 2 else "low"
+            actions.append(_action("festival", f"{item}|{r.festival}|{pd.Timestamp(r.day):%Y-%m-%d}", title, summary,
+                                   impact, f"≈{money(impact)} more stock ({short:+.0f} pcs)", conf, evidence,
+                                   subject={"item": item, "festival": r.festival, "day": str(r.day)}))
     return actions
 
 

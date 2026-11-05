@@ -87,3 +87,14 @@ def table(df, formats=None, rename=None):
              for c, v in zip(df.columns, rec)] for rec in df.itertuples(index=False, name=None)]
     names = [(rename or {}).get(c, str(c).replace("_", " ")) for c in df.columns]
     return {"columns": names, "rows": rows, "numeric": [names[list(df.columns).index(c)] for c in numeric]}
+
+
+def season_lines(months, series):
+    """Monthly index lines, one per key, April -> March (1.0 = an average month). series: {name: [12 values]}."""
+    fig = go.Figure()
+    for i, (name, values) in enumerate(series.items()):
+        fig.add_scatter(x=months, y=values, name=name, mode="lines+markers", line=dict(width=2, color=SERIES[i % 8]),
+                        marker=dict(size=8), hovertemplate=f"{name}<br>%{{x}}: %{{y:.2f}}× an average month<extra></extra>")
+    fig.add_hline(y=1, line_color=GRID, line_width=2)
+    fig.update_yaxes(ticksuffix="×", rangemode="tozero")
+    return style(fig, 320).to_json()

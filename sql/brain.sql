@@ -107,6 +107,10 @@ CREATE TABLE IF NOT EXISTS brain.audit_run (
 ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS level text NOT NULL DEFAULT 'brick';
 ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS brick_group text;
 ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS ideal_source text;
+-- the share of a typical year each window covers (seasonality); annual = sold / share
+ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS season_3m double precision;
+ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS season_6m double precision;
+ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS season_12m double precision;
 ALTER TABLE brain.brick_turn DROP CONSTRAINT IF EXISTS brick_turn_pkey;
 ALTER TABLE brain.brick_turn ADD PRIMARY KEY (as_of, scope, level, brick);   -- brick = the brick or group key
 

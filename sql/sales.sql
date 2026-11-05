@@ -117,3 +117,35 @@ ALTER DEFAULT PRIVILEGES FOR ROLE erp_etl IN SCHEMA sales
     GRANT SELECT ON TABLES TO powerbi_reader;
 
 RESET ROLE;
+
+-- Five years of sales, ALL product groups (diamond, gold, silver), from the ERP's Criteria-wise Sales
+-- Search exports per financial year (2021-22 onwards). Used for seasonality only: label value
+-- (no taxable amount), and the exports leave out sales of order-booked pieces. Loaded by
+-- python -m kkj.pipelines.history_import; each file only after its rows and sums match its totals row.
+SET ROLE erp_etl;
+CREATE TABLE IF NOT EXISTS sales.hist_line (
+    source_file      text NOT NULL,
+    sr_no            int NOT NULL,
+    sale_date        date NOT NULL,
+    bill_no          text,
+    label_no         text,
+    barcode          text,
+    item_name        text,
+    category         text,
+    sub_category     text,
+    item_class_group text,
+    location         text,
+    purity           numeric,
+    pcs              numeric,
+    gross_wt         numeric,
+    net_wt           numeric,
+    dia_wt           numeric,
+    item_amt         numeric,
+    supplier         text,
+    age_days         numeric,
+    order_no         text,
+    PRIMARY KEY (source_file, sr_no)
+);
+CREATE INDEX IF NOT EXISTS hist_line_date ON sales.hist_line (sale_date);
+GRANT SELECT ON sales.hist_line TO powerbi_reader, dashboard_app;
+RESET ROLE;

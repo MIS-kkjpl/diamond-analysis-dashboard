@@ -94,6 +94,24 @@ RULES = [
     Rule("turn_min_change_pcs", "Stock turn", "Smallest change worth recommending", 2, "pieces",
          "Increase / reduce recommendations are raised only when the ideal stock differs by at least this.",
          "int", min=1, max=50),
+    # ── seasonality (kkj.metrics.seasonality) ──
+    Rule("turn_seasonal_adjust", "Seasonality", "Adjust stock turn for the season", True, "",
+         "A 3-month window over Diwali holds far more than a quarter of the year's sales. When on, each window's "
+         "sales are annualised by the share of a typical year it covers (from five years of sales), not by its "
+         "length.", "bool"),
+    Rule("season_min_year_pcs", "Seasonality", "A product has its own seasonal pattern after", 100,
+         "pieces sold a year", "Below this a product uses its item group's pattern.", "int", min=10, max=5000),
+    Rule("festival_days_before", "Seasonality", "Festival buying starts", 21, "days before the festival",
+         "The window around each festival (Settings → Festivals) that its sales are measured over.", "int",
+         min=3, max=60),
+    Rule("festival_days_after", "Seasonality", "Festival buying ends", 3, "days after the festival", "", "int",
+         min=0, max=15),
+    Rule("festival_lead_days", "Seasonality", "Prepare for a festival from", 90, "days ahead",
+         "Festival stock recommendations appear this far ahead (and stop 7 days before, when it is too late "
+         "to buy).", "int", min=14, max=180),
+    Rule("festival_stock_cover", "Seasonality", "Before a festival, hold at least", 2.0,
+         "× its expected festival sales", "Customers need choice: a product expected to sell 50 pieces over "
+         "the festival should have at least this many times that on hand.", min=1, max=6),
     # ── transfers ──
     Rule("transfer_enabled", "Transfers", "Suggest transfers between branches", True, "",
          "Move pieces from a branch with excess to one short of the same group.", "bool"),
