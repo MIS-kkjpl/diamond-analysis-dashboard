@@ -99,11 +99,37 @@ def brick_stock(conn, dates):
 
 
 def brick_sales(conn, date_from):
-    """Net sale lines (returns negative) with the brick columns, since date_from."""
+    """Net sale lines (returns negative) with the brick columns, since date_from.
+
+    A sold piece belongs to the brick it was stocked in, so its brick columns come from its own
+    label in stock history (matched by barcode; a return by the sale it reverses) and from the sale
+    line only when there is no match. Legacy sale lines often lack the diamond weight.
+    """
     df = read(conn, """
-        SELECT sale_date, branch, item_class_group, purity, item_name, category, sub_category, dia_wt, gross_wt, pcs,
-               coalesce(taxable_amount, item_amt) AS value
-        FROM sales.v_sales_line WHERE sale_date >= :d AND item_class_group <> 'Customer Diamond'""", d=date_from)
+        WITH label AS (
+            SELECT DISTINCT ON (barcode) barcode, item_class_group, purity, item_name, category, sub_category,
+                   dia_wt, gross_wt
+            FROM (SELECT snapshot_date, barcode, item_class_group, purity, item_name, category, sub_category, dia_wt,
+                         gross_wt FROM erp.stock_snapshot
+                  UNION ALL
+                  SELECT snapshot_date, barcode, item_class_group, purity, item_name, category, sub_category, dia_wt,
+                         gross_wt FROM stock_hist.snapshot) s
+            WHERE barcode IS NOT NULL
+            ORDER BY barcode, snapshot_date DESC),
+        line AS (
+            SELECT v.*, coalesce(v.barcode, o.barcode) AS label_barcode
+            FROM sales.v_sales_line v
+            LEFT JOIN sales.v_sales_line o ON v.pcs < 0 AND o.bill_no = v.orig_bill_no
+                 AND o.inventory_ref_code = v.inventory_ref_code AND o.pcs > 0
+            WHERE v.sale_date >= :d AND v.item_class_group <> 'Customer Diamond')
+        SELECT l.sale_date, l.branch, coalesce(s.item_class_group, l.item_class_group) AS item_class_group,
+               coalesce(s.purity, l.purity) AS purity, coalesce(s.item_name, l.item_name) AS item_name,
+               CASE WHEN s.barcode IS NOT NULL THEN s.category ELSE l.category END AS category,
+               CASE WHEN s.barcode IS NOT NULL THEN s.sub_category ELSE l.sub_category END AS sub_category,
+               CASE WHEN s.barcode IS NOT NULL THEN s.dia_wt ELSE l.dia_wt END AS dia_wt,
+               CASE WHEN s.barcode IS NOT NULL THEN s.gross_wt ELSE l.gross_wt END AS gross_wt,
+               l.pcs, coalesce(l.taxable_amount, l.item_amt) AS value, s.barcode IS NOT NULL AS from_label
+        FROM line l LEFT JOIN label s ON s.barcode = l.label_barcode""", d=date_from)
     df["sale_date"] = pd.to_datetime(df["sale_date"])
     return df
 
