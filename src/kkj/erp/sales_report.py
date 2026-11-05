@@ -84,11 +84,14 @@ TOTALS = {"pcs": "pcs", "itemamt": "item_amt", "netwt": "net_wt", "diawt": "dia_
 def build_params(cfg, item_codes, log_code=None):
     """sales_payload.json's params for one date range, all diamond groups."""
     p = json.loads((settings.CONFIG_DIR / "sales_payload.json").read_text(encoding="utf-8"))["params"]
+    # showOrderItem: "2" (Show Order Labels: No, the captured screen value) leaves out every sale of a piece
+    # booked against a customer order (June 2026: 52 of 577 lines); "1" includes them, "3" is only them
     p.update(productCodeList=cfg["products"], allItemCodes=item_codes,
              fromDate=cfg["from"], toDate=cfg["to"],
              salesType=cfg["sales_type"], considerSalesReturn=cfg["sales_return"],
+             showOrderItem=cfg.get("order_labels", "1"),
              filterStr=[f" Date From: {cfg['from']} To: {cfg['to']} Location:All  Product Group:Diamond"
-                        "      Show Labels In:Both  Show Order Labels:No ", "Items:All         "])
+                        "      Show Labels In:Both  Show Order Labels:Yes ", "Items:All         "])
     if log_code:
         p["logCode"] = log_code
     return p
