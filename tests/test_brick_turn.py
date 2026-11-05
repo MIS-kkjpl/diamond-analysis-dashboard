@@ -142,3 +142,11 @@ def test_most_specific_ideal_wins():
     assert t.loc["a", ["ideal_turn", "ideal_source", "status"]].tolist() == [5.2, "brick", "keep"]
     assert t.loc["b", ["ideal_turn", "ideal_source"]].tolist() == [4.0, "product"]
     assert t.loc["c", ["ideal_turn", "ideal_source", "status"]].tolist() == [3.0, "item_group", "increase"]
+
+
+def test_audit_reads_the_erp_side_of_each_check():
+    from kkj.checks import audit
+    checks = [{"check": "Row count == Total (N)", "detail": "8856 vs 8856"},
+              {"check": "Sum item_amt == totals row", "detail": "2,445,928,999.630 vs 2,445,928,999.630"},
+              {"check": "Sum pcs == totals row", "detail": "10,182.000 vs 10,183.000"}]
+    assert audit._erp_totals(checks, "totals row") == {"rows": 8856.0, "item_amt": 2445928999.63, "pcs": 10183.0}
