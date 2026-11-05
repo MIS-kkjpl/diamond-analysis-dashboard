@@ -68,14 +68,16 @@ def main():
     ap.add_argument("--from", dest="start", default="01/04/2026")
     ap.add_argument("--pause", type=float, default=30)
     ap.add_argument("--stop-at", default="09:00", help="start no ERP pull after this time (HH:MM)")
+    ap.add_argument("--skip-today", action="store_true", help="today's stock is already loaded")
     ap.add_argument("--plan", action="store_true")
     a = ap.parse_args()
     dates = weekly_dates(datetime.strptime(a.start, "%d/%m/%Y").date(), date.today())
-    steps = [[]] + [["--as-on", "--date", f"{d:%d/%m/%Y}"] for d in dates]
+    steps = ([] if a.skip_today else [[]]) + [["--as-on", "--date", f"{d:%d/%m/%Y}"] for d in dates]
     stop_at = datetime.combine(date.today(), datetime.strptime(a.stop_at, "%H:%M").time())
 
     if a.plan:
-        print(f"backup kkj_erp_stock, then {len(steps)} reports ({len(dates)} as-on + today's production):")
+        today = "" if a.skip_today else " + today's production"
+        print(f"backup kkj_erp_stock, then {len(steps)} reports ({len(dates)} as-on{today}):")
         for s in steps:
             print("  python -m kkj.pipelines.stock", " ".join(s) or "(today -> erp.stock_snapshot)")
         return

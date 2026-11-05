@@ -1,4 +1,4 @@
-"""Analytics pages: Inventory health, Sales, Insights. Filters are plain GET parameters (shareable links)."""
+"""Analytics pages: Inventory health, Sales, Insights, Stock turn. Filters are plain GET parameters (shareable links)."""
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Query, Request
@@ -6,12 +6,13 @@ from fastapi.responses import HTMLResponse
 
 from kkj import rules as rules_mod
 from kkj.db import queries as q
+from kkj.metrics import brick_turn as bt
 from kkj.metrics import core as m
 from kkj.metrics import insights as ins
 from kkj.metrics.summary import fy_start
 from kkj.viz import GROUP_ORDER, money
 from kkj.web import charts
-from kkj.web.common import cached, engine, render
+from kkj.web.common import cached, engine, read, render
 
 router = APIRouter()
 
@@ -266,3 +267,63 @@ def insights(request: Request, group: list[str] = Query(default=["Diamond Jewell
             {"age_years": "dec", "net_wt": "dec", "dia_wt": "dec", "value": "money", "recovery": "money", "recovery_share": "pct"},
             {"value": "tag value", "recovery": "recovery value", "recovery_share": "recovery %"}),
         recovery_pct=rules["diamond_recovery_pct"], liq_days=rules["liquidation_age_days"])
+
+
+# ── Stock turn (weighted, per brick) ──────────────────────────────────────────
+@router.get("/stock-turn", response_class=HTMLResponse)
+def stock_turn(request: Request, scope: str = "Company", group: list[str] = Query(default=[]),
+               status: list[str] = Query(default=[]), search: str = ""):
+    rules = _rules()
+    t = read("""SELECT * FROM brain.brick_turn WHERE as_of = (SELECT max(as_of) FROM brain.brick_turn)""")
+    if t.empty:
+        return render(request, "stock_turn.html", "stock_turn", empty=True, f={}, rules=rules)
+    as_of = t["as_of"].iloc[0]
+    scopes = ["Company"] + sorted(s for s in t["scope"].unique() if s != "Company")
+    scope = scope if scope in scopes else "Company"
+    t = t[t["scope"] == scope]
+    groups = sorted(t["item_class_group"].dropna().unique())
+    group, status = [g for g in group if g], [s for s in status if s in bt.STATUS]
+    if group:
+        t = t[t["item_class_group"].isin(group)]
+    if search:
+        t = t[t["brick"].str.contains(search, case=False, regex=False)]
+    t = t.assign(apv=t["avg_piece_value"].astype(float).fillna(0))
+    t["change_value"] = t["change_pcs"].astype(float) * t["apv"]
+
+    by_status = t.groupby("status").agg(bricks=("brick", "size"), pcs=("current_pcs", "sum"), value=("current_value", "sum"),
+                                        change=("change_value", "sum")).reindex(list(bt.STATUS)).dropna(how="all")
+    def k(s, icon, colour, sub):
+        r = by_status.loc[s] if s in by_status.index else None
+        return (bt.STATUS[s][0], f"{int(r['bricks']) if r is not None else 0:,} bricks", sub(r) if r is not None else "",
+                icon, colour)
+    kpis = [k("increase", "ti-trending-up", "green", lambda r: f"{money(r['change'])} more stock needed"),
+            k("reduce", "ti-trending-down", "orange", lambda r: f"{money(-r['change'])} more than sales need"),
+            k("keep", "ti-check", "blue", lambda r: f"{money(r['value'])} held"),
+            k("phase_out", "ti-trash", "red", lambda r: f"{money(r['value'])} held"),
+            ("Too new / hold / thin", f"{int(by_status.reindex(['new', 'hold', 'stock_up', 'no_history'])['bricks'].sum()):,} bricks",
+             f"{money(by_status.reindex(['new', 'hold', 'stock_up', 'no_history'])['value'].sum())} held", "ti-eye", "secondary")]
+
+    chart = by_status.reset_index()
+    chart["label"] = chart["status"].map(lambda s: bt.STATUS[s][0])
+    shown = t[t["status"].isin(status)] if status else t
+    shown = shown.assign(order=shown["change_value"].abs().where(shown["status"] != "phase_out", shown["current_value"]))
+    shown = shown.sort_values("order", ascending=False).head(300)
+    shown = shown.assign(
+        status_label=shown["status"].map(lambda s: bt.STATUS[s][0]),
+        in_stock=shown["avail_12m"].astype(int).astype(str) + " of " + shown["data_12m"].astype(int).astype(str),
+        weights=shown["weights"].fillna("–"))
+    table = charts.table(
+        shown[["brick", "item_class_group", "current_pcs", "ideal_pcs", "change_pcs", "change_value", "turn_3m", "turn_6m",
+               "turn_12m", "in_stock", "weights", "blended_turn", "status_label"]],
+        {"current_pcs": "num", "ideal_pcs": "num", "change_pcs": "num", "change_value": "money", "turn_3m": "dec",
+         "turn_6m": "dec", "turn_12m": "dec", "blended_turn": "dec"},
+        {"item_class_group": "group", "current_pcs": "now (pcs)", "ideal_pcs": "ideal (pcs)", "change_pcs": "change",
+         "change_value": "change (₹)", "turn_3m": "3 m", "turn_6m": "6 m", "turn_12m": "12 m",
+         "in_stock": "in stock (fortnights, 12 m)", "weights": "blend 3/6/12", "blended_turn": "blended turn",
+         "status_label": "status"})
+    return render(request, "stock_turn.html", "stock_turn", empty=False, rules=rules, as_of=as_of, kpis=kpis,
+                  scopes=scopes, groups=groups, statuses=bt.STATUS, f={"scope": scope, "group": group, "status": status, "search": search},
+                  fig=charts.hbar(chart["label"], chart["value"] / 1e7, np.c_[chart["bricks"], chart["pcs"]],
+                                  "<br>%{customdata[0]:,.0f} bricks · %{customdata[1]:,.0f} pcs"),
+                  t=table, n_shown=len(shown), n_total=len(t[t["status"].isin(status)] if status else t),
+                  levels=" – ".join(bt.LEVEL_LABELS[lv] for lv in bt.LEVELS if lv in rules["turn_brick_levels"]))

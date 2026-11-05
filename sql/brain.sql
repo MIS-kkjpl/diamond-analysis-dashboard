@@ -66,10 +66,38 @@ CREATE TABLE IF NOT EXISTS brain.action_event (
 );
 CREATE INDEX IF NOT EXISTS ix_action_event_action ON brain.action_event (action_id, at);
 
+-- Weighted stock turn per brick (kkj.metrics.brick_turn), one set per stock date; scope = 'Company' or a branch.
+-- Added after the first version. Turns may be 'Infinity' (sold with no stock held).
+CREATE TABLE IF NOT EXISTS brain.brick_turn (
+    as_of            date NOT NULL,
+    scope            text NOT NULL,
+    brick            text NOT NULL,
+    run_id           int REFERENCES brain.run_log (run_id),
+    item_class_group text, purity text, item_name text, category text, sub_category text,
+    weight_band      text, band_order int,
+    current_pcs      numeric, current_value numeric, avg_piece_value numeric,
+    data_3m int, avail_3m int, avg_pcs_3m double precision, sold_3m numeric, annual_3m double precision,
+    turn_3m double precision, q_3m boolean,
+    data_6m int, avail_6m int, avg_pcs_6m double precision, sold_6m numeric, annual_6m double precision,
+    turn_6m double precision, q_6m boolean,
+    data_12m int, avail_12m int, avg_pcs_12m double precision, sold_12m numeric, annual_12m double precision,
+    turn_12m double precision, q_12m boolean,
+    pattern          text,                         -- qualifying windows, e.g. '3m+6m+12m'
+    weights          text,                         -- e.g. '60/30/10'
+    blended_turn     double precision,
+    annual_sales     double precision,             -- blended, pcs a year
+    ideal_turn       double precision,
+    ideal_pcs        numeric,
+    change_pcs       numeric,
+    status           text NOT NULL,                -- increase, reduce, keep, new, hold, phase_out, stock_up, no_history
+    PRIMARY KEY (as_of, scope, brick)
+);
+
 GRANT USAGE ON SCHEMA brain TO powerbi_reader, dashboard_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA brain TO powerbi_reader, dashboard_app;
 GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA brain TO dashboard_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA brain TO dashboard_app;
+GRANT DELETE ON brain.brick_turn TO dashboard_app;      -- a refresh replaces that stock date's set
 ALTER DEFAULT PRIVILEGES FOR ROLE erp_etl IN SCHEMA brain GRANT SELECT ON TABLES TO powerbi_reader, dashboard_app;
 
 RESET ROLE;

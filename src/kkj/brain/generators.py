@@ -21,7 +21,8 @@ import pandas as pd
 from kkj.metrics import core as m
 
 KIND_WEIGHT = {"understock": 1.0, "transfer": 1.0, "discount": 0.9, "offer": 0.8, "liquidate": 0.7,
-               "supplier_slow": 0.6, "pause_buying": 0.6, "supplier_fast": 0.5, "buy_band": 0.5}
+               "supplier_slow": 0.6, "pause_buying": 0.6, "supplier_fast": 0.5, "buy_band": 0.5,
+               "turn_increase": 0.9, "turn_reduce": 0.7, "turn_phase_out": 0.6}
 
 
 # ── groups of similar pieces ──────────────────────────────────────────────────
@@ -283,6 +284,57 @@ def buying(stock, sales, rules):
             + (f". Over-held: {', '.join(over.index)}." if len(over) else ""),
             over_value, f"{money(over_value)} sits in price bands that sell less than their share",
             confidence(sales["pcs"].sum()), share.round(3).to_dict("index"), subject={"bands": list(under.index)}))
+    return actions
+
+
+# ── weighted stock turn per brick ─────────────────────────────────────────────
+def _turn(x):
+    return "–" if x is None or pd.isna(x) else "∞" if np.isinf(x) else f"{x:.2f}×"
+
+
+def stock_turn(company, by_branch, rules):
+    """Increase / reduce / phase out a brick, from kkj.metrics.brick_turn (company level; branch split as evidence)."""
+    ideal, min_change = rules["target_turn"], rules["turn_min_change_pcs"]
+    actions = []
+    for _, r in company.iterrows():
+        status, change = r["status"], r["change_pcs"]
+        buy = r["item_class_group"] not in rules["no_buy_groups"]
+        if status in ("increase", "stock_up") and change >= min_change and buy:
+            kind, title = "turn_increase", f"Increase {r['brick']} to {r['ideal_pcs']:.0f} pcs"
+            impact = change * (r["avg_piece_value"] or 0)
+            label = f"≈{money(impact)} more stock ({change:+.0f} pcs)"
+        elif status == "reduce" and -change >= min_change:
+            kind, title = "turn_reduce", f"Reduce {r['brick']} to {r['ideal_pcs']:.0f} pcs"
+            impact = -change * (r["avg_piece_value"] or 0)
+            label = f"≈{money(impact)} more than its sales need ({change:+.0f} pcs)"
+        elif status == "phase_out" and r["current_pcs"] > 0:
+            kind, title = "turn_phase_out", f"Phase out {r['brick']}"
+            impact, label = r["current_value"], f"{money(r['current_value'])} held ({r['current_pcs']:.0f} pcs)"
+        else:
+            continue
+        if status in ("increase", "reduce"):
+            summary = (f"Turns {_turn(r['blended_turn'])} a year (blend {r['weights']} of 3/6/12 months) against an ideal "
+                       f"of {ideal:g}×. Holding {r['current_pcs']:.0f} pcs, selling about {r['annual_sales']:.0f} a year.")
+        elif status == "stock_up":
+            summary = (f"In stock in only {r['avail_12m']:.0f} of {r['data_12m']:.0f} fortnights, yet sold "
+                       f"{r['sold_12m']:.0f} pcs in 12 months. Its neighbouring weight ranges don't turn at the ideal "
+                       f"rate either, so stock it properly or accept the lost sales.")
+        else:
+            summary = (f"Turns {_turn(r['blended_turn'])} a year against an ideal of {ideal:g}× on thin data (in stock in "
+                       f"{r['avail_12m']:.0f} of {r['data_12m']:.0f} fortnights), and its neighbouring weight ranges "
+                       f"are out of range too.")
+        branches = by_branch[by_branch["brick"] == r["brick"]]
+        evidence = {
+            "turn": {w: _turn(r[f"turn_{w}"]) for w in ("3m", "6m", "12m")},
+            "in stock (fortnights)": {w: f"{r[f'avail_{w}']:.0f} of {r[f'data_{w}']:.0f}" for w in ("3m", "6m", "12m")},
+            "sold (pcs)": {w: float(r[f"sold_{w}"]) for w in ("3m", "6m", "12m")},
+            "qualifying windows": r["pattern"], "weights 3/6/12": r["weights"] or "–",
+            "blended turn": _turn(r["blended_turn"]), "ideal turn": f"{ideal:g}×",
+            "now (pcs)": float(r["current_pcs"]), "ideal (pcs)": float(r["ideal_pcs"]),
+            "by branch": {short(b["scope"]): f"{b['current_pcs']:.0f} pcs held, {b['sold_12m']:.0f} sold in 12 months"
+                          for _, b in branches.sort_values("current_pcs", ascending=False).iterrows()}}
+        actions.append(_action(kind, r["brick"], title, summary, impact, label, confidence(r["sold_12m"]), evidence,
+                               subject={"brick": r["brick"], "item": r["item_name"], "group": r["item_class_group"]}))
     return actions
 
 

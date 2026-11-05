@@ -89,7 +89,9 @@ def test_response_needs_sign_in_then_records_and_is_undone():
 
 @pytest.mark.parametrize("path", ["/inventory", "/inventory?branch=KJ2+%2F+Branch+Dharampeth&old_days=180",
                                   "/sales", "/sales?start=2026-10-01&end=2026-10-31&group=Diamond+Jewellery",
-                                  "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings"])
+                                  "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings",
+                                  "/stock-turn", "/stock-turn?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
+                                  "/stock-turn?group=Diamond+Jewellery&group=", "/recommendations?group=stock_level"])
 def test_analytics_and_settings_pages_render(path):
     r = client.get(path)
     assert r.status_code == 200, r.text[-800:]

@@ -215,6 +215,7 @@ passwords. The same can be done from the command line:
 | Analytics | **Overview** | Headline numbers (stock, FY net sales, turn, ageing), monthly sales, stock over time |
 | | **Inventory health** | Value by branch and age, group × age, oldest stock, stock not on a counter |
 | | **Sales** | By month and group, branch, items, days to sell, salespeople (named from Settings), returns |
+| | **Stock turn** | Weighted stock turn per brick against the ideal turn: increase, reduce, keep, phase out (see below) |
 | | **Insights** | Sell rate by age, price-adjusted supplier performance, stock vs sales by price band and item, exhibitions vs showrooms, clearance candidates; each with a recommended action |
 | Admin | **Data quality** | Recommendation refreshes, stock runs, sales loads, past-date snapshot verdicts |
 | | **Settings** | Business rules by section, salesperson and branch lists (rows save as you edit), change history |
@@ -231,6 +232,49 @@ It runs after the overnight load and from the **Refresh recommendations** button
 
 The earlier Streamlit dashboard (`src/kkj/dashboard`) is superseded by the web
 app and no longer run.
+
+## Weighted stock turn (`kkj/metrics/brick_turn.py`)
+
+The Stock_ETL requirement, rebuilt on the clean data. Every rule below is a business
+rule in **Settings → Stock turn**, not a constant.
+
+- **Brick:** Purity – Product (`item_name`) – Variety (`category`) – Type (`sub_category`) –
+  Weight range. For diamond jewellery the weight range is the total diamond weight in
+  carats (default edges 0.1 / 0.25 / 0.5 / 1 / 2 / 5 ct), the usual planning measure; gross
+  weight in grams is the alternative for gold. The data has no size field.
+- **Windows:** the last 3, 6 and 12 months, with stock read once a fortnight (6 / 13 / 26
+  fortnights; the latest snapshot in each).
+  - A window is judged only if at least 60% of its fortnights have stock data. Missing
+    or quarantined snapshots don't count against a brick.
+  - A window counts if the brick was in stock (pcs > 0) in at least 60% of those
+    fortnights.
+- **Turn** = net pieces sold in the window, annualised ÷ average pieces held. Out-of-stock
+  fortnights count as 0 in the average.
+- **Blend:**
+  - all three windows count → 60/30/10;
+  - 6 and 12 months → 75/25;
+  - 3 and 6 months (a new product) → 75/25;
+  - 3 months only → "too new".
+- **Verdict:** compared with the ideal turn (default 1.0× a year):
+  - within ±10% → keep;
+  - below → reduce;
+  - above → increase.
+
+  Ideal stock = blended yearly sales ÷ ideal turn.
+- **Exception:** when a brick has too little availability and is out of range, it is
+  held for 3 months if its neighbouring weight ranges are both within range. Otherwise
+  it is phased out, or, if it sells whenever it is in stock, marked "sells when stocked".
+- **Fixed from Stock_ETL:**
+  - bricks with stock but no sales are kept (turn 0);
+  - bricks that sold with no stock are shown;
+  - zero-stock fortnights count in the average;
+  - new launches are shown, not dropped.
+- **Runs:** with every recommendation refresh.
+  - It saves the company and per-showroom results to `brain.brick_turn` (one set per
+    stock date).
+  - It raises **Stock levels** recommendations: Increase / Reduce / Phase out at company
+    level, with the split by branch as evidence.
+  - It needs the fortnightly history, which the past-date stock pulls provide.
 
 ## Tests
 

@@ -64,6 +64,50 @@ def stock_history(conn, date_from):
     return df
 
 
+def stock_dates(conn):
+    """Every date with usable stock and its best source: rank 1 ERP daily, 2 ERP as-on, 3 legacy file."""
+    df = read(conn, """
+        SELECT snapshot_date, min(rank) AS rank FROM (
+            SELECT DISTINCT snapshot_date, 1 AS rank FROM erp.stock_snapshot
+            UNION ALL
+            SELECT snapshot_date, CASE source WHEN 'erp_asof' THEN 2 ELSE 3 END
+            FROM stock_hist.snapshot_status WHERE status = 'loaded') d
+        GROUP BY 1 ORDER BY 1""")
+    df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
+    return df
+
+
+BRICK_STOCK = """snapshot_date, branch, location, item_class_group, purity, item_name, category, sub_category,
+    dia_wt, gross_wt, pcs, coalesce(taxable_amount, item_amt) AS value"""
+
+
+def brick_stock(conn, dates):
+    """Company stock rows (brick columns) on the given snapshot dates, each date from its best source."""
+    best = stock_dates(conn)
+    best = best[best["snapshot_date"].isin(pd.to_datetime(pd.Series(list(dates))))]
+    erp = [d.date() for d in best.loc[best["rank"] == 1, "snapshot_date"]]
+    asof = [d.date() for d in best.loc[best["rank"] == 2, "snapshot_date"]]
+    legacy = [d.date() for d in best.loc[best["rank"] == 3, "snapshot_date"]]
+    df = read(conn, f"""
+        SELECT {BRICK_STOCK} FROM erp.stock_snapshot WHERE snapshot_date = ANY(:erp)
+        UNION ALL
+        SELECT {BRICK_STOCK} FROM stock_hist.snapshot
+        WHERE (source = 'erp_asof' AND snapshot_date = ANY(:asof)) OR (source = 'csv_legacy' AND snapshot_date = ANY(:legacy))""",
+              erp=erp, asof=asof, legacy=legacy)
+    df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
+    return df[df["item_class_group"] != "Customer Diamond"]
+
+
+def brick_sales(conn, date_from):
+    """Net sale lines (returns negative) with the brick columns, since date_from."""
+    df = read(conn, """
+        SELECT sale_date, branch, item_class_group, purity, item_name, category, sub_category, dia_wt, gross_wt, pcs,
+               coalesce(taxable_amount, item_amt) AS value
+        FROM sales.v_sales_line WHERE sale_date >= :d AND item_class_group <> 'Customer Diamond'""", d=date_from)
+    df["sale_date"] = pd.to_datetime(df["sale_date"])
+    return df
+
+
 def sales_lines(conn, date_from):
     """Sales lines from sales.v_sales_line (ERP where loaded, legacy before) since date_from."""
     df = read(conn, """
