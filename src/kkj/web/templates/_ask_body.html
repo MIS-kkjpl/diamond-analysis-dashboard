@@ -1,26 +1,6 @@
-{# The Ask panel's body: earlier conversations, the current one, and example questions when it is empty. #}
-<div class="sw-ask-top d-flex align-items-center gap-2 mb-2">
-  {% if past %}
-  <div class="dropdown">
-    <button type="button" class="btn btn-sm btn-ghost-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-      <i class="ti ti-history me-1"></i>Earlier</button>
-    <div class="dropdown-menu sw-ask-past">
-      {% for p in past %}<a class="dropdown-item small {% if p.conversation_id == cid %}active{% endif %}" href="#"
-         hx-get="/ask/panel?c={{ p.conversation_id }}" hx-target="#ask-body">
-        <div class="text-truncate">{{ p.title }}</div>
-        <div class="text-secondary" style="font-size: .72rem">{{ p.last_at | date("%d %b %H:%M") }} · {{ p.questions }} question{{ "" if p.questions == 1 else "s" }}</div></a>{% endfor %}
-    </div>
-  </div>
-  {% endif %}
-  <button type="button" class="btn btn-sm btn-ghost-secondary" hx-get="/ask/panel?c=new" hx-target="#ask-body">
-    <i class="ti ti-plus me-1"></i>New conversation</button>
-  {% if cid %}
-  <button type="button" class="btn btn-sm btn-ghost-danger ms-auto" title="Delete this chat" aria-label="Delete this chat"
-          hx-post="/ask/c/{{ cid }}/delete" hx-target="#ask-body"
-          hx-confirm="Delete this chat?{% if cid_notes %} The {{ cid_notes }} business note{{ '' if cid_notes == 1 else 's' }} saved from it will be deleted as well, so the AI stops using {{ 'it' if cid_notes == 1 else 'them' }}.{% endif %} This can't be undone.">
-    <i class="ti ti-trash"></i></button>
-  {% endif %}
-</div>
+{# The Ask panel's body: the current chat, or example questions when it is empty. Its toolbar (earlier chats,
+   new chat, delete) lives in the panel header and is sent along out of band. #}
+{% set tools_oob = True %}{% include "_ask_tools.html" %}
 {% if notice %}<div class="alert alert-success py-2 small mb-2" role="status">{{ notice }}</div>{% endif %}
 
 <div id="ask-thread">

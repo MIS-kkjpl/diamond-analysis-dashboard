@@ -37,3 +37,5 @@
 </div>
 {% if oob %}<input type="hidden" name="conversation_id" id="ask-conv" value="{{ cid }}" hx-swap-oob="true">
 <div id="ask-empty" hx-swap-oob="true"></div>{% endif %}
+{% if oob or refresh_tools %}<div id="ask-tools" class="sw-ask-tools" hx-swap-oob="true" hx-get="/ask/tools?c={{ cid or r.conversation_id }}"
+     hx-trigger="load" hx-swap="outerHTML"></div>{% endif %}

@@ -223,6 +223,8 @@ def test_change_password_signs_out_other_sessions():
 
 
 def test_users_tab_adds_resets_disables_and_forces_a_new_password():
+    with settings.etl_engine().begin() as c:          # leftovers of an interrupted earlier run
+        c.execute(text("DELETE FROM config.change_log WHERE table_name = 'user' AND row_key LIKE 'pytest%'"))
     r = client.get("/settings/users")
     assert r.status_code == 200 and 'id="users"' in r.text and "you</span>" in r.text
     assert "already exists" in client.post("/settings/users", data={"username": USER, "display_name": "x",
@@ -396,7 +398,7 @@ def test_ai_pages_render_without_calling_the_api(monkeypatch):
     assert 'id="brief"' in recs and "Weekly brief" in recs           # the brief is a card on Recommendations
     assert "AI second look" in recs
     panel = client.get("/ask/panel")
-    assert panel.status_code == 200 and "New conversation" in panel.text
+    assert panel.status_code == 200 and "New chat" in panel.text and "ask-tools" in panel.text
     assert client.get("/brief", follow_redirects=False).headers["location"].startswith("/recommendations")
     assert "Season notes" in client.get("/seasonality").text
     assert client.get("/ask/q/999999999").status_code == 404

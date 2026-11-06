@@ -52,6 +52,17 @@ def _panel(request, rows, cid, past, notice=None):
         "cid_notes": notes.for_conversation(cid) if cid else 0})
 
 
+@router.get("/ask/tools", response_class=HTMLResponse)
+def ask_tools(request: Request, c: str = ""):
+    """The panel header's toolbar for a chat (refreshed after a new chat's first question or a saved note)."""
+    from kkj.ai import notes
+    uid = _user(request)["user_id"]
+    past = ask_mod.conversations(uid)
+    cid = int(c) if c.isdigit() and any(p["conversation_id"] == int(c) for p in past) else ""
+    return templates.TemplateResponse(request, "_ask_tools.html", {
+        "past": past, "cid": cid, "cid_notes": notes.for_conversation(cid) if cid else 0})
+
+
 @router.post("/ask/c/{cid}/delete", response_class=HTMLResponse)
 def ask_delete(request: Request, cid: int):
     """Delete one of my chats and the business notes saved from it; show my latest remaining chat."""
@@ -98,7 +109,7 @@ def ask_save_note(request: Request, qid: int, index: int):
         ask_mod.save_proposed(qid, index, user)
     except ValueError as e:
         return Response(str(e), status_code=400)
-    return templates.TemplateResponse(request, "_ask_bubble.html", {"r": ask_mod.get(qid, user["user_id"])})
+    return templates.TemplateResponse(request, "_ask_bubble.html", {"r": ask_mod.get(qid, user["user_id"]), "refresh_tools": True})
 
 
 # ── Business notes (Settings tab) ─────────────────────────────────────────────

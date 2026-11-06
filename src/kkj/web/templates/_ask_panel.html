@@ -7,7 +7,8 @@
      data-bs-scroll="true" data-bs-backdrop="false">
   <div class="offcanvas-header">
     <h2 class="offcanvas-title" id="ask-title"><i class="ti ti-sparkles me-2"></i>Ask Stockwise</h2>
-    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    <div id="ask-tools" class="sw-ask-tools"></div>
+    <button type="button" class="btn-close ms-2" data-bs-dismiss="offcanvas" aria-label="Close Ask Stockwise"></button>
   </div>
   <div class="offcanvas-body" id="ask-body" hx-get="/ask/panel" hx-trigger="sw-ask-load from:body once">
     <div class="text-secondary small"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>

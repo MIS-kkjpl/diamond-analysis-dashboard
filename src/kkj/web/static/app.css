@@ -338,3 +338,10 @@ body.sw-ask-open .sw-ask-fab { display: none; }
 }
 .sw-toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); z-index: 2000; background: #1d2433; color: #fff;
   padding: .6rem 1rem; border-radius: 8px; font-size: .875rem; box-shadow: 0 6px 18px rgba(0,0,0,.2); max-width: 90vw; }
+
+
+/* Ask panel header: title, the chat toolbar (earlier chats, new chat, delete), close */
+.sw-ask .offcanvas-header { gap: .25rem; }
+.sw-ask-tools { display: flex; align-items: center; gap: .125rem; margin-left: auto; }
+.sw-ask-tools .btn-icon { width: 2rem; height: 2rem; padding: 0; }
+.sw-ask-tools .btn-icon .ti { font-size: 1.1rem; }
