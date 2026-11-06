@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 from kkj import settings
 from kkj.ai import client as ai
-from kkj.ai import notes
+from kkj.ai import notes as business_notes
 from kkj.db import queries as q
 
 TOP = 80               # the most important open recommendations are reviewed
@@ -58,7 +58,7 @@ def run(who="system"):
     payload = {"today": today.date().isoformat(),
                "festivals_next_150_days": [{"name": f.name, "day": f.day.date().isoformat()} for f in ahead.itertuples()],
                "recommendations": json.loads(acts.to_json(orient="records", date_format="iso"))}
-    msg, call_id = ai.call("ai_review", who, max_tokens=16000, system=notes.system(SYSTEM), output_config={
+    msg, call_id = ai.call("ai_review", who, max_tokens=16000, system=business_notes.system(SYSTEM), output_config={
         "effort": "high", "format": {"type": "json_schema", "schema": SCHEMA}},
         messages=[{"role": "user", "content": "The list to review:\n" + ai.as_json(payload)}])
     try:

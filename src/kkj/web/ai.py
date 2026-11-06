@@ -8,6 +8,7 @@ hides the rest.
   AI second look  POST /recommendations/ai-review (notes shown on Recommendations)
   Season notes    POST /seasonality/notes (card on Seasonality)
 """
+import logging
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, Request
@@ -22,6 +23,15 @@ from kkj.web import roles
 from kkj.web.common import templates, who
 
 router = APIRouter()
+log = logging.getLogger("kkj.web.ai")
+
+
+def _problem(e, what):
+    """A message for the page: the AI's own readable reason, or a plain one for anything unexpected (logged in full)."""
+    if isinstance(e, ai.AIError):
+        return str(e)
+    log.exception("Unexpected error in %s", what)
+    return f"Something went wrong while writing {what}. Nothing was saved; try again, or tell the administrator if it repeats."
 
 
 def _user(request):
@@ -185,8 +195,9 @@ def brief_write(request: Request):
     try:
         brief_mod.write(who(request))
         return RedirectResponse("/recommendations?brief=open#brief", status_code=303)
-    except ai.AIError as e:
-        return RedirectResponse("/recommendations?" + urlencode({"brief_error": str(e)}) + "#brief", status_code=303)
+    except Exception as e:
+        return RedirectResponse("/recommendations?" + urlencode({"brief_error": _problem(e, "the weekly brief")}) + "#brief",
+                                status_code=303)
 
 
 @router.get("/brief/{text_id}/print", response_class=HTMLResponse)
@@ -204,8 +215,9 @@ def review_run(request: Request):
     try:
         review_mod.run(who(request))
         return RedirectResponse("/recommendations#ai-notes", status_code=303)
-    except ai.AIError as e:
-        return RedirectResponse("/recommendations?" + urlencode({"ai_error": str(e)}) + "#ai-notes", status_code=303)
+    except Exception as e:
+        return RedirectResponse("/recommendations?" + urlencode({"ai_error": _problem(e, "the AI second look")}) + "#ai-notes",
+                                status_code=303)
 
 
 @router.post("/seasonality/notes")
@@ -213,5 +225,6 @@ def season_write(request: Request):
     try:
         season_mod.write(who(request))
         return RedirectResponse("/seasonality#season-notes", status_code=303)
-    except ai.AIError as e:
-        return RedirectResponse("/seasonality?" + urlencode({"ai_error": str(e)}) + "#season-notes", status_code=303)
+    except Exception as e:
+        return RedirectResponse("/seasonality?" + urlencode({"ai_error": _problem(e, "the season notes")}) + "#season-notes",
+                                status_code=303)
