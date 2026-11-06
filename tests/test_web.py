@@ -435,3 +435,32 @@ def test_business_notes_add_for_all_edit_for_admins(monkeypatch):
         with settings.etl_engine().begin() as c:
             c.execute(text("DELETE FROM config.business_note WHERE note LIKE 'pytest note%'"))
             c.execute(text("DELETE FROM config.change_log WHERE table_name = 'business_note' AND changed_by = 'pytest'"))
+
+
+def test_daily_question_limit_stops_before_any_ai_call(monkeypatch):
+    monkeypatch.setenv("FEATURE_AI_ASK", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("AI_DAILY_QUESTIONS_PER_USER", "1")
+    with settings.etl_engine().begin() as c:
+        uid = c.execute(text("SELECT user_id FROM auth.app_user WHERE username = :u"), {"u": USER}).scalar()
+        cid = c.execute(text("INSERT INTO ai.conversation (started_by, user_id, title) VALUES ('pytest', :u, 'limit') "
+                             "RETURNING conversation_id"), {"u": uid}).scalar()
+        c.execute(text("INSERT INTO ai.question (asked_by, user_id, question, conversation_id, status) "
+                       "VALUES ('pytest', :u, 'earlier today', :c, 'done')"), {"u": uid, "c": cid})
+    try:
+        r = client.post("/ask", data={"question": "How much stock do we hold?"})
+        assert "daily limit" in r.text
+        with settings.app_engine().connect() as c:
+            n = c.execute(text("SELECT count(*) FROM ai.question WHERE user_id = :u"), {"u": uid}).scalar()
+        assert n == 1                                                   # refused before recording or calling the API
+    finally:
+        with settings.etl_engine().begin() as c:
+            c.execute(text("DELETE FROM ai.question WHERE user_id = :u"), {"u": uid})
+            c.execute(text("DELETE FROM ai.conversation WHERE user_id = :u"), {"u": uid})
+
+
+def test_ai_usage_is_for_admins_only(monkeypatch):
+    monkeypatch.setenv("STOCKWISE_ADMINS", "someone-else")
+    assert client.get("/settings/ai-usage").text.strip() == ""
+    monkeypatch.setenv("STOCKWISE_ADMINS", USER)
+    assert "AI usage" in client.get("/settings/ai-usage").text

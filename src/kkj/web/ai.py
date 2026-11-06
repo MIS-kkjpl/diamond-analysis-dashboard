@@ -118,6 +118,29 @@ def notes_change(request: Request, note_id: int, note: str = Form(""), verb: str
         return _notes_card(request, error=str(e))
 
 
+@router.get("/settings/ai-usage", response_class=HTMLResponse)
+def ai_usage(request: Request):
+    """AI spend by person and feature (admins only; others get nothing)."""
+    from sqlalchemy import text
+    from kkj.ai import notes
+    from kkj.web.common import engine
+    if not notes.is_admin(_user(request)["username"]):
+        return HTMLResponse("")
+    per_user, budget = ask_mod.limits()
+    today = "(at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date"
+    with engine().connect() as conn:
+        rows = [dict(r) for r in conn.execute(text(f"""
+            SELECT asked_by, feature, count(*) AS calls, count(*) FILTER (WHERE {today}) AS today, coalesce(sum(cost_usd), 0) AS usd
+            FROM ai.call_log WHERE at > now() - interval '30 days' GROUP BY 1, 2 ORDER BY usd DESC""")).mappings()]
+        tot = conn.execute(text(f"""SELECT coalesce(sum(cost_usd) FILTER (WHERE {today}), 0), coalesce(sum(cost_usd), 0),
+                                           count(*), count(*) FILTER (WHERE NOT ok)
+                                    FROM ai.call_log WHERE at > now() - interval '30 days'""")).first()
+    labels = {"ai_ask": "Ask Stockwise", "ai_brief": "Weekly brief", "ai_review": "AI second look", "ai_season": "Season notes"}
+    return templates.TemplateResponse(request, "_ai_usage.html", {
+        "rows": rows, "labels": labels, "today": float(tot[0]), "month": float(tot[1]), "calls": tot[2], "failed": tot[3],
+        "budget": budget, "per_user": per_user})
+
+
 # ── Weekly brief (card on Recommendations) ────────────────────────────────────
 @router.get("/brief")
 def brief_page():

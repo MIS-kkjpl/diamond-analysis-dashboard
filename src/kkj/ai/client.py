@@ -10,6 +10,8 @@ The one way Stockwise calls Claude: every AI feature goes through call(), which
        ANTHROPIC_WORKSPACE_ID=wrkspc_...  (only for a key that is not tied to one workspace)
        AI_MODEL=claude-opus-5-5     (optional)
        AI_SHARE_NAMES=off           (optional; on = salespeople's names are sent, off = only their codes)
+       AI_DAILY_BUDGET_USD=5        (optional; all AI features together stop for the day at this spend; 0 = no limit)
+       AI_DAILY_QUESTIONS_PER_USER=40  (optional; Ask Stockwise questions per person per day; 0 = no limit)
 """
 import json
 import time
@@ -114,8 +116,25 @@ def create(on_text=None, on_thinking=None, **kwargs):
     return msg
 
 
+def budget_left():
+    """Today's remaining company-wide AI budget in $ (AI_DAILY_BUDGET_USD in .env, default 5; 0 = no limit), or None."""
+    try:
+        budget = float(settings.optional("AI_DAILY_BUDGET_USD", "5"))
+    except ValueError:
+        budget = 5.0
+    if not budget:
+        return None
+    with settings.app_engine().connect() as conn:
+        spent = conn.execute(text("""SELECT coalesce(sum(cost_usd), 0) FROM ai.call_log
+                                     WHERE (at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date""")).scalar()
+    return budget - float(spent)
+
+
 def call(feature, who, **kwargs):
-    """create() plus logging. Returns (message, call_id)."""
+    """create() plus logging. Returns (message, call_id). Refuses when today's company AI budget is used."""
+    left = budget_left()
+    if left is not None and left <= 0:
+        raise AIError("Today's AI budget for the company has been used. AI features are back tomorrow.")
     t0 = time.time()
     try:
         msg = create(**kwargs)

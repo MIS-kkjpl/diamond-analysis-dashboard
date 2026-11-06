@@ -87,7 +87,12 @@ def prompt_block():
             "conflicts with the data, say so.\n" + "\n".join(lines))
 
 
-def system(base):
-    """A system prompt with the business notes appended as a second block (base text first, for caching)."""
+def system(base, cache=False):
+    """A system prompt with the business notes appended as a second block (base text first, for caching).
+    cache=True marks the end of the system prompt as a cache point, so the instructions and tool definitions
+    (which come before it) are read back from the cache by every request instead of being re-sent in full."""
     block = prompt_block()
-    return [{"type": "text", "text": base}] + ([{"type": "text", "text": block}] if block else [])
+    blocks = [{"type": "text", "text": base}] + ([{"type": "text", "text": block}] if block else [])
+    if cache:
+        blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
+    return blocks
