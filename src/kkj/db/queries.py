@@ -5,6 +5,8 @@ engine (kkj.brain.run). Each takes an open SQLAlchemy connection and returns a D
 import pandas as pd
 from sqlalchemy import text
 
+from kkj.scope import DIAMOND_GROUPS
+
 STOCK_COLUMNS = """snapshot_date, barcode, label_no, branch, location, set_item_barcode, item_class_group, item_name,
     category, supplier, pcs, gross_wt, net_wt, dia_wt, dia_amt, rate, item_amt, taxable_amount, age_days,
     days_from_branch_in, branch_in_date, coalesce(label_dt, labeling_date) AS label_date"""
@@ -184,9 +186,11 @@ def sales_lines(conn, date_from):
 
 
 def hist_daily(conn):
-    """Pieces sold per day, item group and product over the five-year history (sales.hist_line)."""
+    """Pieces sold per day, item group and product over the five-year history (sales.hist_line), diamond groups
+    only (kkj.scope): the history holds gold and silver too."""
     df = read(conn, """SELECT sale_date, item_class_group, item_name, sum(pcs) AS pcs, sum(item_amt) AS value
-                       FROM sales.hist_line GROUP BY 1, 2, 3""")
+                       FROM sales.hist_line WHERE item_class_group = ANY(:g) GROUP BY 1, 2, 3""",
+              g=DIAMOND_GROUPS)
     df["sale_date"] = pd.to_datetime(df["sale_date"])
     # the exports spell some names differently by year ('GOLD' / 'Gold'): one spelling per name, the commonest
     for col in ("item_class_group", "item_name"):

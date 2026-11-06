@@ -31,6 +31,7 @@ import pandas as pd
 
 from kkj.checks import snapshot as snapcheck
 from kkj.db import history as db
+from kkj.scope import DIAMOND_GROUPS   # the ERP diamond product groups
 from kkj.erp.stock_report import (DATE_COLUMNS, DECIMAL_COLUMNS, EXCEL_TO_DB, INT_COLUMNS, check,
                                   to_number, to_text)
 
@@ -41,9 +42,6 @@ SALES_CSV = LEGACY_DIR / "ALL_Data" / "SALES2025JUNE_2026JUNEUPDATED.csv"
 STOCK_DIR = LEGACY_DIR / "Stock_all_in_csv"
 SOURCE = "csv_legacy"
 
-# The item groups the ERP diamond product groups (5, 100, 126, 14, 121, 127, 69, 18) return
-DIAMOND_GROUPS = ["Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND",
-                  "Broken Dia Jew", "Customer Diamond"]
 
 DATE_FORMATS = ("%d/%m/%Y", "%d-%b-%y")   # the sales CSV switches format in May 2026
 

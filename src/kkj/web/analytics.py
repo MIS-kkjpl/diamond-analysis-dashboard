@@ -388,13 +388,11 @@ def seasonality(request: Request, group: str = "Diamond Jewellery"):
     fests = cached(q.festivals)
     by_group = sn.monthly_index(daily, "item_class_group", rules["season_min_year_pcs"])
     by_group = by_group.sort_values("avg_year_pcs", ascending=False)
-    # diamond groups first (this app's scope), then the others by pieces sold
-    diamond = [g for g in ("Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND")
-               if g in set(by_group["item_class_group"])]
-    groups = diamond + [g for g in by_group["item_class_group"] if g not in diamond]
+    # the history is diamond groups only (queries.hist_daily); in the app's usual order
+    groups = [g for g in GROUP_ORDER if g in set(by_group["item_class_group"])] +         [g for g in by_group["item_class_group"] if g not in GROUP_ORDER]
     group = group if group in groups else groups[0]
     cols = [f"index_{m}" for m in sn.MONTHS]
-    shown_groups = diamond[:3] + [g for g in groups if g not in diamond][:1]        # plus the biggest other, to compare
+    shown_groups = groups[:4]
     top = by_group.set_index("item_class_group").loc[shown_groups].reset_index()
     fig_groups = charts.season_lines(MONTH_NAMES, {r["item_class_group"]: [r[c] for c in cols]
                                                    for r in top.to_dict("records")})
