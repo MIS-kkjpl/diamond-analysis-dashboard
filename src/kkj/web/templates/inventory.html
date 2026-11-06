@@ -32,6 +32,16 @@
 </div>
 {{ ui.section("What it is and how old") }}
 <div class="mb-3">{{ ui.table_card("Value by item group and age", t_pivot, icon="ti-layout-grid") }}</div>
+{{ ui.section("Sets", "pieces labelled separately but sold together") }}
+<div class="row row-cards mb-3">
+  <div class="col-12">{{ ui.table_card("Sets in stock", t_sets, icon="ti-stack-2",
+      sub="Each set counted once; carats include the solitaire stone. Stock turn and purchasing count sets the same way.") }}</div>
+  <div class="col-12">{% if t_broken %}{{ ui.table_card("Broken sets", t_broken, icon="ti-puzzle",
+      sub="A piece has left stock without the rest, or the pieces are in different places") }}{% else %}
+    <div class="card"><div class="card-header"><h3 class="card-title"><i class="ti ti-puzzle me-2"></i>Broken sets</h3></div>
+      <div class="card-body text-secondary">None: every set in stock is complete and in one place.</div></div>{% endif %}</div>
+</div>
+
 {{ ui.section("Pieces to act on", "old stock, and stock away from a counter") }}
 <div class="mb-3">{{ ui.table_card("Oldest stock: over " ~ f.old_days ~ " days, highest value first", t_oldest,
                                     sub="Top 200", icon="ti-hourglass") }}</div>

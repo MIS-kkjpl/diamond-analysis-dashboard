@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ p.person or p.name or p.code }} · Stockwise{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
+{% block pretitle %}<a href="/salespeople?start={{ f.start }}&end={{ f.end }}">Salespeople</a>{% endblock %}
+{% block page_title %}{{ p.person or p.name or p.code }}<span class="text-secondary fs-4 fw-normal ms-2">{{ p.code }}</span>{% endblock %}
+{% block intro %}{% if not empty %}Sells mostly at {{ short(p.branch) }}. {{ f.start | date }} to {{ f.end | date }}, ERP sales only.{% endif %}{% endblock %}
+{% block content %}
+<form action="/salespeople/{{ p.code | urlencode }}" method="get" class="card card-body py-2 mb-3 filter-bar">
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <input type="date" name="start" aria-label="From date" value="{{ f.start }}" class="form-control form-control-sm" style="width: auto">
+    <span class="text-secondary">to</span>
+    <input type="date" name="end" aria-label="To date" value="{{ f.end }}" class="form-control form-control-sm" style="width: auto">
+    <button class="btn btn-sm btn-primary">Show</button>
+  </div>
+</form>
+
+{% if empty %}
+<div class="empty"><p class="empty-title">No ERP sales by {{ p.name or p.code }} in these dates</p>
+  <p class="empty-subtitle text-secondary">Try a wider date range.</p></div>
+{% else %}
+{{ ui.section("At a glance") }}
+<div class="row row-cards mb-3">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
+{% if p.notes %}<div class="mb-3">{% for text, colour in p.notes %}<span class="badge bg-{{ colour }}-lt me-1">{{ text }}</span>{% endfor %}</div>{% endif %}
+
+{{ ui.section("Over time") }}
+<div class="mb-3">{{ ui.chart("c-month", fig_month, "Net sales by month", "₹ lakh; returns are taken off the month they came back", t=t_month) }}</div>
+
+{{ ui.section("What they sell", "compared with the whole branch") }}
+<div class="row row-cards mb-3">
+  <div class="col-lg-6">{{ ui.table_card("By item group", t_mix, icon="ti-layout-grid") }}</div>
+  <div class="col-lg-6">{{ ui.table_card("Top products", t_items, icon="ti-diamond") }}</div>
+</div>
+
+{{ ui.section("Colleagues", "regular sellers at " ~ short(p.branch)) }}
+<div class="mb-3">{{ ui.table_card("At the same branch", t_peers, icon="ti-users",
+    sub="Regular sellers with " ~ min_lines ~ "+ lines in these dates") }}</div>
+
+{{ ui.section("Recent sales") }}
+<div class="mb-3">{{ ui.table_card("Last 40 lines", t_recent, icon="ti-receipt", sub="Open a barcode to see the piece's history") }}</div>
+{% endif %}
+{% endblock %}

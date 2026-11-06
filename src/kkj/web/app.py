@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from kkj.web import admin, analytics, auth, exports, lookup, pages, recommendations
+from kkj.web import admin, analytics, auth, exports, lookup, pages, recommendations, sellers
 from kkj.web.common import HERE, status, templates
 
 app = FastAPI(title="Stockwise", docs_url=None, redoc_url=None, openapi_url=None)
@@ -26,6 +26,7 @@ app.include_router(exports.router)
 app.include_router(analytics.router)
 app.include_router(admin.router)
 app.include_router(lookup.router)
+app.include_router(sellers.router)
 
 
 @app.get("/")

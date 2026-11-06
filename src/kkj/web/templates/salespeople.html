@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% import "_filters.html" as flt %}
+{% block title %}Salespeople · Stockwise{% endblock %}
+{% block pretitle %}Analytics{% endblock %}
+{% block page_title %}Salespeople{% endblock %}
+{% block intro %}How each salesperson sells, compared with colleagues at the same branch selling pieces at the same prices.
+  Open a name for their own page.{% endblock %}
+{% block content %}
+<div id="page">
+{% call flt.form("/salespeople") %}
+  <div class="d-flex align-items-center gap-2">
+    <input type="date" name="start" aria-label="From date" value="{{ f.start }}" class="form-control form-control-sm">
+    <span class="text-secondary">to</span>
+    <input type="date" name="end" aria-label="To date" value="{{ f.end }}" class="form-control form-control-sm">
+  </div>
+  {{ flt.toggles("branch", branches, f.branch, short=True) }}
+  <select name="show" aria-label="Who to show" class="form-select form-select-sm" style="width: auto">
+    <option value="regular" {% if f.show != "all" %}selected{% endif %}>Regular sellers ({{ min_lines }}+ lines)</option>
+    <option value="all" {% if f.show == "all" %}selected{% endif %}>Everyone</option>
+  </select>
+{% endcall %}
+
+{% if empty %}
+<div class="empty"><p class="empty-title">No sales by salespeople in these dates</p>
+  <p class="empty-subtitle text-secondary">Sales loaded from the old files carry no salesperson; pick dates after the ERP load began.</p></div>
+{% else %}
+{{ ui.section("At a glance") }}
+<div class="row row-cards mb-3">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
+<div class="small text-secondary mb-3">
+  ERP sales only{% if legacy %} (the older sales in these dates came from files without a salesperson){% endif %}. Owners and shared
+  accounts are left out (Settings → Salespeople). A return counts against whoever made the original sale. Value = taxable amount before GST.
+</div>
+
+{{ ui.section("Scorecard", "grouped by the branch where each person sells most") }}
+<div class="card mb-3">
+  <div class="card-header"><div><h3 class="card-title"><i class="ti ti-users me-2"></i>Everyone, branch by branch</h3>
+    <div class="card-subtitle small text-secondary">
+      Units per bill and the code are on each person's page. <b>vs colleagues</b> = discount given minus what colleagues at the branch gave on pieces in the same price band (points).
+      <b>vs branch</b> = sales per active month ÷ the branch's typical regular seller.
+      <b>Old stock</b> = share of sales value in pieces over {{ aged_days }} days old.
+      {% if hidden %}{{ hidden }} people with fewer than {{ min_lines }} lines are hidden: choose "Everyone" to see them.{% endif %}</div></div></div>
+  <div class="table-responsive">
+    <table class="table table-sm table-vcenter card-table table-striped js-table">
+      <thead><tr>
+        <th>Salesperson</th><th>Branch</th><th class="text-end">Net sales</th><th class="text-end">Bills</th>
+        <th class="text-end">Avg bill</th><th class="text-end">Discount</th>
+        <th class="text-end">vs colleagues</th><th class="text-end">Returns</th><th class="text-end">Old stock</th>
+        <th class="text-end">vs branch</th><th class="text-end">Rank</th><th>Notes</th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td><a href="/salespeople/{{ r.code | urlencode }}?start={{ f.start }}&end={{ f.end }}" title="{{ r.code }}">{{ r.person }}</a>
+            {% if r.active == false %} <span class="badge bg-secondary-lt">inactive</span>{% endif %}</td>
+          <td>{{ short(r.branch) }}</td>
+          <td class="text-end">{{ r.net_sales | money }}</td>
+          <td class="text-end">{{ r.bills | num }}</td>
+          <td class="text-end">{{ r.avg_bill | money }}</td>
+          <td class="text-end">{{ r.discount | pct if r.discount == r.discount else "–" }}</td>
+          <td class="text-end">{% if r.discount_vs_peers == r.discount_vs_peers and r.discount_vs_peers is not none %}{{ "%+.1f" | format(100 * r.discount_vs_peers) }} pts{% else %}–{% endif %}</td>
+          <td class="text-end">{{ r.return_rate | pct if r.return_rate == r.return_rate else "–" }}</td>
+          <td class="text-end">{{ r.aged_share | pct if r.aged_share == r.aged_share else "–" }}</td>
+          <td class="text-end">{% if r.vs_branch == r.vs_branch and r.vs_branch is not none %}{{ "%.2f" | format(r.vs_branch) }}×{% else %}–{% endif %}</td>
+          <td class="text-end">{{ r.rank | num }} of {{ r.of | num }}</td>
+          <td>{% for text, colour in r.notes %}<span class="badge bg-{{ colour }}-lt me-1">{{ text }}</span>{% endfor %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+</div>
+{% endblock %}

@@ -21,10 +21,12 @@ import numpy as np
 import pandas as pd
 
 from kkj.metrics import core as m
+from kkj.metrics.sets import PLACE_SEP, unit_word
 
 KIND_WEIGHT = {"understock": 1.0, "transfer": 1.0, "discount": 0.9, "offer": 0.8, "liquidate": 0.7,
                "supplier_slow": 0.6, "pause_buying": 0.6, "supplier_fast": 0.5, "buy_band": 0.5,
-               "turn_increase": 0.9, "turn_reduce": 0.7, "turn_phase_out": 0.6, "festival": 0.95}
+               "turn_increase": 0.9, "turn_reduce": 0.7, "turn_phase_out": 0.6, "festival": 0.95,
+               "broken_set": 0.8}
 
 
 # ── groups of similar pieces ──────────────────────────────────────────────────
@@ -266,28 +268,29 @@ def stock_turn(turns, rules):
     actions = []
     for _, r in groups.iterrows():
         status, change, ideal = r["status"], r["change_pcs"], r["ideal_turn"]
+        u = unit_word(r["item_name"])                     # counted in selling units: 'sets' or 'pieces'
         buy = r["item_class_group"] not in rules["no_buy_groups"]
         if status in ("increase", "stock_up") and change >= min_change and buy:
-            kind, title = "turn_increase", f"Increase {r['brick']} to {r['ideal_pcs']:.0f} pcs"
+            kind, title = "turn_increase", f"Increase {r['brick']} to {r['ideal_pcs']:.0f} {u}"
             impact = change * (r["avg_piece_value"] or 0)
-            label = f"≈{money(impact)} more stock ({change:+.0f} pcs)"
+            label = f"≈{money(impact)} more stock ({change:+.0f} {u})"
         elif status == "reduce" and -change >= min_change:
-            kind, title = "turn_reduce", f"Reduce {r['brick']} to {r['ideal_pcs']:.0f} pcs"
+            kind, title = "turn_reduce", f"Reduce {r['brick']} to {r['ideal_pcs']:.0f} {u}"
             impact = -change * (r["avg_piece_value"] or 0)
-            label = f"≈{money(impact)} more than its sales need ({change:+.0f} pcs)"
+            label = f"≈{money(impact)} more than its sales need ({change:+.0f} {u})"
         elif status == "phase_out" and r["current_pcs"] > 0:
             kind, title = "turn_phase_out", f"Phase out {r['brick']}"
-            impact, label = r["current_value"], f"{money(r['current_value'])} held ({r['current_pcs']:.0f} pcs)"
+            impact, label = r["current_value"], f"{money(r['current_value'])} held ({r['current_pcs']:.0f} {u})"
         else:
             continue
         set_at = {"default": "default", "item_group": "item group", "product": "product", "group": "this group"}
         target = f"{ideal:g}× ({set_at.get(r['ideal_source'], r['ideal_source'])} ideal)"
         if status in ("increase", "reduce"):
             summary = (f"Turns {_turn(r['blended_turn'])} a year (blend {r['weights']} of 3/6/12 months) against "
-                       f"{target}. Holding {r['current_pcs']:.0f} pcs, selling about {r['annual_sales']:.0f} a year.")
+                       f"{target}. Holding {r['current_pcs']:.0f} {u}, selling about {r['annual_sales']:.0f} a year.")
         elif status == "stock_up":
             summary = (f"In stock in only {r['avail_12m']:.0f} of {r['data_12m']:.0f} fortnights, yet sold "
-                       f"{r['sold_12m']:.0f} pcs in 12 months, and its neighbouring weight ranges are out of range too: "
+                       f"{r['sold_12m']:.0f} {u} in 12 months, and its neighbouring weight ranges are out of range too: "
                        f"stock it properly or accept the lost sales.")
         else:
             summary = (f"Turns {_turn(r['blended_turn'])} a year against {target} on thin data (in stock in "
@@ -301,23 +304,58 @@ def stock_turn(turns, rules):
         evidence = {
             "turn": {w: _turn(r[f"turn_{w}"]) for w in ("3m", "6m", "12m")},
             "in stock (fortnights)": {w: f"{r[f'avail_{w}']:.0f} of {r[f'data_{w}']:.0f}" for w in ("3m", "6m", "12m")},
-            "sold (pcs)": {w: float(r[f"sold_{w}"]) for w in ("3m", "6m", "12m")},
+            f"sold ({u})": {w: float(r[f"sold_{w}"]) for w in ("3m", "6m", "12m")},
             "qualifying windows": r["pattern"], "weights 3/6/12": r["weights"] or "–",
             "blended turn": _turn(r["blended_turn"]), "ideal turn": target,
-            "now (pcs)": float(r["current_pcs"]), "ideal (pcs)": float(r["ideal_pcs"]),
+            f"now ({u})": float(r["current_pcs"]), f"ideal ({u})": float(r["ideal_pcs"]),
             f"{r['purity']} {r['item_name']} overall (all weight ranges)".strip(): (
-                f"{p_held:.0f} pcs held ({money(product['current_value'].sum())}), {p_sold:.0f} sold in 12 months, "
+                f"{p_held:.0f} {u} held ({money(product['current_value'].sum())}), {p_sold:.0f} sold in 12 months, "
                 f"turn {_turn(p_sold / p_avg if p_avg else float('nan'))}, "
                 + (f"{p_held / (p_sold / 12):.0f} months of stock" if p_sold > 0 else "no sales")),
             "bricks in this group": {
-                b["brick"]: f"{b['current_pcs']:.0f} → {b['ideal_pcs']:.0f} pcs, turn {_turn(b['blended_turn'])} "
+                b["brick"]: f"{b['current_pcs']:.0f} → {b['ideal_pcs']:.0f} {u}, turn {_turn(b['blended_turn'])} "
                             f"vs {b['ideal_turn']:g}×, {b['status'].replace('_', ' ')}"
                 for _, b in inside.sort_values("size", ascending=False).head(15).iterrows()},
-            "by branch": {short(b["scope"]): f"{b['current_pcs']:.0f} pcs held, {b['sold_12m']:.0f} sold in 12 months, "
+            "by branch": {short(b["scope"]): f"{b['current_pcs']:.0f} {u} held, {b['sold_12m']:.0f} sold in 12 months, "
                                              f"{b['status'].replace('_', ' ')}"
                           for _, b in branches.sort_values("current_pcs", ascending=False).iterrows()}}
         actions.append(_action(kind, r["brick"], title, summary, impact, label, confidence(r["sold_12m"]), evidence,
                                subject={"group": r["brick"], "item": r["item_name"], "item_group": r["item_class_group"]}))
+    return actions
+
+
+# ── broken sets ───────────────────────────────────────────────────────────────
+TEMPORARY = ("approval", "transit", "repair")
+
+
+def broken_sets(broken, rules):
+    """One recommendation per broken set (kkj.metrics.sets.broken_sets) worth at least the rule's value.
+
+    A set whose members only sit apart because one is out on approval, in transit or at repair is left alone:
+    that is temporary.
+    """
+    actions = []
+    for r in broken.itertuples():
+        if r.value_left < rules["broken_set_min_value"]:
+            continue
+        if r.problem == "members in different places":
+            places = r.where.split(PLACE_SEP)
+            if any(t in p.lower() for p in places for t in TEMPORARY):
+                continue
+            title = f"Bring {r.set_type} {r.set_id} together"
+            summary = (f"Its pieces are in {len(places)} places ({'; '.join(places)}), so it cannot be shown or sold whole. "
+                       f"Move them to one counter.")
+            label = f"{money(r.value_left)} set split across places"
+        else:
+            title = f"Sell what is left of {r.set_type} {r.set_id} on its own"
+            summary = (f"{r.missing}. Left in stock: {r.left_in_stock}, {r.age_days:.0f} days old. "
+                       f"Relabel and price it as a single piece, or match it with a similar piece to make a set again.")
+            label = f"{money(r.value_left)} in an incomplete set"
+        evidence = {"set": r.set_id, "set type": r.set_type, "problem": r.problem, "left in stock": r.left_in_stock,
+                    "where": r.where, "missing": r.missing or "–",
+                    "members": f"{r.members_now} of {r.members_before}"}
+        actions.append(_action("broken_set", r.set_id, title, summary, r.value_left, label, "high", evidence,
+                               branch=r.branch, subject={"set": r.set_id, "item": r.set_type}))
     return actions
 
 

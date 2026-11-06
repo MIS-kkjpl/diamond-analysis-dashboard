@@ -341,3 +341,22 @@ def test_no_missing_value_leaks_onto_pages(path):
     import re
     page = re.sub("<[^>]+>", " ", client.get(path).text)
     assert not re.search(r"(?<![A-Za-z])(nan|NaN|NaT|None)(?![A-Za-z])", page), path
+
+
+def test_salespeople_scorecard_and_person_page():
+    r = client.get("/salespeople?start=2026-04-01&show=all")
+    assert r.status_code == 200 and "Traceback" not in r.text
+    assert "Scorecard" in r.text and "vs colleagues" in r.text
+    import re
+    code = re.search(r'href="/salespeople/([^"?]+)\?', r.text).group(1)
+    p = client.get(f"/salespeople/{code}?start=2026-04-01")
+    assert p.status_code == 200 and "At the same branch" in p.text and "nan" not in p.text.lower().split("</script>")[-1]
+    assert client.get("/salespeople/NOSUCHCODE").status_code == 404
+
+
+def test_sets_on_inventory_and_sales():
+    inv = client.get("/inventory")
+    assert inv.status_code == 200 and "Sets in stock" in inv.text and "Broken sets" in inv.text
+    sales = client.get("/sales?start=2026-04-01")
+    assert sales.status_code == 200 and "Sets: sold whole or split" in sales.text
+    assert client.get("/recommendations?group=sets").status_code == 200

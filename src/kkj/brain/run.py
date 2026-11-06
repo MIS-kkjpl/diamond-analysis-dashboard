@@ -24,6 +24,7 @@ from kkj.metrics import brick_turn as bt
 from kkj.metrics import core as m
 from kkj.metrics import insights as ins
 from kkj.metrics import seasonality as sn
+from kkj.metrics import sets
 
 log = logging.getLogger("kkj.brain")
 
@@ -55,8 +56,10 @@ def brick_turns(conn, rules, as_of, showrooms):
     """
     dates = q.stock_dates(conn)
     grid = bt.fortnight_grid(as_of, dates.loc[dates["snapshot_date"] <= as_of, "snapshot_date"])
-    stock = bt.add_brick(q.brick_stock(conn, [s for _, s in grid if s is not None]), rules)
-    sales = bt.add_brick(q.brick_sales(conn, (as_of - timedelta(days=bt.FORTNIGHT * bt.WINDOWS["12m"])).date()), rules)
+    # counted in selling units: a multi-label set is one unit of its set type (kkj.metrics.sets)
+    stock = bt.add_brick(sets.stock_units(q.brick_stock(conn, [s for _, s in grid if s is not None])), rules)
+    sales = bt.add_brick(sets.sales_units(q.brick_sales(conn, (as_of - timedelta(days=bt.FORTNIGHT * bt.WINDOWS["12m"])).date())),
+                         rules)
     ideals = q.ideal_turns(conn)
     season = seasonal_shares(conn, rules, as_of) if rules["turn_seasonal_adjust"] else None
     shop_stock, shop_sales = stock[stock["branch"].isin(showrooms)], sales[sales["branch"].isin(showrooms)]
@@ -112,6 +115,15 @@ def festival_candidates(conn, rules, as_of, stock):
     return gen.festival_stock(outlook, rules) if len(outlook) else []
 
 
+def broken_sets(conn, stock):
+    """Sets in the latest stock that cannot be sold whole (kkj.metrics.sets.broken_sets)."""
+    ids = stock["set_item_barcode"].map(sets.set_id).dropna().unique()
+    if not len(ids):
+        return sets.broken_sets(stock.iloc[:0], stock.iloc[:0])
+    history, sold = q.set_history(conn, ids)
+    return sets.broken_sets(stock, history, sold)
+
+
 def save_brick_turns(conn, table, as_of, run_id):
     conn.execute(text("DELETE FROM brain.brick_turn WHERE as_of = :a"), {"a": as_of})
     cols = [r[0] for r in conn.execute(text("""SELECT column_name FROM information_schema.columns
@@ -155,6 +167,7 @@ def candidates(conn, rules):
     turns = brick_turns(conn, rules, as_of, showrooms)
     actions += gen.stock_turn(turns, rules)
     actions += festival_candidates(conn, rules, as_of, stock)
+    actions += gen.broken_sets(broken_sets(conn, stock), rules)
     return actions, as_of.date(), sales["sale_date"].max().date() if len(sales) else None, turns
 
 

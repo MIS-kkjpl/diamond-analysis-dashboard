@@ -5,7 +5,7 @@ engine (kkj.brain.run). Each takes an open SQLAlchemy connection and returns a D
 import pandas as pd
 from sqlalchemy import text
 
-STOCK_COLUMNS = """snapshot_date, barcode, label_no, branch, location, item_class_group, item_name,
+STOCK_COLUMNS = """snapshot_date, barcode, label_no, branch, location, set_item_barcode, item_class_group, item_name,
     category, supplier, pcs, gross_wt, net_wt, dia_wt, dia_amt, rate, item_amt, taxable_amount, age_days,
     days_from_branch_in, branch_in_date, coalesce(label_dt, labeling_date) AS label_date"""
 
@@ -77,8 +77,18 @@ def stock_dates(conn):
     return df
 
 
-BRICK_STOCK = """snapshot_date, branch, location, item_class_group, purity, item_name, category, sub_category,
-    dia_wt, gross_wt, pcs, coalesce(taxable_amount, item_amt) AS value"""
+# each labelled piece's set id (multi-label sets only), from its latest stock label
+LABEL_SET = """SELECT DISTINCT ON (barcode) barcode, set_item_barcode
+               FROM (SELECT snapshot_date, barcode, set_item_barcode FROM erp.stock_snapshot
+                     WHERE set_item_barcode ~ '^[A-Z]+[1-9][0-9]*$'
+                     UNION ALL
+                     SELECT snapshot_date, barcode, set_item_barcode FROM stock_hist.snapshot
+                     WHERE set_item_barcode ~ '^[A-Z]+[1-9][0-9]*$') s
+               ORDER BY barcode, snapshot_date DESC"""
+
+
+BRICK_STOCK = """snapshot_date, branch, location, barcode, set_item_barcode, item_class_group, purity, item_name,
+    category, sub_category, dia_wt, gross_wt, pcs, coalesce(taxable_amount, item_amt) AS value"""
 
 
 def brick_stock(conn, dates):
@@ -98,6 +108,22 @@ def brick_stock(conn, dates):
     return df[df["item_class_group"] != "Customer Diamond"]
 
 
+def set_history(conn, set_ids):
+    """Every label ever stocked under these set ids (ERP daily and stock history), and how each left stock if it was
+    sold: (snapshot_date, barcode, set_item_barcode, item_name) and (barcode, sale_date, bill_no, sale_branch).
+    Sales are matched by barcode: the sales report writes set numbers with each item's own prefix."""
+    hist = read(conn, """
+        SELECT snapshot_date, barcode, set_item_barcode, item_name FROM erp.stock_snapshot WHERE set_item_barcode = ANY(:ids)
+        UNION
+        SELECT snapshot_date, barcode, set_item_barcode, item_name FROM stock_hist.snapshot WHERE set_item_barcode = ANY(:ids)""",
+                ids=list(set_ids))
+    hist["snapshot_date"] = pd.to_datetime(hist["snapshot_date"])
+    sold = read(conn, """SELECT DISTINCT ON (barcode) barcode, sale_date, bill_no, branch AS sale_branch
+                         FROM sales.v_sales_line WHERE pcs > 0 AND barcode = ANY(:b) ORDER BY barcode, sale_date DESC""",
+                b=hist["barcode"].dropna().unique().tolist())
+    return hist, sold
+
+
 def brick_sales(conn, date_from):
     """Net sale lines (returns negative) with the brick columns, since date_from.
 
@@ -105,15 +131,16 @@ def brick_sales(conn, date_from):
     label in stock history (matched by barcode; a return by the sale it reverses) and from the sale
     line only when there is no match. Legacy sale lines often lack the diamond weight.
     """
-    df = read(conn, """
-        WITH label AS (
-            SELECT DISTINCT ON (barcode) barcode, item_class_group, purity, item_name, category, sub_category,
-                   dia_wt, gross_wt
-            FROM (SELECT snapshot_date, barcode, item_class_group, purity, item_name, category, sub_category, dia_wt,
-                         gross_wt FROM erp.stock_snapshot
+    df = read(conn, f"""
+        WITH label_set AS ({LABEL_SET}),
+        label AS (
+            SELECT DISTINCT ON (barcode) barcode, set_item_barcode, item_class_group, purity, item_name, category,
+                   sub_category, dia_wt, gross_wt
+            FROM (SELECT snapshot_date, barcode, set_item_barcode, item_class_group, purity, item_name, category,
+                         sub_category, dia_wt, gross_wt FROM erp.stock_snapshot
                   UNION ALL
-                  SELECT snapshot_date, barcode, item_class_group, purity, item_name, category, sub_category, dia_wt,
-                         gross_wt FROM stock_hist.snapshot) s
+                  SELECT snapshot_date, barcode, set_item_barcode, item_class_group, purity, item_name, category,
+                         sub_category, dia_wt, gross_wt FROM stock_hist.snapshot) s
             WHERE barcode IS NOT NULL
             ORDER BY barcode, snapshot_date DESC),
         line AS (
@@ -122,25 +149,36 @@ def brick_sales(conn, date_from):
             LEFT JOIN sales.v_sales_line o ON v.pcs < 0 AND o.bill_no = v.orig_bill_no
                  AND o.inventory_ref_code = v.inventory_ref_code AND o.pcs > 0
             WHERE v.sale_date >= :d AND v.item_class_group <> 'Customer Diamond')
-        SELECT l.sale_date, l.branch, coalesce(s.item_class_group, l.item_class_group) AS item_class_group,
+        SELECT l.sale_date, l.branch, l.bill_no, l.label_barcode AS barcode,
+               coalesce(ls.set_item_barcode, l.set_item_barcode) AS set_item_barcode,
+               coalesce(s.item_class_group, l.item_class_group) AS item_class_group,
                coalesce(s.purity, l.purity) AS purity, coalesce(s.item_name, l.item_name) AS item_name,
                CASE WHEN s.barcode IS NOT NULL THEN s.category ELSE l.category END AS category,
                CASE WHEN s.barcode IS NOT NULL THEN s.sub_category ELSE l.sub_category END AS sub_category,
                CASE WHEN s.barcode IS NOT NULL THEN s.dia_wt ELSE l.dia_wt END AS dia_wt,
                CASE WHEN s.barcode IS NOT NULL THEN s.gross_wt ELSE l.gross_wt END AS gross_wt,
                l.pcs, coalesce(l.taxable_amount, l.item_amt) AS value, s.barcode IS NOT NULL AS from_label
-        FROM line l LEFT JOIN label s ON s.barcode = l.label_barcode""", d=date_from)
+        FROM line l LEFT JOIN label s ON s.barcode = l.label_barcode
+             LEFT JOIN label_set ls ON ls.barcode = l.label_barcode""", d=date_from)
     df["sale_date"] = pd.to_datetime(df["sale_date"])
     return df
 
 
 def sales_lines(conn, date_from):
-    """Sales lines from sales.v_sales_line (ERP where loaded, legacy before) since date_from."""
-    df = read(conn, """
-        SELECT source, sale_date, bill_no, barcode, label_no, item_name, category, item_class_group,
-               branch, location, salesman, supplier, pcs, dia_wt, item_amt, taxable_amount,
-               age_days_at_sale, inventory_ref_code, orig_bill_no, orig_sale_date, sales_return_done
-        FROM sales.v_sales_line WHERE sale_date >= :d""", d=date_from)
+    """Sales lines from sales.v_sales_line (ERP where loaded, legacy before) since date_from.
+
+    set_item_barcode comes from the piece's stock label: the sales report writes the set number with the item's own
+    prefix ('DPD1644' for the pendant of set 'DPS1644'), which does not tie the set's pieces together.
+    """
+    df = read(conn, f"""
+        WITH label_set AS ({LABEL_SET})
+        SELECT v.source, v.sale_date, v.bill_no, v.barcode, v.label_no,
+               coalesce(ls.set_item_barcode, v.set_item_barcode) AS set_item_barcode, v.item_name, v.category,
+               v.item_class_group, v.branch, v.location, v.salesman, v.supplier, v.pcs, v.dia_wt, v.item_amt,
+               v.taxable_amount, v.age_days_at_sale, v.inventory_ref_code, v.orig_bill_no, v.orig_sale_date,
+               v.sales_return_done
+        FROM sales.v_sales_line v LEFT JOIN label_set ls ON ls.barcode = v.barcode
+        WHERE v.sale_date >= :d""", d=date_from)
     df["sale_date"] = pd.to_datetime(df["sale_date"])
     return df
 

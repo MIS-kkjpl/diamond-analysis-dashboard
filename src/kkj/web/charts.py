@@ -7,6 +7,7 @@ import math
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from markupsafe import Markup, escape
 
 from kkj.viz import GRID, GROUP_COLOURS, GROUP_ORDER, ORDINAL, SERIES, indian, money, style
 
@@ -44,6 +45,15 @@ def monthly_by_group(monthly):
     return style(fig, 320).to_json()
 
 
+def month_bars(months, values_l, bills):
+    """One person's net sales per month in ₹ lakh, one colour (time runs left to right)."""
+    fig = go.Figure(go.Bar(x=months, y=values_l, marker_color=SERIES[0], customdata=bills,
+                           hovertemplate="%{x|%b %Y}<br>₹%{y:,.1f} L · %{customdata:,} bills<extra></extra>"))
+    fig.update_yaxes(tickprefix="₹", ticksuffix=" L")
+    fig.update_xaxes(dtick="M1", tickformat="%b\n%Y")
+    return style(fig, 280, legend=False).to_json()
+
+
 def two_series(labels, a, b, name_a, name_b, suffix="%"):
     fig = go.Figure()
     fig.add_bar(x=labels, y=a, name=name_a, marker_color=SERIES[0])
@@ -74,6 +84,9 @@ def _cell(value, kind):
         return f"{value:,.2f}"
     if kind == "date":
         return pd.Timestamp(value).strftime("%d %b %Y")
+    if kind == "link":                      # (text, href)
+        text, href = value
+        return Markup(f'<a href="{escape(href)}">{escape(text)}</a>') if href else text
     return value
 
 

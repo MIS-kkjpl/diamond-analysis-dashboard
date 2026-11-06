@@ -37,6 +37,8 @@
   <div class="col-lg-6">{{ ui.chart("c-branch", fig_branch, "By branch", t=t_branch) }}</div>
   <div class="col-lg-6">{{ ui.chart("c-items", fig_items, "Top 10 items", t=t_items) }}</div>
 </div>
+{% if t_sets.rows %}<div class="mb-3">{{ ui.table_card("Sets: sold whole or split", t_sets, icon="ti-stack-2",
+    sub="Sets labelled as separate pieces (a pendant and its tops share a set number). Split = its pieces were sold on different days.") }}</div>{% endif %}
 {{ ui.section("Speed and people", "how long pieces took to sell, salespeople, returns") }}
 <div class="mb-3">{{ ui.chart("c-age", fig_age, "How long items took to sell", "Pieces sold, by days from label date to sale") }}</div>
 <div class="mb-3">{{ ui.table_card("Salespeople", t_team, sub="Owners and generic accounts left out (Settings → Salespeople); discount given = 1 − billed ÷ label value", icon="ti-users") }}</div>

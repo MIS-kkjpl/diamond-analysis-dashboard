@@ -9,6 +9,7 @@ from kkj.db import queries as q
 from kkj.metrics import brick_turn as bt
 from kkj.metrics import core as m
 from kkj.metrics import insights as ins
+from kkj.metrics import sets
 from kkj.metrics.summary import fy_start
 from kkj.viz import GROUP_ORDER, money
 from kkj.web import charts
@@ -67,8 +68,10 @@ def inventory(request: Request, branch: list[str] = Query(default=[]), group: li
         labels=("barcode", "size"), value=("value", "sum"), longest_days_in_branch=("days_from_branch_in", "max")
     ).sort_values("value", ascending=False)
 
+    t_sets, t_broken = _sets_tables(stock)
     return render(
         request, "inventory.html", "inventory", empty=False, kpis=kpis, as_of=stock["snapshot_date"].iloc[0], **ctx,
+        t_sets=t_sets, t_broken=t_broken,
         fig_branch=charts.hbar(by_branch["branch"].map(_short), by_branch["value"] / 1e7, by_branch["labels"],
                                " · %{customdata:,} labels"),
         t_branch=charts.table(by_branch, {"value": "money", "labels": "num", "pcs": "num"}),
@@ -82,6 +85,29 @@ def inventory(request: Request, branch: list[str] = Query(default=[]), group: li
                                       "supplier", "age_days", "days_from_branch_in", "dia_wt", "value"]],
                               {"value": "money", "age_days": "num", "days_from_branch_in": "num", "dia_wt": "dec"}),
         t_away=charts.table(away_t, {"value": "money", "labels": "num", "longest_days_in_branch": "num"}))
+
+
+def _sets_tables(stock):
+    """Sets in stock by set type, and the broken ones (kkj.metrics.sets)."""
+    units = sets.stock_units(stock)
+    multi = units[units["members"] > 1]
+    by_type = multi.groupby("item_name", as_index=False).agg(
+        sets=("pcs", "size"), labels=("members", "sum"), value=("value", "sum"), avg_carats=("dia_wt", "mean")
+    ).sort_values("value", ascending=False).rename(columns={"item_name": "set type"})
+    t_sets = charts.table(by_type, {"sets": "num", "labels": "num", "value": "money", "avg_carats": "dec"})
+    ids = tuple(sorted(stock["set_item_barcode"].map(sets.set_id).dropna().unique()))
+    if not ids:
+        return t_sets, None
+    history, sold = cached(q.set_history, ids)
+    broken = sets.broken_sets(stock, history, sold)
+    if broken.empty:
+        return t_sets, None
+    broken = broken.assign(where=broken["where"].map(lambda w: "; ".join(_short(p.split(" · ")[0]) + " · " +
+                                                                       p.split(" · ")[-1] for p in w.split(sets.PLACE_SEP))))
+    t_broken = charts.table(broken[["set_id", "set_type", "problem", "left_in_stock", "where", "missing", "age_days",
+                                    "value_left"]],
+                            {"value_left": "money", "age_days": "num"}, {"set_id": "set", "value_left": "value left"})
+    return t_sets, t_broken
 
 
 # ── Sales ─────────────────────────────────────────────────────────────────────
@@ -158,6 +184,9 @@ def sales(request: Request, start: str = "", end: str = "", branch: list[str] = 
         t_items=charts.table(by_item, {"net": "money", "pcs": "num"}, {"net": "net sales"}),
         fig_age=charts.ordinal_bars(by_age["age_band"], by_age["pcs"], " pcs", "", by_age["value"] / 1e7,
                                     "<br>₹%{customdata:.2f} Cr"),
+        t_sets=charts.table(sets.sold_whole_or_split(lines), {"sets_sold": "num", "sold_whole": "num", "split": "num",
+                                                                 "whole_share": "pct"},
+                            {"whole_share": "sold whole", "sold_whole": "whole (same day)", "split": "split (different days)"}),
         t_team=charts.table(team, {"net_sales": "money", "pcs": "num", "bills": "num", "returns": "num",
                                    "discount_rate": "pct"}, {"discount_rate": "discount given"}),
         t_returns=charts.table(back.sort_values("sale_date", ascending=False)[

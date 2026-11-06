@@ -95,7 +95,7 @@
   {% if people %}
   <div class="col-md-6"><div class="card"><div class="card-header"><h3 class="card-title">Salespeople</h3></div>
     <div class="list-group list-group-flush">{% for r in people %}
-      <a class="list-group-item list-group-item-action d-flex justify-content-between" href="/sales?salesperson={{ r.sales_code | urlencode }}">
+      <a class="list-group-item list-group-item-action d-flex justify-content-between" href="/salespeople/{{ r.sales_code | urlencode }}">
         <span>{{ r.name }} <span class="text-secondary small">{{ r.sales_code }}</span>{% if not r.active %} <span class="badge bg-secondary-lt">inactive</span>{% endif %}</span>
         <span class="text-secondary small">{{ r.branch | short if r.branch else "" }}</span></a>{% endfor %}</div></div></div>
   {% endif %}

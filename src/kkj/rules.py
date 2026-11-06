@@ -112,6 +112,10 @@ RULES = [
     Rule("festival_stock_cover", "Seasonality", "Before a festival, hold at least", 2.0,
          "× its expected festival sales", "Customers need choice: a product expected to sell 50 pieces over "
          "the festival should have at least this many times that on hand.", min=1, max=6),
+    # ── sets (kkj.metrics.sets) ──
+    Rule("broken_set_min_value", "Sets", "Recommend action on a broken set worth at least", 25_000, "₹",
+         "A set that has lost a member (sold separately or moved out), or whose pieces sit in different places, "
+         "gets a recommendation when what is left is worth at least this.", "int", min=0, max=10_000_000),
     # ── transfers ──
     Rule("transfer_enabled", "Transfers", "Suggest transfers between branches", True, "",
          "Move pieces from a branch with excess to one short of the same group.", "bool"),
