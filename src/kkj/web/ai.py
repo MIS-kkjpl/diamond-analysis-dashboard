@@ -214,7 +214,7 @@ def brief_print(request: Request, text_id: int):
 def review_run(request: Request):
     try:
         review_mod.run(who(request))
-        return RedirectResponse("/recommendations#ai-notes", status_code=303)
+        return RedirectResponse("/recommendations?review=open#ai-notes", status_code=303)
     except Exception as e:
         return RedirectResponse("/recommendations?" + urlencode({"ai_error": _problem(e, "the AI second look")}) + "#ai-notes",
                                 status_code=303)

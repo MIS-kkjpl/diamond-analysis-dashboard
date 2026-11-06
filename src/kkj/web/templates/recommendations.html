@@ -31,21 +31,40 @@
 {% if feature("ai_review") %}{% set rv = ai_review() %}
 {% if request.query_params.get("ai_error") %}<div class="alert alert-warning" id="ai-notes">{{ request.query_params.get("ai_error") }}</div>{% endif %}
 {% if rv[0] %}
-<div class="card mb-3 sw-ai" id="ai-notes">
-  <div class="card-header"><div><h3 class="card-title"><i class="ti ti-sparkles me-2"></i>AI second look</h3>
-    <div class="card-subtitle small text-secondary">{{ rv[0] | date("%d %b %Y %H:%M") }} · notes on the most important open
-      recommendations; they don't change anything</div></div></div>
-  {% if rv[1] %}
-  <div class="list-group list-group-flush">
-    {% for n in rv[1] %}
-    <div class="list-group-item py-2 d-flex gap-3 align-items-start">
-      <span class="badge bg-{{ {'conflict': 'red', 'timing': 'orange', 'duplicate': 'blue', 'caution': 'yellow', 'data': 'secondary'}.get(n.note_type, 'secondary') }}-lt text-capitalize" style="min-width: 5.5rem">{{ n.note_type }}</span>
-      <div class="flex-grow-1">{{ n.note }}
-        <div class="small mt-1">{% for i in n.action_ids %}<a href="/recommendations/{{ i }}" class="me-2">#{{ i }}</a>{% endfor %}</div></div>
+{% set colours = {'conflict': 'red', 'timing': 'orange', 'duplicate': 'blue', 'caution': 'yellow', 'data': 'secondary'} %}
+{% set plural = {'conflict': 'conflicts', 'timing': 'timing', 'duplicate': 'duplicates', 'caution': 'cautions', 'data': 'data'} %}
+<div class="card mb-3 sw-ai sw-brief-card" id="ai-notes">
+  <details {% if request.query_params.get("review") == "open" %}open{% endif %}>
+    <summary class="card-header sw-brief-summary">
+      <div class="flex-grow-1 min-w-0">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <h3 class="card-title mb-0"><i class="ti ti-sparkles me-2"></i>AI second look</h3>
+          <span class="small text-secondary">{{ rv[0] | date("%d %b %Y %H:%M") }}</span>
+        </div>
+        <div class="sw-brief-line d-flex flex-wrap align-items-center gap-1">
+          {% if rv[1] %}<span>{{ rv[1] | length }} note{{ "" if rv[1] | length == 1 else "s" }}</span>
+            {% for t, items in rv[1] | groupby("note_type") %}<span class="badge bg-{{ colours.get(t, 'secondary') }}-lt">{{ items | length }}
+              {{ (plural.get(t, t) if items | length > 1 else t) }}</span>{% endfor %}
+          {% else %}<span>Nothing worth flagging in the latest review.</span>{% endif %}
+        </div>
+      </div>
+      <span class="sw-brief-toggle small text-secondary"><span class="when-closed">Read the notes</span><span class="when-open">Fold</span>
+        <i class="ti ti-chevron-down"></i></span>
+    </summary>
+    <div class="card-body py-2 small text-secondary border-bottom">Notes on the most important open recommendations. They don't
+      change anything; each links to the recommendations it is about.</div>
+    {% if rv[1] %}
+    <div class="list-group list-group-flush">
+      {% for n in rv[1] %}
+      <div class="list-group-item py-2 d-flex gap-3 align-items-start">
+        <span class="badge bg-{{ colours.get(n.note_type, 'secondary') }}-lt text-capitalize" style="min-width: 5.5rem">{{ n.note_type }}</span>
+        <div class="flex-grow-1">{{ n.note }}
+          <div class="small mt-1">{% for i in n.action_ids %}<a href="/recommendations/{{ i }}" class="me-2">#{{ i }}</a>{% endfor %}</div></div>
+      </div>
+      {% endfor %}
     </div>
-    {% endfor %}
-  </div>
-  {% else %}<div class="card-body text-secondary">Nothing worth flagging in the latest review.</div>{% endif %}
+    {% endif %}
+  </details>
 </div>
 {% endif %}{% endif %}
 
