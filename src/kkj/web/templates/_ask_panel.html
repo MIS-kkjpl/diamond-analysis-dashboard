@@ -1,0 +1,25 @@
+{# Ask Stockwise: a floating button on every page opens a side panel (not a modal, so the page stays usable beside it). #}
+<button type="button" class="sw-ask-fab d-print-none" data-bs-toggle="offcanvas" data-bs-target="#ask-panel"
+        aria-controls="ask-panel" title="Ask Stockwise a question about the data">
+  <i class="ti ti-sparkles"></i><span>Ask</span>
+</button>
+<div class="offcanvas offcanvas-end sw-ask d-print-none" id="ask-panel" tabindex="-1" aria-labelledby="ask-title"
+     data-bs-scroll="true" data-bs-backdrop="false">
+  <div class="offcanvas-header">
+    <h2 class="offcanvas-title" id="ask-title"><i class="ti ti-sparkles me-2"></i>Ask Stockwise</h2>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body" id="ask-body" hx-get="/ask/panel" hx-trigger="sw-ask-load from:body once">
+    <div class="text-secondary small"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>
+  </div>
+  <form class="sw-ask-form" id="ask-form" hx-post="/ask" hx-target="#ask-thread" hx-swap="beforeend"
+        hx-disabled-elt="find button[type=submit]">
+    <input type="hidden" name="conversation_id" id="ask-conv" value="">
+    <input type="hidden" name="page" value="">
+    <input type="hidden" name="title" value="">
+    <label for="ask-question" class="visually-hidden">Your question</label>
+    <textarea id="ask-question" name="question" class="form-control" rows="2" maxlength="1000" required
+              placeholder="Ask about stock, sales, this page…"></textarea>
+    <button type="submit" class="btn btn-primary" title="Ask (Enter)" aria-label="Ask"><i class="ti ti-send"></i></button>
+  </form>
+</div>

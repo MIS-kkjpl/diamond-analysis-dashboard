@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weekly brief, {{ b.period }} · Stockwise</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_version() }}">
+  <style>body { background: #fff; } .sheet { max-width: 46rem; margin: 2rem auto; padding: 0 1rem; } @media print { .no-print { display: none; } .sheet { margin: 0; } }</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="d-flex align-items-start justify-content-between mb-3">
+    <div><div class="text-secondary small text-uppercase fw-semibold">Stockwise · weekly brief</div>
+      <h1 class="h2 mb-0">{{ b.period | capitalize }}</h1>
+      <div class="small text-secondary">Written {{ b.created_at | date("%d %b %Y %H:%M") }} · figures computed by Stockwise, writing by AI</div></div>
+    <button class="btn btn-outline-secondary no-print" onclick="window.print()">Print</button>
+  </div>
+  <div class="sw-md sw-brief">{{ b.body_md | md }}</div>
+</div>
+</body>
+</html>

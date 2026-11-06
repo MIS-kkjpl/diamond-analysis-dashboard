@@ -27,6 +27,7 @@
 {% block intro %}What to do next, ranked by the money involved. Approve what you'll act on, dismiss what doesn't apply, snooze what can wait. Each card's Details link shows the numbers behind it.{% endblock %}
 {% block content %}
 {% set oob = False %}{% include "_summary.html" %}
+{% if feature("ai_brief") %}{% include "_brief_card.html" %}{% endif %}
 {% if feature("ai_review") %}{% set rv = ai_review() %}
 {% if request.query_params.get("ai_error") %}<div class="alert alert-warning" id="ai-notes">{{ request.query_params.get("ai_error") }}</div>{% endif %}
 {% if rv[0] %}

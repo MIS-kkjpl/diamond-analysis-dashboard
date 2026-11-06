@@ -1,0 +1,39 @@
+{# The Ask panel's body: earlier conversations, the current one, and example questions when it is empty. #}
+<div class="sw-ask-top d-flex align-items-center gap-2 mb-2">
+  {% if past %}
+  <div class="dropdown">
+    <button type="button" class="btn btn-sm btn-ghost-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+      <i class="ti ti-history me-1"></i>Earlier</button>
+    <div class="dropdown-menu sw-ask-past">
+      {% for p in past %}<a class="dropdown-item small {% if p.conversation_id == cid %}active{% endif %}" href="#"
+         hx-get="/ask/panel?c={{ p.conversation_id }}" hx-target="#ask-body">
+        <div class="text-truncate">{{ p.title }}</div>
+        <div class="text-secondary" style="font-size: .72rem">{{ p.last_at | date("%d %b %H:%M") }} · {{ p.questions }} question{{ "" if p.questions == 1 else "s" }}</div></a>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  <button type="button" class="btn btn-sm btn-ghost-secondary" hx-get="/ask/panel?c=new" hx-target="#ask-body">
+    <i class="ti ti-plus me-1"></i>New conversation</button>
+</div>
+
+<div id="ask-thread">
+  {% for r in rows %}{% include "_ask_bubble.html" %}{% endfor %}
+</div>
+{% if not rows %}
+<div id="ask-empty" class="sw-ask-empty">
+  <p class="text-secondary small mb-2">Ask about stock, sales, stock turn, seasons, salespeople or a recommendation, in plain
+    words. Answers come from the company's data and show the lookups behind them. Follow-up questions keep the
+    conversation's context, and "this" means the page you're on.</p>
+  <div class="d-flex flex-column gap-1">
+    {% for ex in ["Why is this recommended?",
+                  "Which products are we overstocked in, and where?",
+                  "How did sales in the last 4 weeks compare with the 4 weeks before?",
+                  "What should we prepare for the next festival?",
+                  "Which recommendations would free up the most cash?"] %}
+    <button type="button" class="btn btn-sm btn-outline-secondary text-start sw-ask-example">{{ ex }}</button>
+    {% endfor %}
+  </div>
+  <p class="text-secondary mt-3 mb-0" style="font-size: .75rem">Read-only: it can't change anything.{% if not names %} Salespeople are shown by code.{% endif %}</p>
+</div>
+{% endif %}
+<input type="hidden" name="conversation_id" id="ask-conv" value="{{ cid }}" hx-swap-oob="true">

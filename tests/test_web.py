@@ -386,10 +386,15 @@ def test_ai_pages_render_without_calling_the_api(monkeypatch):
     monkeypatch.setenv("FEATURE_AI_REVIEW", "on")
     monkeypatch.setenv("FEATURE_AI_SEASON", "on")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    ask = client.get("/ask")
-    assert ask.status_code == 200 and "Ask Stockwise" in ask.text
-    assert client.get("/brief").status_code == 200
-    assert "AI second look" in client.get("/recommendations").text
+    recs = client.get("/recommendations").text
+    assert "sw-ask-fab" in recs and 'id="ask-panel"' in recs        # the Ask side panel is on every page
+    assert 'id="brief"' in recs and "Weekly brief" in recs           # the brief is a card on Recommendations
+    assert "AI second look" in recs
+    panel = client.get("/ask/panel")
+    assert panel.status_code == 200 and "New conversation" in panel.text
+    assert client.get("/brief", follow_redirects=False).headers["location"].startswith("/recommendations")
     assert "Season notes" in client.get("/seasonality").text
+    assert client.get("/ask/q/999999999").status_code == 404
     monkeypatch.setenv("FEATURE_AI_ASK", "off")
-    assert client.get("/ask").status_code == 404
+    assert client.get("/ask/panel").status_code == 404
+    assert "sw-ask-fab" not in client.get("/overview").text

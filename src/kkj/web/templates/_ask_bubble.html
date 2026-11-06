@@ -1,0 +1,20 @@
+{# One question and its answer. While the answer is being written, the pair re-fetches itself every 2 seconds. #}
+<div class="sw-qa" id="qa-{{ r.question_id or 'x' }}"
+     {% if r.status == "running" %}hx-get="/ask/q/{{ r.question_id }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <div class="sw-q">{{ r.question }}</div>
+  {% if r.status == "running" %}
+  <div class="sw-a sw-a-wait" role="status"><span class="spinner-border spinner-border-sm me-2"></span>Looking it up… usually 15–60 seconds.
+    You can keep working; the answer will be here.</div>
+  {% elif r.status == "failed" %}
+  <div class="sw-a"><div class="alert alert-warning mb-0 py-2 small">{{ r.answer_md }}</div></div>
+  {% else %}
+  <div class="sw-a sw-md">{{ r.answer_md | md }}
+    {% if r.lookups %}<details class="sw-lookups small text-secondary mt-2"><summary>Based on {{ r.lookups | length }} lookup{{ "" if r.lookups | length == 1 else "s" }}{% if r.cost_usd %} · ≈ ${{ "%.2f" | format(r.cost_usd | float) }}{% endif %}</summary>
+      <ul class="mb-0 mt-1 ps-3">{% for l in r.lookups %}<li><b>{{ l.tool | replace("_", " ") }}</b>
+        {% for k, v in (l.input or {}).items() %}{{ k | replace("_", " ") }}: {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</li>{% endfor %}</ul>
+    </details>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% if oob %}<input type="hidden" name="conversation_id" id="ask-conv" value="{{ cid }}" hx-swap-oob="true">
+<div id="ask-empty" hx-swap-oob="true"></div>{% endif %}

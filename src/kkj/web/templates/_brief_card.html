@@ -1,0 +1,47 @@
+{# The weekly brief at the top of Recommendations: folded to its one line, opens to the full page. #}
+{% set briefs = ai_briefs() %}{% set b = briefs[0] if briefs else none %}
+{% set brief_open = request.query_params.get("brief") == "open" %}
+<div class="card mb-3 sw-ai sw-brief-card" id="brief">
+  {% if request.query_params.get("brief_error") %}
+  <div class="card-body pb-0"><div class="alert alert-warning mb-0">{{ request.query_params.get("brief_error") }}</div></div>{% endif %}
+  {% if b %}
+  <details {% if brief_open %}open{% endif %}>
+    <summary class="card-header sw-brief-summary">
+      <div class="flex-grow-1 min-w-0">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <h3 class="card-title mb-0"><i class="ti ti-news me-2"></i>Weekly brief</h3>
+          <span class="badge bg-purple-lt">{{ b.period }}</span>
+        </div>
+        <div class="sw-brief-line">{{ b.body_md | brief_line }}</div>
+      </div>
+      <span class="sw-brief-toggle small text-secondary"><span class="when-closed">Read the brief</span><span class="when-open">Fold</span>
+        <i class="ti ti-chevron-down"></i></span>
+    </summary>
+    <div class="card-body sw-md sw-brief">{{ b.body_md | md }}</div>
+    <div class="card-footer d-flex flex-wrap align-items-center gap-2">
+      <span class="small text-secondary me-auto">Written {{ b.created_at | date("%d %b %Y %H:%M") }} for {{ b.created_by }} ·
+        figures computed by Stockwise, writing by AI{% if b.cost_usd %} · ≈ ${{ "%.2f" | format(b.cost_usd | float) }}{% endif %}</span>
+      <a class="btn btn-sm btn-ghost-secondary" href="/brief/{{ b.text_id }}/print" target="_blank" rel="noopener"><i class="ti ti-printer"></i> Print</a>
+      {% if briefs | length > 1 %}
+      <div class="dropdown">
+        <button type="button" class="btn btn-sm btn-ghost-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="ti ti-archive"></i> Earlier briefs</button>
+        <div class="dropdown-menu dropdown-menu-end">{% for e in briefs[1:] %}
+          <a class="dropdown-item" href="/brief/{{ e.text_id }}/print" target="_blank" rel="noopener">{{ e.period }}
+            <span class="text-secondary small ms-2">{{ e.created_at | date("%d %b") }}</span></a>{% endfor %}</div>
+      </div>
+      {% endif %}
+      <form method="post" action="/brief" class="d-inline" onsubmit="const x = this.querySelector('button'); x.disabled = true; x.innerHTML = '<span class=&quot;spinner-border spinner-border-sm me-2&quot;></span>Writing… up to a minute'">
+        <button class="btn btn-sm btn-outline-secondary"><i class="ti ti-refresh"></i> Write a new one</button></form>
+    </div>
+  </details>
+  {% else %}
+  <div class="card-body d-flex flex-wrap align-items-center gap-3">
+    <i class="ti ti-news fs-2 text-secondary"></i>
+    <div class="flex-grow-1 min-w-0" style="flex-basis: 20rem"><b>Weekly brief</b>
+      <div class="small text-secondary">One page for management: what moved, the decisions that matter this week, what to watch.
+        Written every Monday by the morning refresh, or now.</div></div>
+    <form method="post" action="/brief" onsubmit="const x = this.querySelector('button'); x.disabled = true; x.innerHTML = '<span class=&quot;spinner-border spinner-border-sm me-2&quot;></span>Writing… up to a minute'">
+      <button class="btn btn-outline-secondary"><i class="ti ti-sparkles"></i> Write this week's brief</button></form>
+  </div>
+  {% endif %}
+</div>

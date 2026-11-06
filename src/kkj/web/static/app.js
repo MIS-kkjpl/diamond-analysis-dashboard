@@ -113,3 +113,49 @@
   document.body && document.body.addEventListener("htmx:afterSettle", e => enhance(e.target));
   document.addEventListener("htmx:afterSettle", e => enhance(e.target));
 })();
+
+/* Ask Stockwise side panel (templates/_ask_panel.html): loads its conversation the first time it opens, stays open
+   across page changes (remembered for this browser tab), sends the current page with each question, Enter sends. */
+(function () {
+  const KEY = "swAskOpen";
+  function remember(v) { try { v ? sessionStorage.setItem(KEY, "1") : sessionStorage.removeItem(KEY); } catch (e) {} }
+  function wasOpen() { try { return sessionStorage.getItem(KEY) === "1"; } catch (e) { return false; } }
+  function scrollDown() { const b = document.getElementById("ask-body"); if (b) b.scrollTop = b.scrollHeight; }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const panel = document.getElementById("ask-panel");
+    if (!panel) return;
+    const form = document.getElementById("ask-form"), box = document.getElementById("ask-question");
+    let loaded = false;
+    panel.addEventListener("show.bs.offcanvas", () => {
+      document.body.classList.add("sw-ask-open");
+      if (!loaded) { loaded = true; htmx.trigger(document.body, "sw-ask-load"); }
+      remember(true);
+    });
+    panel.addEventListener("shown.bs.offcanvas", () => { scrollDown(); box.focus(); });
+    panel.addEventListener("hidden.bs.offcanvas", () => { document.body.classList.remove("sw-ask-open"); remember(false); });
+
+    // reopen without animation if it was open on the previous page
+    if (wasOpen() || new URLSearchParams(location.search).get("ask") === "1") {
+      panel.classList.add("show-instant");
+      const fab = document.querySelector(".sw-ask-fab");
+      if (window.bootstrap && bootstrap.Offcanvas) bootstrap.Offcanvas.getOrCreateInstance(panel).show();
+      else if (fab) fab.click();
+      setTimeout(() => panel.classList.remove("show-instant"), 400);
+    }
+
+    form.addEventListener("htmx:configRequest", e => {
+      e.detail.parameters.page = location.pathname + location.search;
+      e.detail.parameters.title = document.title;
+    });
+    form.addEventListener("htmx:afterRequest", e => { if (e.detail.successful) { box.value = ""; setTimeout(scrollDown, 50); } });
+    box.addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (box.value.trim()) htmx.trigger(form, "submit"); }
+    });
+    panel.addEventListener("click", e => {
+      const ex = e.target.closest(".sw-ask-example");
+      if (ex) { box.value = ex.textContent.trim(); htmx.trigger(form, "submit"); }
+    });
+    document.body.addEventListener("htmx:afterSwap", e => { if (e.target.id === "ask-body") setTimeout(scrollDown, 30); });
+  });
+})();

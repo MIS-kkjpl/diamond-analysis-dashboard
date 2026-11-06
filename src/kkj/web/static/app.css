@@ -258,3 +258,41 @@ a:focus-visible, button:focus-visible, .btn:focus-visible, input:focus-visible, 
 .sw-md > *:last-child { margin-bottom: 0; }
 .sw-brief { font-size: .95rem; line-height: 1.55; max-width: 52rem; }
 @media print { .sw-sidebar, .topbar, .page-header .col-md-auto, .card-footer, .card-actions { display: none !important; } }
+
+/* Ask Stockwise: floating button + side panel (the page stays usable beside it) */
+.sw-ask-fab { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 1040; display: inline-flex; align-items: center; gap: .4rem;
+  border: 0; border-radius: 999px; padding: .65rem 1.05rem; background: #7c5cd6; color: #fff; font-weight: 600; font-size: .9rem;
+  box-shadow: 0 6px 18px rgba(60, 40, 120, .28); }
+.sw-ask-fab:hover { background: #6a4cc4; }
+.sw-ask-fab:focus-visible { outline: 3px solid #b9a7f0; outline-offset: 2px; }
+body.sw-ask-open .sw-ask-fab { display: none; }
+.sw-ask.offcanvas { width: 28rem; max-width: 100vw; border-left: 1px solid var(--sw-card-border); box-shadow: -8px 0 24px rgba(20, 26, 38, .08); }
+.sw-ask.show-instant { transition: none !important; }
+.sw-ask .offcanvas-header { border-bottom: 1px solid var(--sw-card-border); padding: .75rem 1rem; }
+.sw-ask .offcanvas-title { font-size: 1rem; font-weight: 600; display: flex; align-items: center; }
+.sw-ask .offcanvas-title .ti { color: #7c5cd6; }
+.sw-ask .offcanvas-body { padding: .75rem 1rem; background: #f8f9fc; }
+.sw-ask-form { display: flex; gap: .5rem; align-items: flex-end; padding: .75rem 1rem; border-top: 1px solid var(--sw-card-border); background: #fff; }
+.sw-ask-form textarea { resize: none; font-size: .875rem; }
+.sw-ask-form .btn { height: 2.6rem; width: 2.6rem; padding: 0; flex: 0 0 auto; }
+.sw-ask-past { width: 22rem; max-height: 60vh; overflow-y: auto; }
+.sw-qa { margin-bottom: 1rem; }
+.sw-q { margin-left: 2.5rem; background: #ece7fb; color: #2b2142; border-radius: 12px 12px 3px 12px; padding: .5rem .75rem; font-size: .875rem;
+  white-space: pre-wrap; }
+.sw-a { margin-top: .5rem; margin-right: 1rem; background: #fff; border: 1px solid var(--sw-card-border); border-radius: 12px 12px 12px 3px;
+  padding: .65rem .8rem; font-size: .875rem; }
+.sw-a-wait { color: var(--sw-muted); font-size: .8125rem; }
+.sw-a.sw-md h2, .sw-a.sw-md h3 { font-size: .9rem; }
+.sw-lookups summary { cursor: pointer; }
+@media (max-width: 575.98px) { .sw-ask.offcanvas { width: 100vw; } .sw-ask-fab { right: .9rem; bottom: .9rem; } }
+
+/* weekly brief card on Recommendations */
+.sw-brief-card details > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 1rem; }
+.sw-brief-card details > summary::-webkit-details-marker { display: none; }
+.sw-brief-card details:not([open]) > summary { border-bottom: 0; }
+.sw-brief-line { margin-top: .3rem; color: #2b3242; font-size: .9rem; }
+.sw-brief-toggle .when-open, .sw-brief-card details[open] .sw-brief-toggle .when-closed { display: none; }
+.sw-brief-card details[open] .sw-brief-toggle .when-open { display: inline; }
+.sw-brief-card details[open] .sw-brief-toggle .ti { transform: rotate(180deg); }
+.min-w-0 { min-width: 0; }
+.sw-brief-card details[open] .sw-brief-line { display: none; }

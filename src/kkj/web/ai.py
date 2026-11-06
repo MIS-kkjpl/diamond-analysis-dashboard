@@ -1,56 +1,93 @@
 """
-AI pages (kkj.ai): Ask Stockwise, the weekly brief, the AI second look on Recommendations and season notes on
-Seasonality. Each exists only while its switch is on (kkj.features); the middleware in app.py hides the rest.
+AI parts of the app (kkj.ai). Each exists only while its switch is on (kkj.features); the middleware in app.py
+hides the rest.
+
+  Ask Stockwise   a side panel on every page (base.html): /ask/panel loads a conversation, POST /ask starts a
+                  question, /ask/q/<id> is polled until its answer is ready
+  Weekly brief    a folded card at the top of Recommendations; POST /brief writes one, /brief/<id>/print prints it
+  AI second look  POST /recommendations/ai-review (notes shown on Recommendations)
+  Season notes    POST /seasonality/notes (card on Seasonality)
 """
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from kkj.ai import ask as ask_mod
 from kkj.ai import brief as brief_mod
 from kkj.ai import client as ai
 from kkj.ai import review as review_mod
 from kkj.ai import season as season_mod
-from kkj.web.common import render, templates, who
+from kkj.web.common import templates, who
 
 router = APIRouter()
 
 
-@router.get("/ask", response_class=HTMLResponse)
-def ask_page(request: Request):
-    recent = ask_mod.recent(limit=15)
-    return render(request, "ask.html", "ask", recent=recent.to_dict("records"), names=ai.share_names())
+# ── Ask Stockwise (side panel) ────────────────────────────────────────────────
+@router.get("/ask")
+def ask_page():
+    return RedirectResponse("/recommendations?ask=1", status_code=303)
+
+
+@router.get("/ask/panel", response_class=HTMLResponse)
+def ask_panel(request: Request, c: str = ""):
+    """The panel's body: a conversation (the latest one unless c is given, or a new one with c=new)."""
+    name = who(request)
+    past = ask_mod.conversations(name)
+    cid = None if c == "new" else (int(c) if c.isdigit() else (past[0]["conversation_id"] if past else None))
+    rows = ask_mod.conversation(cid, name) if cid else []
+    return templates.TemplateResponse(request, "_ask_body.html", {"rows": rows, "cid": cid if rows else "", "past": past,
+                                                                   "names": ai.share_names()})
 
 
 @router.post("/ask", response_class=HTMLResponse)
-def ask_post(request: Request, question: str = Form(...)):
-    """Answers one question; returns the answer card (HTMX puts it at the top of the list)."""
+def ask_post(request: Request, question: str = Form(...), conversation_id: str = Form(""), page: str = Form(""),
+             title: str = Form("")):
+    """Starts a question; returns its bubble (polling until the answer is ready) and the conversation id."""
     name = who(request)
     try:
-        qid, answer, lookups = ask_mod.ask(question, name)
-        row = {"question_id": qid, "asked_by": name, "question": question.strip(), "answer_md": answer,
-               "lookups": lookups, "asked_at": None, "cost_usd": None}
-        return templates.TemplateResponse(request, "_answer.html", {"r": row, "fresh": True})
+        context = ask_mod.describe_page(page, title)
+        qid, cid = ask_mod.start(question, name, int(conversation_id) if conversation_id.isdigit() else None, context)
+        r = ask_mod.get(qid, name)
+        return templates.TemplateResponse(request, "_ask_bubble.html", {"r": r, "cid": cid, "oob": True})
     except ai.AIError as e:
-        return templates.TemplateResponse(request, "_answer.html", {"r": {"question": question, "error": str(e)}, "fresh": True})
+        return templates.TemplateResponse(request, "_ask_bubble.html",
+                                          {"r": {"question": question, "status": "failed", "answer_md": str(e)}})
 
 
-@router.get("/brief", response_class=HTMLResponse)
-def brief_page(request: Request, error: str = ""):
-    briefs = brief_mod.latest("brief", 12)
-    return render(request, "brief.html", "brief", briefs=briefs.to_dict("records"), error=error)
+@router.get("/ask/q/{qid}", response_class=HTMLResponse)
+def ask_poll(request: Request, qid: int):
+    r = ask_mod.get(qid, who(request))
+    if r is None:
+        return Response(status_code=404)
+    return templates.TemplateResponse(request, "_ask_bubble.html", {"r": r})
+
+
+# ── Weekly brief (card on Recommendations) ────────────────────────────────────
+@router.get("/brief")
+def brief_page():
+    return RedirectResponse("/recommendations#brief", status_code=303)
 
 
 @router.post("/brief")
 def brief_write(request: Request):
     try:
         brief_mod.write(who(request))
-        return RedirectResponse("/brief", status_code=303)
+        return RedirectResponse("/recommendations?brief=open#brief", status_code=303)
     except ai.AIError as e:
-        return RedirectResponse("/brief?" + urlencode({"error": str(e)}), status_code=303)
+        return RedirectResponse("/recommendations?" + urlencode({"brief_error": str(e)}) + "#brief", status_code=303)
 
 
+@router.get("/brief/{text_id}/print", response_class=HTMLResponse)
+def brief_print(request: Request, text_id: int):
+    briefs = brief_mod.latest("brief", 60)
+    hit = briefs[briefs["text_id"] == text_id]
+    if hit.empty:
+        return Response("No such brief", status_code=404)
+    return templates.TemplateResponse(request, "brief_print.html", {"b": hit.iloc[0].to_dict()})
+
+
+# ── AI second look, season notes ──────────────────────────────────────────────
 @router.post("/recommendations/ai-review")
 def review_run(request: Request):
     try:

@@ -65,8 +65,6 @@
           {%- endmacro %}
           <li class="nav-section">Actions</li>
           {{ item("recommendations", "/recommendations", "ti-checklist", "Recommendations") }}
-          {% if feature("ai_ask") %}{{ item("ask", "/ask", "ti-sparkles", "Ask Stockwise") }}{% endif %}
-          {% if feature("ai_brief") %}{{ item("brief", "/brief", "ti-news", "Weekly brief") }}{% endif %}
           <li class="nav-section">Analytics</li>
           {{ item("overview", "/overview", "ti-chart-line", "Overview") }}
           {{ item("inventory", "/inventory", "ti-packages", "Inventory health") }}
@@ -123,6 +121,7 @@
     </main>
   </div>
 </div>
+{% if feature("ai_ask") and who %}{% include "_ask_panel.html" %}{% endif %}
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/js/tabler.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script src="/static/app.js?v={{ asset_version() }}"></script>

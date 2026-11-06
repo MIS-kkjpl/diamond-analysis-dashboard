@@ -4,6 +4,7 @@ user's name (see web/auth.py), and the live status shown on every page.
 """
 import json
 import math
+import re
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -132,7 +133,23 @@ def markdown(value):
         from markdown_it import MarkdownIt
         _MD = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable("table")
     from markupsafe import Markup
-    return Markup(_MD.render(value or ""))
+    # "Recommendation #12" and "#12" become links to the recommendation
+    value = re.sub(r"(?<![\w/\[&#])#(\d{1,6})\b", r"[#\1](/recommendations/\1)", value or "")
+    return Markup(_MD.render(value))
+
+
+def brief_line(body):
+    """The brief's one-line summary: the first line of text under its first heading."""
+    lines = [l.strip() for l in (body or "").splitlines()]
+    headed = any(l.startswith("#") for l in lines)
+    after_heading = False
+    for line in lines:
+        if line.startswith("#"):
+            after_heading = True
+            continue
+        if line and (after_heading or not headed):
+            return re.sub(r"[*_`]", "", line)[:300]
+    return ""
 
 
 def _feature(key):
@@ -153,8 +170,14 @@ def _ai_review():
     return review.latest()
 
 
-templates.env.filters.update(md=markdown)
-templates.env.globals.update(ai_text=_ai_text, ai_review=_ai_review)
+templates.env.filters.update(md=markdown, brief_line=brief_line)
+def _ai_briefs(n=12):
+    """The latest weekly briefs, newest first, as dicts."""
+    from kkj.ai import brief
+    return brief.latest("brief", n).to_dict("records")
+
+
+templates.env.globals.update(ai_text=_ai_text, ai_review=_ai_review, ai_briefs=_ai_briefs)
 templates.env.globals.update(feature=_feature)
 templates.env.globals.update(flatten=flatten, choice_label=lambda c: CHOICE_LABELS.get(str(c), str(c)))
 

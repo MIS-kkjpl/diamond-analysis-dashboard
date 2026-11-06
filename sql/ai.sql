@@ -55,6 +55,18 @@ CREATE TABLE IF NOT EXISTS ai.review_note (
 );
 CREATE INDEX IF NOT EXISTS ix_review_note_review ON ai.review_note (review_id);
 
+-- Ask Stockwise conversations: a question can follow up on earlier ones in the same conversation
+CREATE TABLE IF NOT EXISTS ai.conversation (
+    conversation_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    started_at      timestamptz NOT NULL DEFAULT now(),
+    started_by      text,
+    title           text
+);
+ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS conversation_id bigint REFERENCES ai.conversation (conversation_id);
+ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS page text;                        -- what the person was looking at
+ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'done';  -- running, done, failed
+CREATE INDEX IF NOT EXISTS ix_question_conversation ON ai.question (conversation_id, question_id);
+
 GRANT USAGE ON SCHEMA ai TO dashboard_app;
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA ai TO dashboard_app;
 GRANT UPDATE ON ai.question TO dashboard_app;     -- the answer is written after the question
