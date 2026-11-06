@@ -18,6 +18,7 @@
 <input type="hidden" name="{{ name }}" value="">
 <div class="filter-pick">
   <select name="{{ name }}" multiple class="form-select form-select-sm js-multi"
+          aria-label="{{ placeholder or ('Branches' if short else name ~ 's') }}"
           data-placeholder="{{ placeholder or ('All branches' if short else 'All ' ~ name ~ 's') }}">
     {% for o in options %}<option value="{{ o }}" {% if o in selected %}selected{% endif %}>{{ o.split(" / ")[0] if short else o }}</option>{% endfor %}
   </select>

@@ -34,7 +34,7 @@
     bar.className = "table-tools d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom";
     bar.innerHTML = `<div class="input-icon flex-grow-1" style="max-width: 18rem">
         <span class="input-icon-addon"><i class="ti ti-search"></i></span>
-        <input type="search" class="form-control form-control-sm" placeholder="Search this table"></div>
+        <input type="search" class="form-control form-control-sm" placeholder="Search this table" aria-label="Search this table"></div>
       <span class="small text-secondary count"></span>
       <button type="button" class="btn btn-sm btn-ghost-secondary ms-auto csv" title="Download as a spreadsheet (CSV)">
         <i class="ti ti-download"></i> CSV</button>`;
@@ -102,8 +102,9 @@
     if (window.TomSelect) {
       root.querySelectorAll("select.js-multi").forEach(sel => {
         if (sel.tomselect) return;
-        new TomSelect(sel, {plugins: ["remove_button"], maxOptions: 500, hidePlaceholder: false,
-                            placeholder: sel.dataset.placeholder || "All"});
+        const ts = new TomSelect(sel, {plugins: ["remove_button"], maxOptions: 500, hidePlaceholder: true,
+                                       placeholder: sel.dataset.placeholder || "All"});
+        if (ts.control_input && sel.getAttribute("aria-label")) ts.control_input.setAttribute("aria-label", sel.getAttribute("aria-label"));
       });
     }
   }

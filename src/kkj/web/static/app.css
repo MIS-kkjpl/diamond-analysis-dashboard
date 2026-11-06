@@ -75,7 +75,6 @@ body { background: var(--sw-bg); font-feature-settings: "tnum" 1, "cv11" 1; }   
 /* ── filters ── */
 .filter-bar { border-radius: var(--sw-radius); }
 .filter-bar .filter-pick { min-width: 12rem; max-width: 22rem; flex: 1 1 12rem; }
-.filter-bar .ts-wrapper.form-select { padding-top: .1rem; padding-bottom: .1rem; min-height: calc(1.5em + .5rem + 2px); }
 .filter-bar .ts-control { font-size: .8125rem; }
 .seg { display: inline-flex; background: #eef1f6; border-radius: 9px; padding: 3px; gap: 2px; flex-wrap: wrap; }
 .seg .btn-check + label { border: 0; border-radius: 7px; padding: .3rem .7rem; font-size: .8125rem; font-weight: 500;
@@ -168,3 +167,53 @@ th.sorted-desc::after { content: "↓"; opacity: .8; }
 
 /* other pop-up lists keep a solid surface too */
 .dropdown-menu { background: #fff; border: 1px solid #dfe3ea; border-radius: 10px; box-shadow: 0 10px 30px rgba(20, 26, 38, .12); }
+
+/* ── accessibility: text contrast at least 4.5:1 (WCAG AA) ── */
+:root { --sw-muted: #586073; }
+.text-secondary, .text-muted, .form-hint, .card-subtitle, .card-footer, .page-intro, .sw-section-sub,
+.sw-kpi .sw-kpi-label, .sw-kpi .sw-kpi-sub, .rec-meta, .rec-money .what { color: #586073 !important; }
+.nav-section { color: #646c7e; }
+.page-pretitle { color: #5d6577; }
+.sw-sidebar .nav-link-icon { color: #6b7385; }
+.badge.bg-blue-lt { color: #1a56b8 !important; }
+.badge.bg-azure-lt { color: #0f5d8c !important; }
+.badge.bg-green-lt { color: #1d7234 !important; }
+.badge.bg-teal-lt { color: #0e6b5c !important; }
+.badge.bg-yellow-lt { color: #7a5200 !important; }
+.badge.bg-orange-lt { color: #9a4208 !important; }
+.badge.bg-red-lt { color: #a8241a !important; }
+.badge.bg-purple-lt { color: #6a2fa0 !important; }
+.badge.bg-pink-lt { color: #a3245a !important; }
+.badge.bg-cyan-lt { color: #0b6779 !important; }
+.badge.bg-secondary-lt { color: #4a5266 !important; }
+.text-green { color: #1d7234 !important; }
+.text-orange { color: #9a4208 !important; }
+.text-red { color: #a8241a !important; }
+.rec-type { color: color-mix(in srgb, var(--rec-colour, #2a78d6) 62%, #000); }
+.btn-ghost-secondary { color: #4a5266; }
+.btn-outline-secondary { color: #3a4152; }
+.nav-tabs .nav-link { color: #4a5266; }
+.nav-tabs .nav-link.active { color: #141a26; }
+a.text-secondary:hover { color: #1b5bc5 !important; }
+
+/* ── no text smaller than ~11.5px: .small inside .small no longer shrinks twice ── */
+.small .small, small .small, .small small { font-size: inherit; }
+.badge { font-size: .75rem; }
+
+/* ── keyboard focus is always visible ── */
+a:focus-visible, button:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visible,
+.btn-check:focus-visible + label, summary:focus-visible {
+  outline: 2px solid #2a78d6; outline-offset: 2px; box-shadow: none; }
+.btn-success { --tblr-btn-bg: #1d7a35; --tblr-btn-border-color: #1d7a35; --tblr-btn-hover-bg: #186a2e; --tblr-btn-hover-border-color: #186a2e;
+               background-color: #1d7a35; border-color: #1d7a35; color: #fff; }
+.btn-success:hover { background-color: #186a2e; border-color: #186a2e; color: #fff; }
+.table thead th, .subheader { color: #586073; }
+.alert-info { background: #eef4fd; border-color: #cfe0f7; color: #1f3f6e; }
+.alert-info .ti, .alert-info b { color: #1a56b8; }
+/* one height for every control in a filter bar (plain inputs, dropdowns and searchable pickers) */
+.filter-bar .form-select-sm, .filter-bar .form-control-sm, #filters .form-select-sm, #filters .form-control-sm {
+  min-height: 2.125rem; font-size: .8125rem; }
+/* the searchable picker draws its box on the wrapper: same height and look as a plain dropdown */
+.filter-bar .ts-wrapper.form-select { min-height: 2.125rem; padding-top: .2rem; padding-bottom: .2rem; background-color: #fff; }
+.filter-bar .ts-wrapper .ts-control { min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.filter-bar .ts-wrapper.form-select { padding-left: .65rem; }

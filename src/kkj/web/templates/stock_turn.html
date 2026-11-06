@@ -14,23 +14,23 @@
   <p class="empty-subtitle text-secondary">Stock turn is worked out with each recommendation refresh.</p></div>
 {% else %}
 {% call flt.form("/stock-turn") %}
-  <div class="btn-group" role="group">
+  <div class="seg" role="group" aria-label="Show">
     <input type="radio" class="btn-check" name="view" id="view-group" value="group" {% if f.view == "group" %}checked{% endif %}>
-    <label class="btn btn-sm" for="view-group" title="Where recommendations are made">Brick groups</label>
+    <label for="view-group" title="Where recommendations are made">Brick groups</label>
     <input type="radio" class="btn-check" name="view" id="view-brick" value="brick" {% if f.view == "brick" %}checked{% endif %}>
-    <label class="btn btn-sm" for="view-brick" title="Fine tracking">Bricks</label>
+    <label for="view-brick" title="Fine tracking">Bricks</label>
   </div>
-  <select name="scope" class="form-select form-select-sm" style="width: auto">
+  <select name="scope" aria-label="Whole company or one branch" class="form-select form-select-sm" style="width: auto">
     {% for s in scopes %}<option value="{{ s }}" {% if s == f.scope %}selected{% endif %}>{{ s | short if s != "Company" else "Whole company" }}</option>{% endfor %}
   </select>
   {{ flt.toggles("group", groups, f.group, placeholder="All item groups") }}
   <input type="hidden" name="status" value="">
   <div class="filter-pick">
-    <select name="status" multiple class="form-select form-select-sm js-multi" data-placeholder="Any verdict">
+    <select name="status" multiple aria-label="Verdict" class="form-select form-select-sm js-multi" data-placeholder="Any verdict">
       {% for key, st in statuses.items() %}<option value="{{ key }}" {% if key in f.status %}selected{% endif %}>{{ st[0] }}</option>{% endfor %}
     </select>
   </div>
-  <input type="search" name="search" value="{{ f.search }}" placeholder="Find a brick, e.g. D RING" class="form-control form-control-sm"
+  <input type="search" name="search" aria-label="Find a brick" value="{{ f.search }}" placeholder="Find a brick, e.g. D RING" class="form-control form-control-sm"
          style="width: 14rem">
 {% endcall %}
 

@@ -56,7 +56,7 @@ def _latest_audit():
     for k in ("results", "exceptions"):
         if isinstance(a[k], str):
             a[k] = json.loads(a[k])
-    a["issues"] = [r for r in a["results"] if r["result"] != "PASS"]
+    a["issues"] = sorted((r for r in a["results"] if r["result"] != "PASS"), key=lambda r: (r["result"] != "FAIL", r["layer"]))
     a["layers"] = {}
     for r in a["results"]:
         a["layers"].setdefault(r["layer"], {"PASS": 0, "FAIL": 0, "INFO": 0})[r["result"]] += 1

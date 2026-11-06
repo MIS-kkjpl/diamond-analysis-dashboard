@@ -10,13 +10,13 @@
 <div id="page">
 {% call flt.form("/sales") %}
   <div class="d-flex align-items-center gap-2">
-    <input type="date" name="start" value="{{ f.start }}" class="form-control form-control-sm">
+    <input type="date" name="start" aria-label="From date" value="{{ f.start }}" class="form-control form-control-sm">
     <span class="text-secondary">to</span>
-    <input type="date" name="end" value="{{ f.end }}" class="form-control form-control-sm">
+    <input type="date" name="end" aria-label="To date" value="{{ f.end }}" class="form-control form-control-sm">
   </div>
   {{ flt.toggles("branch", branches, f.branch, short=True) }}
   {{ flt.toggles("group", groups, f.group, placeholder="All item groups") }}
-  <select name="salesperson" class="form-select form-select-sm" style="width: auto; max-width: 14rem">
+  <select name="salesperson" aria-label="Salesperson" class="form-select form-select-sm" style="width: auto; max-width: 14rem">
     <option value="">All salespeople</option>
     {% for code, name in sellers %}<option value="{{ code }}" {% if code == f.salesperson %}selected{% endif %}>{{ name }}</option>{% endfor %}
   </select>

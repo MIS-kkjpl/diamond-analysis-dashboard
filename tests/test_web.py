@@ -333,3 +333,11 @@ def test_stock_turn_shows_its_table_when_calculated():
     r = client.get("/stock-turn")
     if calculated:
         assert "Not calculated yet" not in r.text and "biggest changes first" in r.text
+
+
+@pytest.mark.parametrize("path", ["/recommendations", "/overview", "/inventory", "/sales", "/stock-turn", "/seasonality",
+                                  "/insights", "/checks", "/settings", "/lookup?q=D+TOPS"])
+def test_no_missing_value_leaks_onto_pages(path):
+    import re
+    page = re.sub("<[^>]+>", " ", client.get(path).text)
+    assert not re.search(r"(?<![A-Za-z])(nan|NaN|NaT|None)(?![A-Za-z])", page), path

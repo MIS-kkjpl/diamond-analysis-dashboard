@@ -26,8 +26,14 @@ def engine():
 
 
 def read(sql, **params):
+    """A query as a DataFrame. Text columns hold None for missing values: pandas' string type uses NaN, which
+    templates would print as 'nan'."""
     with engine().connect() as conn:
-        return pd.read_sql(text(sql), conn, params=params)
+        df = pd.read_sql(text(sql), conn, params=params)
+    for col in df.columns:
+        if pd.api.types.is_string_dtype(df[col]) and not pd.api.types.is_object_dtype(df[col]):
+            df[col] = df[col].astype(object).where(df[col].notna(), None)
+    return df
 
 
 _CACHE = {}

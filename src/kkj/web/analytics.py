@@ -359,10 +359,14 @@ def seasonality(request: Request, group: str = "Diamond Jewellery"):
     fests = cached(q.festivals)
     by_group = sn.monthly_index(daily, "item_class_group", rules["season_min_year_pcs"])
     by_group = by_group.sort_values("avg_year_pcs", ascending=False)
-    groups = by_group["item_class_group"].tolist()
+    # diamond groups first (this app's scope), then the others by pieces sold
+    diamond = [g for g in ("Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND")
+               if g in set(by_group["item_class_group"])]
+    groups = diamond + [g for g in by_group["item_class_group"] if g not in diamond]
     group = group if group in groups else groups[0]
     cols = [f"index_{m}" for m in sn.MONTHS]
-    top = by_group.head(4)
+    shown_groups = diamond[:3] + [g for g in groups if g not in diamond][:1]        # plus the biggest other, to compare
+    top = by_group.set_index("item_class_group").loc[shown_groups].reset_index()
     fig_groups = charts.season_lines(MONTH_NAMES, {r["item_class_group"]: [r[c] for c in cols]
                                                    for r in top.to_dict("records")})
     t_groups = charts.table(by_group[["item_class_group", "avg_year_pcs", "years"] + cols].rename(
@@ -379,7 +383,9 @@ def seasonality(request: Request, group: str = "Diamond Jewellery"):
     lift = sn.festival_lift(daily, fests, "item_class_group", rules["festival_days_before"],
                             rules["festival_days_after"], rules["season_min_year_pcs"])
     lift = lift[lift["item_class_group"].isin(groups[:6])]
-    t_lift = charts.table(lift.pivot_table(index="festival", columns="item_class_group", values="lift").reset_index(),
+    lift = lift.assign(order=lift["item_class_group"].map({g: i for i, g in enumerate(groups)})).sort_values("order")
+    t_lift = charts.table(lift.pivot_table(index="festival", columns="item_class_group", values="lift")
+                          .reindex(columns=[g for g in groups if g in set(lift["item_class_group"])]).reset_index(),
                           {g: "dec" for g in groups}) if len(lift) else None
 
     today = pd.Timestamp.today().normalize()
@@ -391,13 +397,15 @@ def seasonality(request: Request, group: str = "Diamond Jewellery"):
         outlook = festival_outlook(conn, rules, as_of, latest)
     t_outlook = None
     if len(outlook):
+        outlook = outlook[outlook["days_away"] >= 7]
+    if len(outlook):
         outlook = outlook.assign(target=lambda d: (rules["festival_stock_cover"] * d["expected_pcs"]).round(),
                                  day=lambda d: pd.to_datetime(d["day"]).dt.strftime("%d %b %Y"))
         outlook["short"] = (outlook["target"] - outlook["held_pcs"]).clip(lower=0)
         t_outlook = charts.table(outlook.sort_values(["day", "short"], ascending=[True, False])[
             ["festival", "day", "days_away", "item_name", "years", "past_window_pcs", "growth", "expected_pcs",
              "held_pcs", "target", "short"]],
-            {"past_window_pcs": "dec", "growth": "dec", "expected_pcs": "dec", "held_pcs": "num", "target": "num",
+            {"past_window_pcs": "num", "growth": "dec", "expected_pcs": "num", "held_pcs": "num", "target": "num",
              "short": "num", "days_away": "num"},
             {"item_name": "product", "past_window_pcs": "past festival sales (avg pcs)", "growth": "this year ×",
              "expected_pcs": "expected", "held_pcs": "held", "target": f"target ({rules['festival_stock_cover']:g}×)",
@@ -419,7 +427,7 @@ def seasonality(request: Request, group: str = "Diamond Jewellery"):
                      "expected_next_90_days": exp, "held": h["held"],
                      "months_of_cover": h["held"] / (exp / 3) if exp > 0 else np.nan})
     ahead = pd.DataFrame(rows).sort_values("expected_next_90_days", ascending=False) if rows else pd.DataFrame()
-    t_ahead = charts.table(ahead, {"sold_last_12m": "num", "next_90_days_share": "pct", "expected_next_90_days": "dec",
+    t_ahead = charts.table(ahead, {"sold_last_12m": "num", "next_90_days_share": "pct", "expected_next_90_days": "num",
                                    "held": "num", "months_of_cover": "dec"},
                            {"next_90_days_share": "share of a year in the next 90 days"}) if len(ahead) else None
 
@@ -428,5 +436,5 @@ def seasonality(request: Request, group: str = "Diamond Jewellery"):
               + ", ".join(f"{y}-{str(y + 1)[2:]}" for y in years) + f" · {daily['pcs'].sum():,.0f} pieces, all product groups")
     return render(request, "seasonality.html", "seasonality", empty=False, rules=rules, period=period,
                   fig_groups=fig_groups, t_groups=t_groups, groups=groups, f={"group": group}, t_products=t_products,
-                  t_lift=t_lift, upcoming=upcoming.to_dict("records"), t_outlook=t_outlook, t_ahead=t_ahead,
+                  t_lift=t_lift, upcoming=upcoming.astype(object).where(upcoming.notna(), None).to_dict("records"), t_outlook=t_outlook, t_ahead=t_ahead,
                   as_of=as_of)

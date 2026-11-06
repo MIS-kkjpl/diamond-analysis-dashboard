@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · Stockwise</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%232a78d6%27/%3E%3Cpath d=%27M16 7l9 5-9 5-9-5z%27 fill=%27white%27/%3E%3Cpath d=%27M7 16l9 5 9-5M7 20l9 5 9-5%27 stroke=%27white%27 stroke-width=%272%27 fill=%27none%27/%3E%3C/svg%3E">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="/static/app.css?v={{ asset_version() }}">
@@ -17,7 +18,7 @@
     </div>
     <form class="card card-md" method="post" action="/login" autocomplete="on">
       <div class="card-body">
-        <h2 class="h2 text-center mb-4">Sign in</h2>
+        <h1 class="h2 text-center mb-4">Sign in</h1>
         {% if error %}<div class="alert alert-danger" role="alert"><i class="ti ti-alert-circle"></i> {{ error }}</div>{% endif %}
         <input type="hidden" name="next" value="{{ next }}">
         <div class="mb-3">

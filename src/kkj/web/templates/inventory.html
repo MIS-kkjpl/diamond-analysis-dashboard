@@ -13,7 +13,7 @@
   {{ flt.toggles("group", groups, f.group, placeholder="All item groups") }}
   <div class="d-flex align-items-center gap-2">
     <span class="small text-secondary">Old means over</span>
-    <input type="number" name="old_days" value="{{ f.old_days }}" min="90" max="1095" step="30"
+    <input type="number" name="old_days" aria-label="Old means over this many days" value="{{ f.old_days }}" min="90" max="1095" step="30"
            class="form-control form-control-sm" style="width: 6rem"><span class="small text-secondary">days</span>
   </div>
 {% endcall %}
