@@ -20,11 +20,11 @@ are irregular), not the mean of the snapshots.
 import numpy as np
 import pandas as pd
 
+
 AGE_BUCKETS = [(0, 90, "0–90 d"), (91, 180, "91–180 d"), (181, 365, "181–365 d"),
                (366, 730, "1–2 yr"), (731, None, "2 yr +")]
 PRICE_BANDS = [(0, 50_000, "< 50K"), (50_000, 100_000, "50K–1L"), (100_000, 300_000, "1L–3L"),
                (300_000, 500_000, "3L–5L"), (500_000, None, "5L +")]
-CUSTOMER_GROUP = "Customer Diamond"          # customers' own items: never company stock
 
 
 def value(df):
@@ -53,11 +53,6 @@ def location_type(location):
     return np.select([loc.str.contains("approval"), loc.str.contains("transit"),
                       loc.str.contains("repair"), loc.str.contains("counter|branch|mo diamond")],
                      ["Approval", "In transit", "Repair", "Counter"], default="Other")
-
-
-def company_stock(stock):
-    """Stock rows that are the company's (customers' own items excluded)."""
-    return stock[stock["item_class_group"] != CUSTOMER_GROUP]
 
 
 def net_sales(lines):

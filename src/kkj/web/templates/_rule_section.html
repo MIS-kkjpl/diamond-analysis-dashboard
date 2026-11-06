@@ -28,6 +28,13 @@
             <select id="rule-{{ r.key }}" class="form-select form-select-sm" name="{{ r.key }}" style="max-width: 16rem">
               {% for c in r.choices %}<option value="{{ c }}" {% if c == v %}selected{% endif %}>{{ choice_label(c) }}</option>{% endfor %}
             </select>
+          {% elif r.key == "excluded_products" %}
+            <div class="filter-pick" style="max-width: 32rem">
+              <select name="{{ r.key }}" multiple class="form-select form-select-sm js-multi" aria-label="{{ r.label }}"
+                      data-placeholder="None: type to search products">
+                {% for c in s.product_names %}<option value="{{ c }}" {% if c in v %}selected{% endif %}>{{ c }}</option>{% endfor %}
+              </select>
+            </div>
           {% elif r.choices or r.key == "transfer_excluded_branches" %}
             <div class="d-flex flex-wrap gap-2">
               {% for c in (r.choices if r.choices else s.branch_names) %}

@@ -5,7 +5,7 @@ engine (kkj.brain.run). Each takes an open SQLAlchemy connection and returns a D
 import pandas as pd
 from sqlalchemy import text
 
-from kkj.scope import DIAMOND_GROUPS
+from kkj.scope import DIAMOND_GROUPS, excluded, own_goods
 
 STOCK_COLUMNS = """snapshot_date, barcode, label_no, branch, location, set_item_barcode, item_class_group, item_name,
     category, supplier, pcs, gross_wt, net_wt, dia_wt, dia_amt, rate, item_amt, taxable_amount, age_days,
@@ -13,30 +13,34 @@ STOCK_COLUMNS = """snapshot_date, barcode, label_no, branch, location, set_item_
 
 
 def read(conn, sql, **params):
+    """A query as a DataFrame. Queries using kkj.scope.own_goods() get the current exclusions as parameters."""
+    if ":x_groups" in sql:
+        params["x_groups"], params["x_products"] = excluded(conn)
     return pd.read_sql(text(sql), conn, params=params)
 
 
 def stock_latest(conn):
-    """Every label in the latest production snapshot (erp.stock_snapshot)."""
+    """Every label that counts in the latest production snapshot (erp.stock_snapshot): exclusions left out."""
     return read(conn, f"""SELECT {STOCK_COLUMNS} FROM erp.stock_snapshot
-                         WHERE snapshot_date = (SELECT max(snapshot_date) FROM erp.stock_snapshot)""")
+                         WHERE snapshot_date = (SELECT max(snapshot_date) FROM erp.stock_snapshot) AND {own_goods()}""")
 
 
 def stock_on(conn, snapshot_date):
-    return read(conn, f"SELECT {STOCK_COLUMNS} FROM erp.stock_snapshot WHERE snapshot_date = :d", d=snapshot_date)
+    return read(conn, f"SELECT {STOCK_COLUMNS} FROM erp.stock_snapshot WHERE snapshot_date = :d AND {own_goods()}",
+                d=snapshot_date)
 
 
 def stock_series(conn):
     """Company stock totals per date, best source per date (ERP daily > ERP as-on > legacy file)."""
-    df = read(conn, """
+    df = read(conn, f"""
         SELECT snapshot_date, 'ERP daily' AS source, 1 AS rank,
                sum(coalesce(taxable_amount, item_amt)) AS value, sum(pcs) AS pcs, count(*) AS labels
-        FROM erp.stock_snapshot WHERE item_class_group <> 'Customer Diamond' GROUP BY 1
+        FROM erp.stock_snapshot WHERE {own_goods()} GROUP BY 1
         UNION ALL
         SELECT snapshot_date, CASE source WHEN 'erp_asof' THEN 'ERP as-on' ELSE 'Legacy file' END,
                CASE source WHEN 'erp_asof' THEN 2 ELSE 3 END,
                sum(coalesce(taxable_amount, item_amt)), sum(pcs), count(*)
-        FROM stock_hist.snapshot WHERE item_class_group <> 'Customer Diamond' GROUP BY 1, 2, 3""")
+        FROM stock_hist.snapshot WHERE {own_goods()} GROUP BY 1, 2, 3""")
     df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
     df = df.sort_values(["snapshot_date", "rank"]).drop_duplicates("snapshot_date")
     return df.drop(columns="rank").reset_index(drop=True)
@@ -47,7 +51,7 @@ def stock_history(conn, date_from):
 
     value is on the common basis (taxable, else item_amt); age = snapshot date - label date.
     """
-    df = read(conn, """
+    df = read(conn, f"""
         WITH all_rows AS (
             SELECT snapshot_date, 1 AS rank, barcode, branch, location, item_class_group, item_name, supplier, pcs,
                    coalesce(taxable_amount, item_amt) AS value, coalesce(label_dt, labeling_date) AS label_date
@@ -59,7 +63,7 @@ def stock_history(conn, date_from):
             FROM stock_hist.snapshot WHERE snapshot_date >= :d),
         best AS (SELECT snapshot_date, min(rank) AS rank FROM all_rows GROUP BY 1)
         SELECT a.* FROM all_rows a JOIN best USING (snapshot_date, rank)
-        WHERE a.item_class_group <> 'Customer Diamond'""", d=date_from)
+        WHERE {own_goods('a')}""", d=date_from)
     df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
     df["age"] = (df["snapshot_date"] - pd.to_datetime(df["label_date"])).dt.days
     df["source"] = df.pop("rank").map({1: "ERP daily", 2: "ERP as-on", 3: "Legacy file"})
@@ -101,13 +105,14 @@ def brick_stock(conn, dates):
     asof = [d.date() for d in best.loc[best["rank"] == 2, "snapshot_date"]]
     legacy = [d.date() for d in best.loc[best["rank"] == 3, "snapshot_date"]]
     df = read(conn, f"""
-        SELECT {BRICK_STOCK} FROM erp.stock_snapshot WHERE snapshot_date = ANY(:erp)
+        SELECT {BRICK_STOCK} FROM erp.stock_snapshot WHERE snapshot_date = ANY(:erp) AND {own_goods()}
         UNION ALL
         SELECT {BRICK_STOCK} FROM stock_hist.snapshot
-        WHERE (source = 'erp_asof' AND snapshot_date = ANY(:asof)) OR (source = 'csv_legacy' AND snapshot_date = ANY(:legacy))""",
+        WHERE ((source = 'erp_asof' AND snapshot_date = ANY(:asof)) OR (source = 'csv_legacy' AND snapshot_date = ANY(:legacy)))
+          AND {own_goods()}""",
               erp=erp, asof=asof, legacy=legacy)
     df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
-    return df[df["item_class_group"] != "Customer Diamond"]
+    return df
 
 
 def set_history(conn, set_ids):
@@ -150,7 +155,7 @@ def brick_sales(conn, date_from):
             FROM sales.v_sales_line v
             LEFT JOIN sales.v_sales_line o ON v.pcs < 0 AND o.bill_no = v.orig_bill_no
                  AND o.inventory_ref_code = v.inventory_ref_code AND o.pcs > 0
-            WHERE v.sale_date >= :d AND v.item_class_group <> 'Customer Diamond')
+            WHERE v.sale_date >= :d AND {own_goods('v')})
         SELECT l.sale_date, l.branch, l.bill_no, l.label_barcode AS barcode,
                coalesce(ls.set_item_barcode, l.set_item_barcode) AS set_item_barcode,
                coalesce(s.item_class_group, l.item_class_group) AS item_class_group,
@@ -180,7 +185,7 @@ def sales_lines(conn, date_from):
                v.taxable_amount, v.age_days_at_sale, v.inventory_ref_code, v.orig_bill_no, v.orig_sale_date,
                v.sales_return_done
         FROM sales.v_sales_line v LEFT JOIN label_set ls ON ls.barcode = v.barcode
-        WHERE v.sale_date >= :d""", d=date_from)
+        WHERE v.sale_date >= :d AND {own_goods('v')}""", d=date_from)
     df["sale_date"] = pd.to_datetime(df["sale_date"])
     return df
 
@@ -188,8 +193,8 @@ def sales_lines(conn, date_from):
 def hist_daily(conn):
     """Pieces sold per day, item group and product over the five-year history (sales.hist_line), diamond groups
     only (kkj.scope): the history holds gold and silver too."""
-    df = read(conn, """SELECT sale_date, item_class_group, item_name, sum(pcs) AS pcs, sum(item_amt) AS value
-                       FROM sales.hist_line WHERE item_class_group = ANY(:g) GROUP BY 1, 2, 3""",
+    df = read(conn, f"""SELECT sale_date, item_class_group, item_name, sum(pcs) AS pcs, sum(item_amt) AS value
+                       FROM sales.hist_line WHERE item_class_group = ANY(:g) AND {own_goods()} GROUP BY 1, 2, 3""",
               g=DIAMOND_GROUPS)
     df["sale_date"] = pd.to_datetime(df["sale_date"])
     # the exports spell some names differently by year ('GOLD' / 'Gold'): one spelling per name, the commonest

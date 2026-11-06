@@ -17,7 +17,7 @@ def fy_start(day):
 
 def headline(conn, aged_days=365):
     """Stock, sales, turn and ageing as of the latest snapshot, plus the series behind the charts."""
-    stock = m.company_stock(q.stock_latest(conn))
+    stock = q.stock_latest(conn)
     if stock.empty:
         return None
     as_of = pd.Timestamp(stock["snapshot_date"].iloc[0])

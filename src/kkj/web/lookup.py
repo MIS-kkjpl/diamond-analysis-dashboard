@@ -47,7 +47,7 @@ def _piece(barcode):
 
 
 def _product(item):
-    stock = m.company_stock(cached(q.stock_latest))
+    stock = cached(q.stock_latest)
     stock = stock[stock["item_name"].str.casefold() == item.casefold()]
     if stock.empty:
         return None

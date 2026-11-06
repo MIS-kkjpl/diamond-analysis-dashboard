@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import text
 
 from kkj import rules as rules_mod
-from kkj.web.common import engine, read, render, templates, who
+from kkj.web.common import clear_cache, engine, read, render, templates, who
 
 router = APIRouter(prefix="/settings")
 SECTIONS = list(dict.fromkeys(r.section for r in rules_mod.RULES))
@@ -26,7 +26,13 @@ def _section_ctx(section, saved=None, error=None):
     with engine().connect() as conn:
         current = rules_mod.load(conn)
     return {"section": section, "rules": [r for r in rules_mod.RULES if r.section == section], "current": current,
-            "branch_names": _branch_names(), "saved": saved, "error": error}
+            "branch_names": _branch_names(), "product_names": _product_names(), "saved": saved, "error": error}
+
+
+def _product_names():
+    """Every product name in the stock and sales loads (for the exclusions picker)."""
+    return read("""SELECT item_name FROM erp.stock_snapshot WHERE item_name IS NOT NULL
+                   UNION SELECT item_name FROM sales.v_sales_line WHERE item_name IS NOT NULL ORDER BY 1""")["item_name"].tolist()
 
 
 def _plain(df):
@@ -170,7 +176,7 @@ def _parse(rule, form):
         if form[key] not in rule.choices:
             raise ValueError(f"{rule.label}: choose one of {', '.join(rule.choices)}")
         return form[key]
-    if rule.choices or key == "transfer_excluded_branches":
+    if rule.choices or key in ("transfer_excluded_branches", "excluded_products"):
         return [v for v in form.getlist(key) if v]
     items = [x.strip() for x in form.get(key, "").split(",") if x.strip()]
     if rule.default and all(isinstance(d, (int, float)) for d in rule.default):
@@ -200,6 +206,8 @@ async def save_rules(request: Request, section: str):
         return templates.TemplateResponse(request, "_rule_section.html", {"s": _section_ctx(section, error=str(e)), "who": name})
     with engine().begin() as conn:
         changed = [k for k, v in values.items() if rules_mod.save(conn, k, v, name)]
+    if changed:
+        clear_cache()                     # cached reads depend on settings (e.g. exclusions)
     msg = ("Saved: " + ", ".join(rules_mod.BY_KEY[k].label for k in changed)) if changed else "No changes."
     return templates.TemplateResponse(request, "_rule_section.html", {"s": _section_ctx(section, saved=msg), "who": name})
 

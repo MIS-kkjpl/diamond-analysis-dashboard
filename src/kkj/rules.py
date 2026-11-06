@@ -26,6 +26,15 @@ class Rule:
 
 
 RULES = [
+    # ── scope (kkj.scope): what never counts as stock or sales ──
+    Rule("excluded_groups", "Scope", "Leave out these item groups", ["Customer Diamond"], "",
+         "Never counted as stock or sales anywhere: customers' own items (repairs, exchanges), or any group that is "
+         "not the company's merchandise. They stay in the data loads. Recommendations follow on the next refresh.",
+         "list", choices=("Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND", "Broken Dia Jew",
+                          "Customer Diamond")),
+    Rule("excluded_products", "Scope", "Leave out these products", [], "",
+         "Products (item names) that should not count, e.g. a niche or non-merchandise line. Same effect as above.",
+         "list"),
     # ── targets ──
     Rule("overstock_days", "Targets", "Overstocked above", 365, "days of stock", "A group of similar pieces at a "
          "branch holding more than this many days of sales at its current rate is overstocked.", "int", min=30, max=1460),

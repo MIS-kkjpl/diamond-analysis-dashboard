@@ -32,7 +32,7 @@ def _short(b):
 def inventory(request: Request, branch: list[str] = Query(default=[]), group: list[str] = Query(default=[]),
               old_days: int = 365):
     branch, group = [b for b in branch if b], [g for g in group if g]
-    stock = m.company_stock(cached(q.stock_latest)).copy()
+    stock = cached(q.stock_latest).copy()
     all_branches = sorted(stock["branch"].dropna().unique())
     all_groups = sorted(stock["item_class_group"].dropna().unique())
     if branch:
@@ -200,7 +200,7 @@ def sales(request: Request, start: str = "", end: str = "", branch: list[str] = 
 @router.get("/insights", response_class=HTMLResponse)
 def insights(request: Request, group: list[str] = Query(default=["Diamond Jewellery"])):
     rules = _rules()
-    latest = m.company_stock(cached(q.stock_latest))
+    latest = cached(q.stock_latest)
     as_of = pd.Timestamp(latest["snapshot_date"].iloc[0])
     history = ins.one_per_week(cached(q.stock_history, (as_of - pd.DateOffset(months=rules["insight_months"])).date()))
     all_groups = sorted(history["item_class_group"].dropna().unique())
@@ -417,7 +417,7 @@ def seasonality(request: Request, group: str = "Diamond Jewellery"):
 
     today = pd.Timestamp.today().normalize()
     upcoming = fests[(fests["day"] >= today)].head(8).assign(days_away=lambda d: (d["day"] - today).dt.days)
-    latest = m.company_stock(cached(q.stock_latest))
+    latest = cached(q.stock_latest)
     latest = latest.assign(value=m.value(latest))
     as_of = pd.Timestamp(latest["snapshot_date"].iloc[0])
     with engine().connect() as conn:

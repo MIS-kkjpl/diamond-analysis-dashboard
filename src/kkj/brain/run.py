@@ -135,7 +135,7 @@ def save_brick_turns(conn, table, as_of, run_id):
 
 def candidates(conn, rules):
     """Every generator over the current data; returns (candidates, stock_as_of, sales_to, brick turn table)."""
-    stock = m.company_stock(q.stock_latest(conn))
+    stock = q.stock_latest(conn)
     if stock.empty:
         return [], None, None, None
     stock = stock.assign(value=m.value(stock))
