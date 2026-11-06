@@ -313,3 +313,26 @@ body.sw-ask-open .sw-ask-fab { display: none; }
 @keyframes sw-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .sw-typing span, .sw-writing > *:last-child::after, .sw-steps li { animation: none; } }
 .sw-thinking { margin-top: .4rem; font-size: .78rem; font-style: italic; color: #6b6585; line-height: 1.4; animation: sw-fade .3s ease-out; }
+
+/* Ask panel placement. Wide screens: the page makes room for the panel (both stay usable side by side).
+   Narrower screens: the panel sits over a dimmed, frozen page; clicking the dimmed part closes it. */
+.sw-ask .offcanvas-body { overscroll-behavior: contain; }
+.sw-ask-backdrop { position: fixed; inset: 0; z-index: 1044; background: rgba(20, 26, 38, .38); opacity: 0;
+  pointer-events: none; transition: opacity .2s ease; }
+@media (min-width: 1440px) {
+  .page-wrapper { transition: margin-right .25s ease; }
+  body.sw-ask-open .page-wrapper { margin-right: 28rem; }
+  .sw-ask.offcanvas { box-shadow: none; }
+}
+@media (max-width: 1439.98px) {
+  body.sw-ask-open { overflow: hidden; }
+  body.sw-ask-open .sw-ask-backdrop { opacity: 1; pointer-events: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .page-wrapper, .sw-ask-backdrop { transition: none; } }
+@media (min-width: 1440px) {
+  /* docked: the page is narrower, so keep the top bar on one line and KPI figures unbroken */
+  body.sw-ask-open .lookup-box { flex: 1 1 10rem; min-width: 8rem; max-width: 18rem; }
+  body.sw-ask-open .topbar .container-xl { flex-wrap: nowrap !important; }
+  body.sw-ask-open .sw-user-name { display: none !important; }
+  body.sw-ask-open .sw-kpi-value { font-size: clamp(1.15rem, 1.6vw, 1.6rem); white-space: nowrap; }
+}

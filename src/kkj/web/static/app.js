@@ -114,10 +114,15 @@
   document.addEventListener("htmx:afterSettle", e => enhance(e.target));
 })();
 
-/* Ask Stockwise side panel (templates/_ask_panel.html): loads its conversation the first time it opens, stays open
-   across page changes (remembered for this browser tab), sends the current page with each question, Enter sends. */
+/* Ask Stockwise side panel (templates/_ask_panel.html): loads its conversation the first time it opens, sends the
+   current page with each question, Enter sends.
+   Wide screens (DOCK and up): the page makes room for the panel and stays usable beside it; the panel stays open
+   across page changes (remembered for this browser tab). Narrower screens: the panel sits over a dimmed, frozen
+   page (click the dimmed part to close) and doesn't reopen on its own. Scrolling the chat never scrolls the page. */
 (function () {
   const KEY = "swAskOpen";
+  const DOCK = window.matchMedia("(min-width: 1440px)");
+  function chartsResize() { setTimeout(() => window.dispatchEvent(new Event("resize")), 260); }
   function remember(v) { try { v ? sessionStorage.setItem(KEY, "1") : sessionStorage.removeItem(KEY); } catch (e) {} }
   function wasOpen() { try { return sessionStorage.getItem(KEY) === "1"; } catch (e) { return false; } }
   function scrollDown() { const b = document.getElementById("ask-body"); if (b) b.scrollTop = b.scrollHeight; }
@@ -127,16 +132,39 @@
     if (!panel) return;
     const form = document.getElementById("ask-form"), box = document.getElementById("ask-question");
     let loaded = false;
+    const backdrop = document.createElement("div");
+    backdrop.className = "sw-ask-backdrop";
+    backdrop.setAttribute("aria-hidden", "true");
+    document.body.appendChild(backdrop);
+    const close = () => (window.bootstrap && bootstrap.Offcanvas)
+      ? bootstrap.Offcanvas.getOrCreateInstance(panel).hide() : panel.querySelector(".btn-close").click();
+    backdrop.addEventListener("click", close);
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && panel.classList.contains("show")) close(); });
+
     panel.addEventListener("show.bs.offcanvas", () => {
       document.body.classList.add("sw-ask-open");
       if (!loaded) { loaded = true; htmx.trigger(document.body, "sw-ask-load"); }
       remember(true);
+      if (DOCK.matches) chartsResize();
     });
     panel.addEventListener("shown.bs.offcanvas", () => { scrollDown(); box.focus(); });
-    panel.addEventListener("hidden.bs.offcanvas", () => { document.body.classList.remove("sw-ask-open"); remember(false); });
+    panel.addEventListener("hidden.bs.offcanvas", () => {
+      document.body.classList.remove("sw-ask-open");
+      remember(false);
+      if (DOCK.matches) chartsResize();
+    });
+    DOCK.addEventListener("change", () => { if (panel.classList.contains("show")) chartsResize(); });
 
-    // reopen without animation if it was open on the previous page
-    if (wasOpen() || new URLSearchParams(location.search).get("ask") === "1") {
+    // the chat scrolls on its own: at its top or bottom, and over the header or the question box, the page stays put
+    panel.addEventListener("wheel", e => {
+      const area = e.target.closest("#ask-body, textarea, .dropdown-menu");
+      if (!area) { e.preventDefault(); return; }
+      const up = e.deltaY < 0, down = e.deltaY > 0;
+      if ((up && area.scrollTop <= 0) || (down && area.scrollTop + area.clientHeight >= area.scrollHeight - 1)) e.preventDefault();
+    }, {passive: false});
+
+    // reopen without animation if it was open on the previous page (only where the page stays usable beside it)
+    if ((wasOpen() && DOCK.matches) || new URLSearchParams(location.search).get("ask") === "1") {
       panel.classList.add("show-instant");
       const fab = document.querySelector(".sw-ask-fab");
       if (window.bootstrap && bootstrap.Offcanvas) bootstrap.Offcanvas.getOrCreateInstance(panel).show();
