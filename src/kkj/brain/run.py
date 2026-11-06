@@ -149,7 +149,10 @@ def candidates(conn, rules):
 
     actions = gen.transfers_and_understock(stock, sales, rules, showrooms)
     moving = {p["barcode"] for a in actions if a["kind"] == "transfer" for p in a["pieces"]}
-    actions += gen.offers(stock, sales, rules, showrooms, exclude_barcodes=moving)
+    existing = {k for (k,) in conn.execute(text("""SELECT action_key FROM brain.action
+                                                   WHERE kind = 'offer' AND status IN ('open', 'approved', 'snoozed')"""))}
+    actions += gen.hold_markdowns(gen.offers(stock, sales, rules, showrooms, exclude_barcodes=moving),
+                                  q.festivals(conn), as_of, rules, existing)
     actions += gen.liquidation(stock, rules)
     actions += gen.discounts(stock, sales, rules, people)
 

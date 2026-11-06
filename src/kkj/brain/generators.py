@@ -171,9 +171,49 @@ def transfers_and_understock(stock, sales, rules, showrooms):
 
 # ── aged stock: offers ────────────────────────────────────────────────────────
 def suggested_discount(age_days, rules):
-    """Deeper for older pieces: 5% up to a year, 10% to two years, then the maximum allowed."""
-    cap = rules["max_offer_discount_pct"]
-    return min(cap, 5 if age_days <= 365 else 10 if age_days <= 730 else cap)
+    """Deeper for older pieces, from the schedule in the rules (markdown_age_steps / markdown_pct_steps), never above
+    the largest discount allowed. Default: 5% up to a year, 10% to two years, 15% after."""
+    steps = [float(a) for a in rules["markdown_age_steps"]]
+    pcts = [float(p) for p in rules["markdown_pct_steps"]]
+    i = sum(age_days > a for a in steps)
+    return min(rules["max_offer_discount_pct"], pcts[min(i, len(pcts) - 1)])
+
+
+def festival_hold(festivals, as_of, rules):
+    """(festival names, last festival day) a markdown hold is on for, or None: from markdown_hold_days before a festival
+    until festival_days_after it. Overlapping festivals (Dhanteras and Diwali) make one hold that lasts to the last."""
+    hold = int(rules.get("markdown_hold_days", 0) or 0)
+    if not hold or festivals is None or festivals.empty:
+        return None
+    as_of = pd.Timestamp(as_of).normalize()
+    after = int(rules.get("festival_days_after", 3))
+    live = festivals[(festivals["day"] - pd.Timedelta(days=hold) <= as_of)
+                     & (as_of <= festivals["day"] + pd.Timedelta(days=after))].sort_values("day")
+    if live.empty:
+        return None
+    names = list(dict.fromkeys(live["name"]))
+    return (" and ".join([", ".join(names[:-1]), names[-1]] if len(names) > 1 else names), pd.Timestamp(live["day"].max()))
+
+
+def hold_markdowns(actions, festivals, as_of, rules, existing_keys):
+    """Around a festival: drop new markdown recommendations; keep ones already raised, noted as on hold and lower in
+    the list (so they don't vanish and come back after the festival)."""
+    hold = festival_hold(festivals, as_of, rules)
+    if not hold:
+        return actions
+    name, day = hold
+    until = (day + pd.Timedelta(days=int(rules.get("festival_days_after", 3)))).strftime("%d %b")
+    kept = []
+    for a in actions:
+        if a["kind"] != "offer":
+            kept.append(a)
+        elif a["action_key"] in existing_keys:
+            a["summary"] = (f"On hold for {name}: aged pieces often sell at full price around a festival, "
+                            f"so consider waiting until after {until}. " + a["summary"])
+            a["priority"] = round(a["priority"] * 0.3, 4)
+            a["evidence"] = {**a["evidence"], "festival hold": f"{name}; no new markdowns until after {until}"}
+            kept.append(a)
+    return kept
 
 
 def offers(stock, sales, rules, showrooms, exclude_barcodes=()):

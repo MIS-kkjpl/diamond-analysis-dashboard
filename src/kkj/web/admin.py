@@ -198,6 +198,14 @@ async def save_rules(request: Request, section: str):
     form = await request.form()
     try:
         values = {r.key: _parse(r, form) for r in rules_mod.RULES if r.section == section}
+        if "markdown_age_steps" in values or "markdown_pct_steps" in values:
+            ages = values.get("markdown_age_steps", rules_mod.BY_KEY["markdown_age_steps"].default)
+            pcts = values.get("markdown_pct_steps", rules_mod.BY_KEY["markdown_pct_steps"].default)
+            if len(pcts) != len(ages) + 1:
+                raise ValueError(f"Markdown percentages: give one more than there are age steps ({len(ages) + 1} for "
+                                 f"{len(ages)} steps), youngest first")
+            if any(p < 0 or p > 60 for p in pcts) or any(a <= 0 for a in ages):
+                raise ValueError("Markdown steps: ages above 0 days, percentages between 0 and 60")
         for r in rules_mod.RULES:
             if r.key in values and r.min is not None and isinstance(values[r.key], (int, float)) \
                     and not (r.min <= values[r.key] <= (r.max if r.max is not None else float("inf"))):

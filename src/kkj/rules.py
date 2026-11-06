@@ -44,6 +44,12 @@ RULES = [
          "Aged pieces become candidates for an offer, a transfer or clearance.", "int", min=90, max=1460),
     Rule("max_offer_discount_pct", "Targets", "Largest discount the system may suggest", 15.0, "%",
          "Offer suggestions never go above this. Today the top 5% of discounts are 14.5% and above.", min=0, max=60),
+    Rule("markdown_age_steps", "Targets", "Markdown age steps", [365, 730], "days since labelling",
+         "Where the suggested markdown steps up. With 365, 730 and percentages 5, 10, 15: up to a year 5%, one to two "
+         "years 10%, over two years 15%. Only pieces older than 'A piece is aged after' get a markdown at all.", "list"),
+    Rule("markdown_pct_steps", "Targets", "Markdown percentages", [5, 10, 15], "%",
+         "The markdown for each age step, youngest first: one more than there are age steps. Never above the "
+         "largest discount above.", "list"),
     # ── how demand is measured ──
     Rule("demand_window_days", "Demand", "Selling rate measured over the last", 180, "days",
          "The window for each group's selling rate. Longer = steadier, slower to react.", "int", min=30, max=730),
@@ -115,6 +121,10 @@ RULES = [
          min=3, max=60),
     Rule("festival_days_after", "Seasonality", "Festival buying ends", 3, "days after the festival", "", "int",
          min=0, max=15),
+    Rule("markdown_hold_days", "Seasonality", "Hold markdowns before a festival", 21, "days before the festival",
+         "From this many days before a festival (Settings > Festivals) until festival buying ends, no new markdowns are "
+         "suggested: aged pieces often sell at full price then. Markdowns already raised stay, marked as on hold and "
+         "lower in the list. 0 = no hold.", "int", min=0, max=60),
     Rule("festival_lead_days", "Seasonality", "Prepare for a festival from", 90, "days ahead",
          "Festival stock recommendations appear this far ahead (and stop 7 days before, when it is too late "
          "to buy).", "int", min=14, max=180),

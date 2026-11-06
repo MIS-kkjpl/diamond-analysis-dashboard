@@ -550,3 +550,10 @@ def test_deleting_a_chat_deletes_its_business_notes(monkeypatch):
             c.execute(text("DELETE FROM ai.conversation WHERE conversation_id IN (:a, :b)"), {"a": mine, "b": other})
             c.execute(text("DELETE FROM config.business_note WHERE note LIKE 'pytest note%'"))
             c.execute(text("DELETE FROM config.change_log WHERE table_name = 'business_note' AND changed_by = 'pytest'"))
+
+
+def test_markdown_schedule_must_fit_together():
+    r = client.post("/settings/rules/Targets", data={
+        "overstock_days": "365", "understock_days": "60", "aged_days": "365", "max_offer_discount_pct": "15",
+        "markdown_age_steps": "365, 730", "markdown_pct_steps": "5, 10"}, headers={"hx-request": "true"})
+    assert "one more than there are age steps" in r.text
