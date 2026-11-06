@@ -154,7 +154,9 @@ def sales(request: Request, start: str = "", end: str = "", branch: list[str] = 
              "ti-arrow-back-up", "red"),
             ("Average sale value", money(gross / sold["pcs"].sum()) if sold["pcs"].sum() else "–", "per piece", "ti-currency-rupee", "blue"),
             ("Median days to sell", f"{sold['age_days_at_sale'].median():,.0f} days", "label date → sale", "ti-clock", "azure"),
-            ("Bills", f"{sold['bill_no'].nunique():,}", "", "ti-file-invoice", "purple")]
+            ("Bills", f"{sold['bill_no'].nunique():,}",
+             f"{sold['pcs'].sum() / sold['bill_no'].nunique():.2f} pieces each" if sold["bill_no"].nunique() else "",
+             "ti-file-invoice", "purple")]
     monthly = (lines.assign(month=lines["sale_date"].dt.to_period("M").dt.to_timestamp())
                .groupby(["month", "item_class_group"], as_index=False).agg(net=("net_value", "sum"), pcs=("net_pcs", "sum")))
     by_branch = lines.groupby("branch", as_index=False).agg(net=("net_value", "sum"), pcs=("net_pcs", "sum")) \
@@ -180,16 +182,18 @@ def sales(request: Request, start: str = "", end: str = "", branch: list[str] = 
     team["discount_rate"] = team["discount"] / team["label_value"].replace(0, np.nan)
     team = team.drop(columns=["discount", "label_value"]).sort_values("net_sales", ascending=False)
 
+    pair_h = max(260, 30 * max(len(by_branch), min(len(by_item), 10)))     # both bar charts in the row
     return render(
         request, "sales.html", "sales", empty=False, kpis=kpis, legacy=(lines["source"] == "csv_legacy").any(), **ctx,
         fig_monthly=charts.monthly_by_group(monthly),
         t_monthly=charts.table(monthly.pivot_table(index="month", columns="item_class_group", values="net", aggfunc="sum",
                                                    fill_value=0).reset_index().assign(month=lambda d: d["month"].dt.strftime("%b %Y")),
                                {g: "money" for g in all_groups}),
-        fig_branch=charts.hbar(by_branch["branch"].map(_short), by_branch["net"] / 1e7, by_branch["pcs"], " · %{customdata:,.0f} pcs"),
+        fig_branch=charts.hbar(by_branch["branch"].map(_short), by_branch["net"] / 1e7, by_branch["pcs"], " · %{customdata:,.0f} pcs",
+                               height=pair_h),
         t_branch=charts.table(by_branch, {"net": "money", "pcs": "num"}, {"net": "net sales"}),
         fig_items=charts.hbar(by_item["item_name"].head(10), by_item["net"].head(10) / 1e7, by_item["pcs"].head(10),
-                              " · %{customdata:,.0f} pcs"),
+                              " · %{customdata:,.0f} pcs", height=pair_h),
         t_items=charts.table(by_item, {"net": "money", "pcs": "num"}, {"net": "net sales"}),
         fig_age=charts.ordinal_bars(by_age["age_band"], by_age["pcs"], " pcs", "", by_age["value"] / 1e7,
                                     "<br>₹%{customdata:.2f} Cr"),
@@ -469,7 +473,7 @@ def seasonality(request: Request, group: str = "Diamond Jewellery"):
 
     years = sorted(set(sn.complete_years(daily)))
     period = (f"{daily['sale_date'].min():%b %Y} to {daily['sale_date'].max():%b %Y} · complete financial years used: "
-              + ", ".join(f"{y}-{str(y + 1)[2:]}" for y in years) + f" · {daily['pcs'].sum():,.0f} pieces, all product groups")
+              + ", ".join(f"{y}-{str(y + 1)[2:]}" for y in years) + f" · {daily['pcs'].sum():,.0f} pieces, diamond item groups")
     return render(request, "seasonality.html", "seasonality", empty=False, rules=rules, period=period,
                   fig_groups=fig_groups, t_groups=t_groups, groups=groups, f={"group": group}, t_products=t_products,
                   t_lift=t_lift, upcoming=upcoming.astype(object).where(upcoming.notna(), None).to_dict("records"), t_outlook=t_outlook, t_ahead=t_ahead,

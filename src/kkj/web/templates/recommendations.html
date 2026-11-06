@@ -32,9 +32,18 @@
       <label for="v-{{ key }}">{{ label }}</label>
       {% endfor %}
     </div>
-    <div class="input-icon ms-md-auto" style="min-width: 15rem">
-      <span class="input-icon-addon"><i class="ti ti-search"></i></span>
-      <input id="q" name="q" aria-label="Search recommendations" value="{{ f.q }}" class="form-control form-control-sm" placeholder="Search item, supplier, branch…">
+    <div class="d-flex flex-wrap gap-2 ms-md-auto">
+      <div class="input-icon" style="min-width: 15rem">
+        <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+        <input id="q" name="q" aria-label="Search recommendations" value="{{ f.q }}" class="form-control form-control-sm" placeholder="Search item, supplier, branch…">
+      </div>
+      <select name="branch" aria-label="Branch" class="form-select form-select-sm w-auto">
+        <option value="">All branches</option>
+        {% for b in branches %}<option value="{{ b }}" {% if f.branch == b %}selected{% endif %}>{{ b }}</option>{% endfor %}
+      </select>
+      <select name="sort" aria-label="Order" class="form-select form-select-sm w-auto">
+        {% for key, so in sorts.items() %}<option value="{{ key }}" {% if f.sort == key %}selected{% endif %}>{{ so[0] }}</option>{% endfor %}
+      </select>
     </div>
   </div>
   <div class="d-flex flex-wrap align-items-center gap-2">
@@ -43,15 +52,6 @@
       <input type="radio" class="btn-check" name="group" id="g-{{ key }}" value="{{ key }}" {% if f.group == key %}checked{% endif %}>
       <label for="g-{{ key }}">{{ label }}</label>
       {% endfor %}
-    </div>
-    <div class="d-flex gap-2 ms-md-auto">
-      <select name="branch" aria-label="Branch" class="form-select form-select-sm w-auto">
-        <option value="">All branches</option>
-        {% for b in branches %}<option value="{{ b }}" {% if f.branch == b %}selected{% endif %}>{{ b }}</option>{% endfor %}
-      </select>
-      <select name="sort" aria-label="Order" class="form-select form-select-sm w-auto">
-        {% for key, so in sorts.items() %}<option value="{{ key }}" {% if f.sort == key %}selected{% endif %}>{{ so[0] }}</option>{% endfor %}
-      </select>
     </div>
   </div>
 </form>

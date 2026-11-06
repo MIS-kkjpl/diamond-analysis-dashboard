@@ -48,7 +48,7 @@
 {%- endmacro %}
 
 {% macro table_card(title, t, sub="", limit=None, icon="ti-table") -%}
-<div class="card">
+<div class="card h-100">
   <div class="card-header"><div><h3 class="card-title"><i class="ti {{ icon }} me-2"></i>{{ title }}</h3>
     {% if sub %}<div class="card-subtitle small text-secondary">{{ sub }}</div>{% endif %}</div></div>
   {{ data_table(t, limit) }}

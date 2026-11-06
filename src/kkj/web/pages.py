@@ -43,7 +43,7 @@ def overview(request: Request):
                                    hovertemplate="%{x|%d %b %Y}<br>₹%{y:.2f} Cr<br>%{customdata[1]:,.0f} pcs · "
                                                  "%{customdata[0]}<extra></extra>"))
         fig.update_yaxes(tickprefix="₹", ticksuffix=" Cr")
-        charts["series"] = style(fig, 280, legend=False).to_json()
+        charts["series"] = style(fig, 300, legend=False).to_json()
         h["monthly_rows"] = m.assign(month=m["month"].dt.strftime("%b %Y")).to_dict("records")
         h["series_rows"] = s.assign(snapshot_date=s["snapshot_date"].dt.strftime("%d %b %Y")).to_dict("records")
     return render(request, "overview.html", "overview", h=h, charts=charts)

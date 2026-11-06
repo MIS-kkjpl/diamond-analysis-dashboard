@@ -239,3 +239,7 @@ a:focus-visible, button:focus-visible, .btn:focus-visible, input:focus-visible, 
 }
 .sw-user .dropdown-header { text-transform: none; letter-spacing: 0; }
 .empty-icon .ti { font-size: 2.5rem; color: var(--sw-muted); }
+
+/* filter bars: the loading spinner floats in the corner instead of wrapping onto an empty line */
+.filter-bar { position: relative; }
+.filter-bar #filter-spin { position: absolute; right: .75rem; bottom: .55rem; }

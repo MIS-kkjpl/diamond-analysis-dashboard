@@ -358,7 +358,7 @@ def test_sets_on_inventory_and_sales():
     inv = client.get("/inventory")
     assert inv.status_code == 200 and "Sets in stock" in inv.text and "Broken sets" in inv.text
     sales = client.get("/sales?start=2026-04-01")
-    assert sales.status_code == 200 and "Sets: sold whole or split" in sales.text
+    assert sales.status_code == 200 and "Sold whole or split" in sales.text
     assert client.get("/recommendations?group=sets").status_code == 200
 
 

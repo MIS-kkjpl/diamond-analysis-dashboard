@@ -42,7 +42,7 @@
   </div>
   {% endif %}
   <div class="col-lg-6">
-    <div class="card">
+    <div class="card h-100">
       <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-dots me-2"></i>Supporting data</h3></div>
       <table class="table table-sm table-vcenter card-table">
         <tbody>
@@ -54,7 +54,7 @@
     </div>
   </div>
   <div class="col-lg-6">
-    <div class="card">
+    <div class="card h-100">
       <div class="card-header"><h3 class="card-title"><i class="ti ti-history me-2"></i>History</h3></div>
       <div class="list-group list-group-flush">
         {% for e in history %}
@@ -75,10 +75,13 @@
       <div class="card-header"><h3 class="card-title"><i class="ti ti-diamond me-2"></i>Pieces ({{ a.pieces | length }})</h3></div>
       <div class="table-responsive">
         <table class="table table-sm table-vcenter card-table table-striped">
-          <thead><tr>{% for k in a.pieces[0].keys() %}<th>{{ k | replace("_", " ") }}</th>{% endfor %}</tr></thead>
+          {% set first = ["barcode", "item_name", "location", "age_days", "dia_wt", "value", "recovery"] %}
+          {% set keys = first | select("in", a.pieces[0].keys()) | list %}
+          {% set keys = keys + (a.pieces[0].keys() | reject("in", first) | list) %}
+          <thead><tr>{% for k in keys %}<th {% if a.pieces[0][k] is number %}class="text-end"{% endif %}>{{ k | replace("_", " ") }}</th>{% endfor %}</tr></thead>
           <tbody>
           {% for p in a.pieces %}
-            <tr>{% for k, v in p.items() %}<td {% if v is number %}class="text-end"{% endif %}>
+            <tr>{% for k in keys %}{% set v = p.get(k) %}<td {% if v is number %}class="text-end"{% endif %}>
               {%- if k == "value" or k == "recovery" %}{{ v | money }}{% elif v is number %}{{ v | num(2 if v % 1 else 0) }}{% else %}{{ v if v is not none else "–" }}{% endif -%}
             </td>{% endfor %}</tr>
           {% endfor %}

@@ -100,11 +100,16 @@ def lookup(request: Request):
         ctx["people"] = read("""SELECT sales_code, name, branch, active FROM config.salesperson
                                 WHERE name ILIKE :p OR sales_code ILIKE :p OR employee_code ILIKE :p
                                 ORDER BY active DESC, name LIMIT 15""", p=like).to_dict("records")
-        ctx["groups"] = read("""SELECT brick, level, status, current_pcs FROM brain.brick_turn
+        ctx["groups"] = read("""SELECT brick, level, status, current_pcs, item_name FROM brain.brick_turn
                                 WHERE scope = 'Company' AND brick ILIKE :p AND as_of = (SELECT max(as_of) FROM brain.brick_turn)
                                 ORDER BY level DESC, current_pcs DESC LIMIT 15""", p=like).to_dict("records")
         ctx["recs"] = read("""SELECT action_id, title, status, kind FROM brain.action
                               WHERE status IN ('open', 'approved', 'snoozed') AND (title ILIKE :p OR summary ILIKE :p)
                               ORDER BY priority DESC LIMIT 15""", p=like).to_dict("records")
+        if ctx["product"]:             # its card already lists its brick groups and recommendations
+            item = ctx["product"]["item"].casefold()
+            shown = {r["action_id"] for r in ctx["product"]["recs"]}
+            ctx["groups"] = [g for g in ctx["groups"] if str(g["item_name"] or "").casefold() != item]
+            ctx["recs"] = [r for r in ctx["recs"] if r["action_id"] not in shown]
     ctx["nothing"] = len(text_q) >= 2 and not any(ctx[k] for k in ("piece", "product", "products", "people", "groups", "recs"))
     return render(request, "lookup.html", "lookup", **ctx)
