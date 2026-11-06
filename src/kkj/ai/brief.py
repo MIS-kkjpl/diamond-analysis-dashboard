@@ -41,6 +41,20 @@ def _week(lines, start, end):
     return {"net_sales_rupees": _r(w["net_value"].sum()), "net_pieces": _r(w["net_pcs"].sum()), "bills": int(w["bill_no"].nunique())}
 
 
+def _audit(audit):
+    """The latest accuracy audit: counts, and which checks failed (by layer), so the brief can say what they mean."""
+    if not audit:
+        return None
+    res = audit.results if isinstance(audit.results, list) else json.loads(audit.results or "[]")
+    fails = [r for r in res if r.get("result") == "FAIL"]
+    layers = {1: "loads vs the ERP's own totals", 2: "data sources compared with each other", 3: "stock flow continuity"}
+    return {"passed": audit.passed, "failed": audit.failed, "at": str(audit.at)[:16],
+            "loads_match_erp_exactly": not any(r.get("layer") == 1 and "load" in str(r.get("check", "")).lower() for r in fails),
+            "failed_checks": sorted({f"{layers.get(r.get('layer'), r.get('layer'))}: {r.get('check')}" for r in fails}),
+            "note": "Most failures are known gaps listed on the Data quality page (missing old snapshots, order-booked sales "
+                    "not yet re-pulled, unexplained Stock Outward exits); a failure in loads vs the ERP would be new."}
+
+
 def facts():
     """Everything the brief may say, computed from the database."""
     with settings.app_engine().connect() as conn:
@@ -55,7 +69,7 @@ def facts():
                                           first_seen_at, decided_at FROM brain.action"""), conn)
         stock = q.stock_latest(conn)
         fests = q.festivals(conn)
-        audit = conn.execute(text("SELECT passed, failed, at FROM brain.audit_run ORDER BY audit_id DESC LIMIT 1")).first()
+        audit = conn.execute(text("SELECT passed, failed, at, results FROM brain.audit_run ORDER BY audit_id DESC LIMIT 1")).first()
         note = notice.get(conn)
         followed = outcomes.follow(conn)
     end = lines["sale_date"].max() if len(lines) else as_of
@@ -91,7 +105,7 @@ def facts():
                   "festivals_next_60_days": [{"name": f.name, "day": f.day.date().isoformat(), "days_away": int((f.day - as_of).days)}
                                              for f in fests[(fests["day"] >= as_of) & (fests["day"] <= as_of + pd.Timedelta(days=60))].itertuples()]},
         "data": {"notice": (note or {}).get("text") if isinstance(note, dict) else None,
-                 "last_accuracy_audit": {"passed": audit.passed, "failed": audit.failed, "at": str(audit.at)[:16]} if audit else None},
+                 "last_accuracy_audit": _audit(audit)},
     }
 
 
