@@ -332,13 +332,27 @@ def conversations(user_id, limit=15):
             WHERE v.user_id = :u GROUP BY 1, 2 ORDER BY max(q.question_id) DESC LIMIT :n"""), {"u": user_id, "n": limit}).mappings()]
 
 
+def delete_conversation(conversation_id, user):
+    """Delete one of this person's conversations and the business notes saved from it. Returns the number of notes
+    removed, or None when it isn't theirs. The cost log (ai.call_log) is kept."""
+    with _db().begin() as conn:
+        mine = conn.execute(text("SELECT 1 FROM ai.conversation WHERE conversation_id = :c AND user_id = :u"),
+                            {"c": conversation_id, "u": user["user_id"]}).first()
+        if not mine:
+            return None
+        removed = notes.remove_for_conversation(conn, conversation_id, user["display_name"])
+        conn.execute(text("DELETE FROM ai.question WHERE conversation_id = :c"), {"c": conversation_id})
+        conn.execute(text("DELETE FROM ai.conversation WHERE conversation_id = :c"), {"c": conversation_id})
+    return removed
+
+
 def save_proposed(qid, index, user):
     """Save one of the notes the AI offered in an answer; returns the note_id."""
     r = get(qid, user["user_id"])
     if not r or not r.get("proposed_notes") or index >= len(r["proposed_notes"]):
         raise ValueError("That suggestion is no longer available.")
     props = r["proposed_notes"]
-    nid = notes.add(props[index]["note"], user["display_name"], source="chat")
+    nid = notes.add(props[index]["note"], user["display_name"], source="chat", conversation_id=r["conversation_id"])
     props[index]["saved"] = True
     with _db().begin() as conn:
         conn.execute(text("UPDATE ai.question SET proposed_notes = CAST(:p AS jsonb) WHERE question_id = :q"),

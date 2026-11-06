@@ -81,6 +81,7 @@ CREATE INDEX IF NOT EXISTS ix_conversation_user ON ai.conversation (user_id, con
 GRANT USAGE ON SCHEMA ai TO dashboard_app;
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA ai TO dashboard_app;
 GRANT UPDATE ON ai.question TO dashboard_app;     -- the answer is written after the question
+GRANT DELETE ON ai.question, ai.conversation TO dashboard_app;   -- people delete their own chats (the cost log stays)
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA ai TO dashboard_app;
 
 RESET ROLE;

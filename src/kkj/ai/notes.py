@@ -33,7 +33,7 @@ def active():
                                    FROM config.business_note WHERE active ORDER BY note_id"""), conn)
 
 
-def add(note, by, source="settings"):
+def add(note, by, source="settings", conversation_id=None):
     note = " ".join((note or "").split())[:MAX_LEN]
     if len(note) < 5:
         raise ValueError("Write the note as a full sentence.")
@@ -42,8 +42,9 @@ def add(note, by, source="settings"):
                            {"n": note}).scalar()
         if dup:
             return dup
-        nid = conn.execute(text("""INSERT INTO config.business_note (note, added_by, source) VALUES (:n, :b, :s)
-                                   RETURNING note_id"""), {"n": note, "b": by, "s": source}).scalar_one()
+        nid = conn.execute(text("""INSERT INTO config.business_note (note, added_by, source, conversation_id)
+                                   VALUES (:n, :b, :s, :c) RETURNING note_id"""),
+                           {"n": note, "b": by, "s": source, "c": conversation_id}).scalar_one()
         _log(conn, by, nid, None, note, f"added ({source})")
     return nid
 
@@ -69,6 +70,24 @@ def remove(note_id, by):
         conn.execute(text("UPDATE config.business_note SET active = false, updated_by = :b, updated_at = now() WHERE note_id = :i"),
                      {"b": by, "i": note_id})
         _log(conn, by, note_id, old, None, "removed")
+
+
+def for_conversation(conversation_id):
+    """How many active notes were saved from this Ask Stockwise conversation."""
+    with settings.app_engine().connect() as conn:
+        return conn.execute(text("SELECT count(*) FROM config.business_note WHERE active AND conversation_id = :c"),
+                            {"c": conversation_id}).scalar()
+
+
+def remove_for_conversation(conn, conversation_id, by):
+    """Remove the notes saved from a conversation that is being deleted (inside the caller's transaction)."""
+    rows = conn.execute(text("SELECT note_id, note FROM config.business_note WHERE active AND conversation_id = :c"),
+                        {"c": conversation_id}).all()
+    for r in rows:
+        conn.execute(text("UPDATE config.business_note SET active = false, updated_by = :b, updated_at = now() "
+                          "WHERE note_id = :i"), {"b": by, "i": r.note_id})
+        _log(conn, by, r.note_id, r.note, None, "removed with the chat it came from")
+    return len(rows)
 
 
 def prompt_block():

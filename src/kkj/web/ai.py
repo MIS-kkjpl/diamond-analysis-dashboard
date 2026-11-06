@@ -42,8 +42,29 @@ def ask_panel(request: Request, c: str = ""):
     past = ask_mod.conversations(uid)
     cid = None if c == "new" else (int(c) if c.isdigit() else (past[0]["conversation_id"] if past else None))
     rows = ask_mod.conversation(cid, uid) if cid else []
-    return templates.TemplateResponse(request, "_ask_body.html", {"rows": rows, "cid": cid if rows else "", "past": past,
-                                                                   "names": ai.share_names()})
+    return _panel(request, rows, cid if rows else "", past)
+
+
+def _panel(request, rows, cid, past, notice=None):
+    from kkj.ai import notes
+    return templates.TemplateResponse(request, "_ask_body.html", {
+        "rows": rows, "cid": cid, "past": past, "names": ai.share_names(), "notice": notice,
+        "cid_notes": notes.for_conversation(cid) if cid else 0})
+
+
+@router.post("/ask/c/{cid}/delete", response_class=HTMLResponse)
+def ask_delete(request: Request, cid: int):
+    """Delete one of my chats and the business notes saved from it; show my latest remaining chat."""
+    user = _user(request)
+    removed = ask_mod.delete_conversation(cid, user)
+    if removed is None:
+        return Response("Not found", status_code=404)
+    past = ask_mod.conversations(user["user_id"])
+    nxt = past[0]["conversation_id"] if past else None
+    rows = ask_mod.conversation(nxt, user["user_id"]) if nxt else []
+    notice = "Chat deleted." + (f" {removed} business note{'' if removed == 1 else 's'} saved from it "
+                                f"{'was' if removed == 1 else 'were'} deleted too." if removed else "")
+    return _panel(request, rows, nxt if rows else "", past, notice)
 
 
 @router.post("/ask", response_class=HTMLResponse)

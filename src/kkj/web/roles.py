@@ -25,6 +25,7 @@ RULES = [
     ("POST", r"^/account/password$", "viewer"),
     ("POST", r"^/ask/q/\d+/note/\d+$", "manager"),          # saving a note the AI offered
     ("POST", r"^/ask$", "viewer"),
+    ("POST", r"^/ask/c/\d+/delete$", "viewer"),            # people delete their own chats (checked: owner only)
     ("POST", r"^/recommendations/ai-review$", "manager"),
     ("POST", r"^/recommendations/\d+/[a-z]+$", "manager"),
     ("POST", r"^/refresh$", "manager"),

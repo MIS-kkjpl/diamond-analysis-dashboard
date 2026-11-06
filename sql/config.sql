@@ -115,6 +115,8 @@ CREATE TABLE IF NOT EXISTS config.business_note (
     updated_by  text,
     updated_at  timestamptz
 );
+-- the Ask Stockwise conversation a note was saved from (deleting that chat deletes its notes)
+ALTER TABLE config.business_note ADD COLUMN IF NOT EXISTS conversation_id bigint;
 GRANT SELECT ON config.business_note TO dashboard_app;
 GRANT INSERT, UPDATE ON config.business_note TO dashboard_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA config TO dashboard_app;

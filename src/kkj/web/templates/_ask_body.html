@@ -14,7 +14,14 @@
   {% endif %}
   <button type="button" class="btn btn-sm btn-ghost-secondary" hx-get="/ask/panel?c=new" hx-target="#ask-body">
     <i class="ti ti-plus me-1"></i>New conversation</button>
+  {% if cid %}
+  <button type="button" class="btn btn-sm btn-ghost-danger ms-auto" title="Delete this chat" aria-label="Delete this chat"
+          hx-post="/ask/c/{{ cid }}/delete" hx-target="#ask-body"
+          hx-confirm="Delete this chat?{% if cid_notes %} The {{ cid_notes }} business note{{ '' if cid_notes == 1 else 's' }} saved from it will be deleted as well, so the AI stops using {{ 'it' if cid_notes == 1 else 'them' }}.{% endif %} This can't be undone.">
+    <i class="ti ti-trash"></i></button>
+  {% endif %}
 </div>
+{% if notice %}<div class="alert alert-success py-2 small mb-2" role="status">{{ notice }}</div>{% endif %}
 
 <div id="ask-thread">
   {% for r in rows %}{% include "_ask_bubble.html" %}{% endfor %}

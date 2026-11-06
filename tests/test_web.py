@@ -516,3 +516,35 @@ def test_more_switches(monkeypatch):
     assert "/exports/" not in client.get("/recommendations").text
     monkeypatch.setenv("FEATURE_INVENTORY", "off")
     assert client.get("/inventory").status_code == 404 and 'href="/inventory"' not in client.get("/overview").text
+
+
+def test_deleting_a_chat_deletes_its_business_notes(monkeypatch):
+    from kkj.ai import notes
+    monkeypatch.setenv("FEATURE_AI_ASK", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    with settings.etl_engine().begin() as c:
+        uid = c.execute(text("SELECT user_id FROM auth.app_user WHERE username = :u"), {"u": USER}).scalar()
+        mine = c.execute(text("INSERT INTO ai.conversation (started_by, user_id, title) VALUES ('pytest', :u, 'mine') "
+                              "RETURNING conversation_id"), {"u": uid}).scalar()
+        c.execute(text("INSERT INTO ai.question (asked_by, user_id, question, conversation_id, status, answer_md) "
+                       "VALUES ('pytest', :u, 'q', :c, 'done', 'a')"), {"u": uid, "c": mine})
+        other = c.execute(text("INSERT INTO ai.conversation (started_by, user_id, title) VALUES ('pytest', -98, 'theirs') "
+                               "RETURNING conversation_id")).scalar()
+    from_chat = notes.add("pytest note: from this chat.", "pytest", source="chat", conversation_id=mine)
+    unrelated = notes.add("pytest note: added in Settings.", "pytest")
+    try:
+        panel = client.get(f"/ask/panel?c={mine}").text
+        assert "The 1 business note saved from it will be deleted as well" in panel
+        r = client.post(f"/ask/c/{mine}/delete")
+        assert r.status_code == 200 and "1 business note saved from it was deleted too" in r.text
+        active = set(notes.active()["note_id"])
+        assert from_chat not in active and unrelated in active
+        with settings.app_engine().connect() as c:
+            assert c.execute(text("SELECT count(*) FROM ai.question WHERE conversation_id = :c"), {"c": mine}).scalar() == 0
+        assert client.post(f"/ask/c/{other}/delete").status_code == 404        # not my chat
+    finally:
+        with settings.etl_engine().begin() as c:
+            c.execute(text("DELETE FROM ai.question WHERE conversation_id IN (:a, :b)"), {"a": mine, "b": other})
+            c.execute(text("DELETE FROM ai.conversation WHERE conversation_id IN (:a, :b)"), {"a": mine, "b": other})
+            c.execute(text("DELETE FROM config.business_note WHERE note LIKE 'pytest note%'"))
+            c.execute(text("DELETE FROM config.change_log WHERE table_name = 'business_note' AND changed_by = 'pytest'"))
