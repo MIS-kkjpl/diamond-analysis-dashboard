@@ -41,6 +41,11 @@ def _week(lines, start, end):
     return {"net_sales_rupees": _r(w["net_value"].sum()), "net_pieces": _r(w["net_pcs"].sum()), "bills": int(w["bill_no"].nunique())}
 
 
+def _coverage(r):
+    c = str(r.get("check", "")).lower()
+    return "every fortnight" in c or "every working day" in c
+
+
 def _audit(audit):
     """The latest accuracy audit: counts, and which checks failed (by layer), so the brief can say what they mean."""
     if not audit:
@@ -49,7 +54,9 @@ def _audit(audit):
     fails = [r for r in res if r.get("result") == "FAIL"]
     layers = {1: "loads vs the ERP's own totals", 2: "data sources compared with each other", 3: "stock flow continuity"}
     return {"passed": audit.passed, "failed": audit.failed, "at": str(audit.at)[:16],
-            "loads_match_erp_exactly": not any(r.get("layer") == 1 and "load" in str(r.get("check", "")).lower() for r in fails),
+            # layer 1 has two kinds of check: coverage (a day or fortnight missing) and totals (a load that disagrees)
+            "every_loaded_day_matches_erp_totals": not any(r.get("layer") == 1 and not _coverage(r) for r in fails),
+            "missing_days_or_fortnights": [r.get("check") for r in fails if r.get("layer") == 1 and _coverage(r)],
             "failed_checks": sorted({f"{layers.get(r.get('layer'), r.get('layer'))}: {r.get('check')}" for r in fails}),
             "note": "Most failures are known gaps listed on the Data quality page (missing old snapshots, order-booked sales "
                     "not yet re-pulled, unexplained Stock Outward exits); a failure in loads vs the ERP would be new."}
