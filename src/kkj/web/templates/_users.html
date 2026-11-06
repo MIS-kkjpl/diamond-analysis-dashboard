@@ -69,15 +69,19 @@
   <form class="card mb-3" hx-post="/settings/users" hx-target="#users" hx-swap="outerHTML">
     <div class="card-header"><h3 class="card-title"><i class="ti ti-user-plus me-1"></i>Add a user</h3></div>
     <div class="card-body">
-      <div class="row g-2 align-items-end">
-        <div class="col-sm-6 col-lg-3"><label class="form-label">Name</label>
-          <input name="display_name" class="form-control" placeholder="Full name" required></div>
-        <div class="col-sm-6 col-lg-3"><label class="form-label">Username</label>
-          <input name="username" class="form-control" placeholder="e.g. firstname" autocapitalize="none" autocomplete="off" required></div>
-        <div class="col-sm-6 col-lg-3"><label class="form-label">Temporary password</label>
-          <input name="password" type="text" class="form-control" minlength="{{ min_password }}" autocomplete="off" required>
-          <div class="form-hint">At least {{ min_password }} characters.</div></div>
-        <div class="col-sm-6 col-lg-3"><button class="btn btn-primary w-100"><i class="ti ti-plus"></i> Add user</button></div>
+      {# fields align at the top (the password hint hangs below its box); the button gets an empty label so it
+         lines up with the boxes, not with the hint #}
+      <div class="row g-3 align-items-start">
+        <div class="col-sm-6 col-lg-3"><label class="form-label" for="new-name">Name</label>
+          <input id="new-name" name="display_name" class="form-control" placeholder="Full name" required></div>
+        <div class="col-sm-6 col-lg-3"><label class="form-label" for="new-username">Username</label>
+          <input id="new-username" name="username" class="form-control" placeholder="e.g. firstname" autocapitalize="none" autocomplete="off" required></div>
+        <div class="col-sm-6 col-lg-3"><label class="form-label" for="new-password">Temporary password</label>
+          <input id="new-password" name="password" type="text" class="form-control" minlength="{{ min_password }}" autocomplete="off" required
+                 aria-describedby="new-password-hint">
+          <div class="form-hint" id="new-password-hint">At least {{ min_password }} characters. They'll choose their own when they first sign in.</div></div>
+        <div class="col-sm-6 col-lg-3"><span class="form-label d-none d-sm-block" aria-hidden="true">&nbsp;</span>
+          <button class="btn btn-primary w-100"><i class="ti ti-plus"></i> Add user</button></div>
       </div>
     </div>
   </form>

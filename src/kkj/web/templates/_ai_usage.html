@@ -1,9 +1,8 @@
 {# Settings > AI: what the AI features cost, by person and feature (admins only). #}
 <div class="card mt-3">
   <div class="card-header"><div><h3 class="card-title"><i class="ti ti-coin me-2"></i>AI usage</h3>
-    <div class="card-subtitle small text-secondary">Estimated from the tokens of each call. Limits are set in .env:
-      {{ "$%.2f" | format(budget) if budget else "no" }} a day for the whole company{% if per_user %}, {{ per_user }} questions a day per person{% endif %}.
-      Also set a monthly spending limit on the API key in the Claude Console.</div></div></div>
+    <div class="card-subtitle small text-secondary">Estimated from the tokens of each call. Daily limits:
+      {{ "$%.2f" | format(budget) if budget else "none" }} for the whole company{% if per_user %}, {{ per_user }} questions per person{% endif %}.</div></div></div>
   <div class="card-body pb-2">
     <div class="d-flex flex-wrap gap-4">
       <div><div class="subheader">Today</div><div class="h3 mb-0">${{ "%.2f" | format(today) }}</div>

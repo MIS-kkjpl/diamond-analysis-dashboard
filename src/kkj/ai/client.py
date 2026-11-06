@@ -97,15 +97,14 @@ def create(on_text=None, on_thinking=None, **kwargs):
                         on_thinking(event.snapshot)
             msg = s.get_final_message()
     except anthropic.AuthenticationError:
-        raise AIError("The Claude API key was refused. Check ANTHROPIC_API_KEY in .env.")
+        raise AIError("The AI service didn't accept the app's key. Ask the administrator to check it.")
     except anthropic.PermissionDeniedError:
-        raise AIError("This API key is not allowed to use the model. Check the key's workspace in the Claude Console.")
+        raise AIError("The AI service isn't available to this app right now. Ask the administrator.")
     except anthropic.RateLimitError:
         raise AIError("The Claude API is busy or the spending limit was reached. Try again in a minute.")
     except anthropic.BadRequestError as e:
         if "workspace" in str(e.message).lower():
-            raise AIError("This API key needs a workspace: add ANTHROPIC_WORKSPACE_ID=wrkspc_... to .env (Claude Console > "
-                          "Settings > Workspaces), or use a key created inside a workspace, then restart the app.")
+            raise AIError("The AI service isn't fully set up (its key needs a workspace). Ask the administrator.")
         raise AIError(f"The request was not accepted: {e.message}")
     except anthropic.APIStatusError as e:
         raise AIError(f"The Claude API returned an error ({e.status_code}). Try again later.")
