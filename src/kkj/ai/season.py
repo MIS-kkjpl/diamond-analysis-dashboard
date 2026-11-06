@@ -10,6 +10,7 @@ from sqlalchemy import text
 from kkj import rules as rules_mod
 from kkj import settings
 from kkj.ai import client as ai
+from kkj.ai import notes
 from kkj.brain.run import festival_outlook
 from kkj.db import queries as q
 from kkj.metrics import seasonality as sn
@@ -52,7 +53,7 @@ def facts():
 
 def write(who="system"):
     f = facts()
-    msg, call_id = ai.call("ai_season", who, max_tokens=6000, system=SYSTEM, output_config={"effort": "medium"},
+    msg, call_id = ai.call("ai_season", who, max_tokens=6000, system=notes.system(SYSTEM), output_config={"effort": "medium"},
                            messages=[{"role": "user", "content": "Figures:\n" + ai.as_json(f)}])
     with settings.app_engine().begin() as conn:
         return conn.execute(text("""INSERT INTO ai.text (kind, created_by, period, body_md, facts, call_id)

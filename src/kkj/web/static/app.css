@@ -296,3 +296,20 @@ body.sw-ask-open .sw-ask-fab { display: none; }
 .sw-brief-card details[open] .sw-brief-toggle .ti { transform: rotate(180deg); }
 .min-w-0 { min-width: 0; }
 .sw-brief-card details[open] .sw-brief-line { display: none; }
+
+/* Ask: live progress, typing indicator, answer while it is written, note offers */
+.sw-steps { list-style: none; padding: 0; margin: 0 0 .45rem; font-size: .78rem; color: var(--sw-muted); }
+.sw-steps li { display: flex; gap: .35rem; align-items: baseline; padding: .05rem 0; animation: sw-fade .25s ease-out; }
+.sw-steps .ti { color: #2fb344; }
+.sw-typing { display: flex; align-items: center; gap: .25rem; color: var(--sw-muted); font-size: .8rem; }
+.sw-typing span { width: .4rem; height: .4rem; border-radius: 50%; background: #9b87e0; animation: sw-bounce 1.2s infinite ease-in-out; }
+.sw-typing span:nth-child(2) { animation-delay: .15s; }
+.sw-typing span:nth-child(3) { animation-delay: .3s; }
+.sw-typing em { font-style: normal; margin-left: .35rem; }
+.sw-writing > *:last-child::after { content: "▍"; color: #7c5cd6; margin-left: 1px; animation: sw-blink 1s steps(1) infinite; }
+.sw-note-offer { margin-top: .6rem; padding: .55rem .65rem; border: 1px dashed #b9a7f0; border-radius: 8px; background: #faf8ff; }
+@keyframes sw-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: .45; } 40% { transform: translateY(-4px); opacity: 1; } }
+@keyframes sw-blink { 50% { opacity: 0; } }
+@keyframes sw-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .sw-typing span, .sw-writing > *:last-child::after, .sw-steps li { animation: none; } }
+.sw-thinking { margin-top: .4rem; font-size: .78rem; font-style: italic; color: #6b6585; line-height: 1.4; animation: sw-fade .3s ease-out; }

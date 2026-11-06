@@ -80,10 +80,19 @@ class Totals:
         self.cache_creation_input_tokens += getattr(u, "cache_creation_input_tokens", 0) or 0
 
 
-def create(**kwargs):
-    """One streamed request with the refusal fallback; returns the final message. Raises AIError."""
+def create(on_text=None, on_thinking=None, **kwargs):
+    """One streamed request with the refusal fallback; returns the final message. Raises AIError.
+
+    on_text(text_so_far) is called as the reply's text arrives (for showing an answer while it is written);
+    on_thinking(summary_so_far) as the reasoning summary arrives (needs thinking display "summarized")."""
     try:
         with client().beta.messages.stream(model=MODEL, betas=[FALLBACK_BETA], fallbacks="default", **kwargs) as s:
+            if on_text or on_thinking:
+                for event in s:
+                    if event.type == "text" and on_text:
+                        on_text(event.snapshot)
+                    elif event.type == "thinking" and on_thinking:
+                        on_thinking(event.snapshot)
             msg = s.get_final_message()
     except anthropic.AuthenticationError:
         raise AIError("The Claude API key was refused. Check ANTHROPIC_API_KEY in .env.")

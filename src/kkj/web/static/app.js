@@ -157,5 +157,15 @@
       if (ex) { box.value = ex.textContent.trim(); htmx.trigger(form, "submit"); }
     });
     document.body.addEventListener("htmx:afterSwap", e => { if (e.target.id === "ask-body") setTimeout(scrollDown, 30); });
+    // keep the newest text in view while an answer streams in, unless the person has scrolled up to read
+    const body = document.getElementById("ask-body");
+    let pinned = true;
+    body.addEventListener("scroll", () => { pinned = body.scrollHeight - body.scrollTop - body.clientHeight < 80; });
+    document.body.addEventListener("htmx:beforeSwap", e => {
+      if (e.target.closest && e.target.closest("#ask-body")) pinned = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+    });
+    document.body.addEventListener("htmx:afterSettle", e => {
+      if (pinned && e.target.closest && e.target.closest("#ask-body")) scrollDown();
+    });
   });
 })();

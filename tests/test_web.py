@@ -398,3 +398,40 @@ def test_ai_pages_render_without_calling_the_api(monkeypatch):
     monkeypatch.setenv("FEATURE_AI_ASK", "off")
     assert client.get("/ask/panel").status_code == 404
     assert "sw-ask-fab" not in client.get("/overview").text
+
+
+def test_chats_belong_to_one_account():
+    """A conversation is only visible to the account that started it, even with the same display name."""
+    from kkj.ai import ask
+    with settings.etl_engine().begin() as c:
+        cid = c.execute(text("INSERT INTO ai.conversation (started_by, user_id, title) VALUES ('pytest', -99, 'other') "
+                             "RETURNING conversation_id")).scalar()
+        qid = c.execute(text("INSERT INTO ai.question (asked_by, user_id, question, conversation_id, status, answer_md) "
+                             "VALUES ('pytest', -99, 'secret?', :c, 'done', 'secret answer') RETURNING question_id"), {"c": cid}).scalar()
+    try:
+        assert ask.get(qid, -99)["answer_md"] == "secret answer"
+        assert client.get(f"/ask/q/{qid}").status_code == 404                  # same display name, different account
+        assert "secret answer" not in client.get(f"/ask/panel?c={cid}").text
+    finally:
+        with settings.etl_engine().begin() as c:
+            c.execute(text("DELETE FROM ai.question WHERE question_id = :q"), {"q": qid})
+            c.execute(text("DELETE FROM ai.conversation WHERE conversation_id = :c"), {"c": cid})
+
+
+def test_business_notes_add_for_all_edit_for_admins(monkeypatch):
+    from kkj.ai import notes
+    monkeypatch.setenv("STOCKWISE_ADMINS", "someone-else")
+    r = client.post("/settings/notes", data={"note": "pytest note: Test showroom is a franchise window."})
+    assert r.status_code == 200 and "pytest note" in r.text
+    nid = int(notes.active().query("note.str.startswith('pytest note')", engine="python")["note_id"].iloc[-1])
+    try:
+        assert "pytest note" in (notes.prompt_block() or "")
+        denied = client.post(f"/settings/notes/{nid}", data={"verb": "remove"})
+        assert "Only an admin" in denied.text and nid in set(notes.active()["note_id"])
+        monkeypatch.setenv("STOCKWISE_ADMINS", USER)
+        client.post(f"/settings/notes/{nid}", data={"verb": "remove"})
+        assert nid not in set(notes.active()["note_id"])
+    finally:
+        with settings.etl_engine().begin() as c:
+            c.execute(text("DELETE FROM config.business_note WHERE note LIKE 'pytest note%'"))
+            c.execute(text("DELETE FROM config.change_log WHERE table_name = 'business_note' AND changed_by = 'pytest'"))

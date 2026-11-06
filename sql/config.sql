@@ -101,3 +101,21 @@ CREATE TABLE IF NOT EXISTS config.festival (
 GRANT SELECT ON config.festival TO powerbi_reader, dashboard_app;
 GRANT INSERT, UPDATE, DELETE ON config.festival TO dashboard_app;
 RESET ROLE;
+
+-- Business notes: facts about the business that every AI feature reads (kkj.ai.notes). Shared by everyone;
+-- each note records who added it; only admins (STOCKWISE_ADMINS in .env) can edit or remove one.
+SET ROLE erp_etl;
+CREATE TABLE IF NOT EXISTS config.business_note (
+    note_id     bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    note        text NOT NULL,
+    added_by    text NOT NULL,
+    added_at    timestamptz NOT NULL DEFAULT now(),
+    source      text NOT NULL DEFAULT 'settings' CHECK (source IN ('settings', 'chat')),
+    active      boolean NOT NULL DEFAULT true,
+    updated_by  text,
+    updated_at  timestamptz
+);
+GRANT SELECT ON config.business_note TO dashboard_app;
+GRANT INSERT, UPDATE ON config.business_note TO dashboard_app;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA config TO dashboard_app;
+RESET ROLE;

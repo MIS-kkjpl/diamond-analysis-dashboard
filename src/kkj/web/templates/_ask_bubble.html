@@ -1,14 +1,32 @@
-{# One question and its answer. While the answer is being written, the pair re-fetches itself every 2 seconds. #}
+{# One question and its answer. While the answer is being written the pair re-fetches itself a few times a second:
+   the steps taken so far appear as they happen, then the answer as it is written. #}
 <div class="sw-qa" id="qa-{{ r.question_id or 'x' }}"
-     {% if r.status == "running" %}hx-get="/ask/q/{{ r.question_id }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+     {% if r.status == "running" %}hx-get="/ask/q/{{ r.question_id }}" hx-trigger="every 800ms" hx-swap="outerHTML"{% endif %}>
   <div class="sw-q">{{ r.question }}</div>
   {% if r.status == "running" %}
-  <div class="sw-a sw-a-wait" role="status"><span class="spinner-border spinner-border-sm me-2"></span>Looking it up… usually 15–60 seconds.
-    You can keep working; the answer will be here.</div>
+  <div class="sw-a" role="status" aria-live="polite">
+    {% if r.progress %}<ul class="sw-steps">{% for s in r.progress %}<li><i class="ti ti-check"></i>{{ s }}</li>{% endfor %}</ul>{% endif %}
+    {% if r.partial_md %}<div class="sw-md sw-writing">{{ r.partial_md | md }}</div>
+    {% else %}
+    <div class="sw-typing" aria-label="Working on it"><span></span><span></span><span></span>
+      <em>{{ "Thinking it through" if r.thinking else ("Working out the answer" if r.progress else "Reading your question") }}</em></div>
+    {% if r.thinking_tail %}<div class="sw-thinking">{{ r.thinking_tail }}</div>{% endif %}
+    {% endif %}
+  </div>
   {% elif r.status == "failed" %}
   <div class="sw-a"><div class="alert alert-warning mb-0 py-2 small">{{ r.answer_md }}</div></div>
   {% else %}
   <div class="sw-a sw-md">{{ r.answer_md | md }}
+    {% for p in (r.proposed_notes or []) %}
+    <div class="sw-note-offer">
+      <div class="small"><i class="ti ti-notebook me-1"></i><b>Remember this?</b> {{ p.note }}</div>
+      {% if p.setting_hint %}<div class="small text-secondary mt-1">To change the recommendations too: {{ p.setting_hint }}</div>{% endif %}
+      <div class="mt-2">{% if p.saved %}<span class="badge bg-green-lt"><i class="ti ti-check"></i> Saved as a business note</span>
+        {% else %}<button type="button" class="btn btn-sm btn-outline-primary" hx-post="/ask/q/{{ r.question_id }}/note/{{ loop.index0 }}"
+                hx-target="#qa-{{ r.question_id }}" hx-swap="outerHTML">Save as a business note</button>
+        <span class="small text-secondary ms-1">Shared with everyone; see Settings → Business notes</span>{% endif %}</div>
+    </div>
+    {% endfor %}
     {% if r.lookups %}<details class="sw-lookups small text-secondary mt-2"><summary>Based on {{ r.lookups | length }} lookup{{ "" if r.lookups | length == 1 else "s" }}{% if r.cost_usd %} · ≈ ${{ "%.2f" | format(r.cost_usd | float) }}{% endif %}</summary>
       <ul class="mb-0 mt-1 ps-3">{% for l in r.lookups %}<li><b>{{ l.tool | replace("_", " ") }}</b>
         {% for k, v in (l.input or {}).items() %}{{ k | replace("_", " ") }}: {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</li>{% endfor %}</ul>

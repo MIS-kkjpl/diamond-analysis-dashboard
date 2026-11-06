@@ -1,0 +1,38 @@
+{# Settings > Business notes (kkj.ai.notes). Swapped in place by HTMX after every change. #}
+<div id="notes-card" class="card">
+  <div class="card-header"><div><h3 class="card-title"><i class="ti ti-notebook me-2"></i>Business notes</h3>
+    <div class="card-subtitle small text-secondary">Facts about the business that every AI feature takes into account: Ask
+      Stockwise, the weekly brief, the AI second look and season notes. Shared by everyone. They change what the AI explains,
+      not the recommendations; to change those, use the matching setting (the AI points to it).
+      {% if not admin %}Only an admin can edit or remove a note.{% endif %}</div></div></div>
+  {% if error %}<div class="card-body pb-0"><div class="alert alert-warning mb-0">{{ error }}</div></div>{% endif %}
+  {% if saved %}<div class="card-body pb-0"><div class="alert alert-success mb-0">{{ saved }}</div></div>{% endif %}
+  <div class="list-group list-group-flush">
+    {% for n in rows %}
+    <div class="list-group-item">
+      {% if admin %}
+      <form class="d-flex flex-wrap gap-2 align-items-start" hx-post="/settings/notes/{{ n.note_id }}" hx-target="#notes-card" hx-swap="outerHTML">
+        <textarea name="note" class="form-control form-control-sm flex-grow-1" rows="2" maxlength="500" aria-label="Note {{ n.note_id }}"
+                  style="min-width: 16rem; flex-basis: 30rem">{{ n.note }}</textarea>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm btn-outline-secondary" name="verb" value="save">Save</button>
+          <button class="btn btn-sm btn-ghost-danger" name="verb" value="remove"
+                  hx-confirm="Remove this note? The AI will stop using it.">Remove</button>
+        </div>
+      </form>
+      {% else %}<div>{{ n.note }}</div>{% endif %}
+      <div class="small text-secondary mt-1">Added by {{ n.added_by }} on {{ n.added_at | date }}{% if n.source == "chat" %} from Ask Stockwise{% endif %}
+        {% if n.updated_by %} · edited by {{ n.updated_by }} on {{ n.updated_at | date }}{% endif %}</div>
+    </div>
+    {% else %}
+    <div class="list-group-item text-secondary">No notes yet. Add the first one below, or tell Ask Stockwise a fact and save
+      the note it offers.</div>
+    {% endfor %}
+  </div>
+  <form class="card-footer d-flex flex-wrap gap-2 align-items-start" hx-post="/settings/notes" hx-target="#notes-card" hx-swap="outerHTML">
+    <textarea name="note" class="form-control form-control-sm flex-grow-1" rows="2" maxlength="500" required aria-label="New business note"
+              style="min-width: 16rem; flex-basis: 30rem"
+              placeholder="e.g. Opera House MO Branch is an exclusive franchise showroom; its stock is curated, not rebalanced."></textarea>
+    <button class="btn btn-primary btn-sm"><i class="ti ti-plus"></i> Add note</button>
+  </form>
+</div>

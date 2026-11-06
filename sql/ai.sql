@@ -67,6 +67,17 @@ ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS page text;                     
 ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'done';  -- running, done, failed
 CREATE INDEX IF NOT EXISTS ix_question_conversation ON ai.question (conversation_id, question_id);
 
+-- Conversations belong to an account (not a display name); live progress while an answer is written
+ALTER TABLE ai.conversation ADD COLUMN IF NOT EXISTS user_id int;
+ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS user_id int;
+ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS progress jsonb;        -- the lookups done so far, as shown live
+ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS partial_md text;       -- the answer as it is being written
+ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS proposed_notes jsonb;  -- business notes the AI offers to save
+ALTER TABLE ai.question ADD COLUMN IF NOT EXISTS thinking text;        -- its reasoning summary, shown live, cleared after
+UPDATE ai.conversation v SET user_id = u.user_id FROM auth.app_user u WHERE v.user_id IS NULL AND u.display_name = v.started_by;
+UPDATE ai.question q SET user_id = u.user_id FROM auth.app_user u WHERE q.user_id IS NULL AND u.display_name = q.asked_by;
+CREATE INDEX IF NOT EXISTS ix_conversation_user ON ai.conversation (user_id, conversation_id DESC);
+
 GRANT USAGE ON SCHEMA ai TO dashboard_app;
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA ai TO dashboard_app;
 GRANT UPDATE ON ai.question TO dashboard_app;     -- the answer is written after the question

@@ -23,6 +23,11 @@ from kkj.web.common import templates, who
 router = APIRouter()
 
 
+def _user(request):
+    """The signed-in account (user_id, username, display_name); chats belong to it, not to a display name."""
+    return request.state.user
+
+
 # ── Ask Stockwise (side panel) ────────────────────────────────────────────────
 @router.get("/ask")
 def ask_page():
@@ -32,10 +37,10 @@ def ask_page():
 @router.get("/ask/panel", response_class=HTMLResponse)
 def ask_panel(request: Request, c: str = ""):
     """The panel's body: a conversation (the latest one unless c is given, or a new one with c=new)."""
-    name = who(request)
-    past = ask_mod.conversations(name)
+    uid = _user(request)["user_id"]
+    past = ask_mod.conversations(uid)
     cid = None if c == "new" else (int(c) if c.isdigit() else (past[0]["conversation_id"] if past else None))
-    rows = ask_mod.conversation(cid, name) if cid else []
+    rows = ask_mod.conversation(cid, uid) if cid else []
     return templates.TemplateResponse(request, "_ask_body.html", {"rows": rows, "cid": cid if rows else "", "past": past,
                                                                    "names": ai.share_names()})
 
@@ -44,11 +49,11 @@ def ask_panel(request: Request, c: str = ""):
 def ask_post(request: Request, question: str = Form(...), conversation_id: str = Form(""), page: str = Form(""),
              title: str = Form("")):
     """Starts a question; returns its bubble (polling until the answer is ready) and the conversation id."""
-    name = who(request)
+    user = _user(request)
     try:
         context = ask_mod.describe_page(page, title)
-        qid, cid = ask_mod.start(question, name, int(conversation_id) if conversation_id.isdigit() else None, context)
-        r = ask_mod.get(qid, name)
+        qid, cid = ask_mod.start(question, user, int(conversation_id) if conversation_id.isdigit() else None, context)
+        r = ask_mod.get(qid, user["user_id"])
         return templates.TemplateResponse(request, "_ask_bubble.html", {"r": r, "cid": cid, "oob": True})
     except ai.AIError as e:
         return templates.TemplateResponse(request, "_ask_bubble.html",
@@ -57,10 +62,60 @@ def ask_post(request: Request, question: str = Form(...), conversation_id: str =
 
 @router.get("/ask/q/{qid}", response_class=HTMLResponse)
 def ask_poll(request: Request, qid: int):
-    r = ask_mod.get(qid, who(request))
+    r = ask_mod.get(qid, _user(request)["user_id"])
     if r is None:
         return Response(status_code=404)
     return templates.TemplateResponse(request, "_ask_bubble.html", {"r": r})
+
+
+@router.post("/ask/q/{qid}/note/{index}", response_class=HTMLResponse)
+def ask_save_note(request: Request, qid: int, index: int):
+    """Save a business note the AI offered in an answer; returns the updated bubble."""
+    user = _user(request)
+    try:
+        ask_mod.save_proposed(qid, index, user)
+    except ValueError as e:
+        return Response(str(e), status_code=400)
+    return templates.TemplateResponse(request, "_ask_bubble.html", {"r": ask_mod.get(qid, user["user_id"])})
+
+
+# ── Business notes (Settings tab) ─────────────────────────────────────────────
+def _notes_card(request, error=None, saved=None):
+    from kkj.ai import notes
+    return templates.TemplateResponse(request, "_notes.html", {
+        "rows": notes.active().to_dict("records"), "admin": notes.is_admin(_user(request)["username"]),
+        "error": error, "saved": saved})
+
+
+@router.get("/settings/notes", response_class=HTMLResponse)
+def notes_card(request: Request):
+    return _notes_card(request)
+
+
+@router.post("/settings/notes", response_class=HTMLResponse)
+def notes_add(request: Request, note: str = Form("")):
+    from kkj.ai import notes
+    try:
+        notes.add(note, _user(request)["display_name"])
+        return _notes_card(request, saved="Note added. The AI takes it into account from the next answer.")
+    except ValueError as e:
+        return _notes_card(request, error=str(e))
+
+
+@router.post("/settings/notes/{note_id}", response_class=HTMLResponse)
+def notes_change(request: Request, note_id: int, note: str = Form(""), verb: str = Form("save")):
+    from kkj.ai import notes
+    user = _user(request)
+    if not notes.is_admin(user["username"]):
+        return _notes_card(request, error="Only an admin can edit or remove a note.")
+    try:
+        if verb == "remove":
+            notes.remove(note_id, user["display_name"])
+            return _notes_card(request, saved="Note removed.")
+        notes.edit(note_id, note, user["display_name"])
+        return _notes_card(request, saved="Note saved.")
+    except ValueError as e:
+        return _notes_card(request, error=str(e))
 
 
 # ── Weekly brief (card on Recommendations) ────────────────────────────────────

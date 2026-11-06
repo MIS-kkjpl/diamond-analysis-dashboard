@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from kkj import notice, settings
 from kkj.ai import client as ai
+from kkj.ai import notes
 from kkj.brain import outcomes
 from kkj.db import queries as q
 from kkj.metrics import core as m
@@ -137,7 +138,7 @@ Money in Indian style with ₹, lakh (L) and crore (Cr). Values are before GST. 
 def write(who="system"):
     """Compute the facts, have Claude write the brief, store it. Returns the text_id."""
     f = facts()
-    msg, call_id = ai.call("ai_brief", who, max_tokens=8000, system=SYSTEM, output_config={"effort": "high"},
+    msg, call_id = ai.call("ai_brief", who, max_tokens=8000, system=notes.system(SYSTEM), output_config={"effort": "high"},
                            messages=[{"role": "user", "content": "Facts for this week's brief:\n" + ai.as_json(f)}])
     body = ai.text_of(msg)
     period = f"week to {pd.Timestamp(f['sales_to']):%d %b %Y}"
