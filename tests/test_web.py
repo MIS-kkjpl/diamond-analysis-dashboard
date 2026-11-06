@@ -116,7 +116,7 @@ def test_settings_save_rule_and_row_then_revert():
         person = c.execute(text("SELECT * FROM config.salesperson WHERE kind = 'salesperson' "
                                 "ORDER BY sales_code LIMIT 1")).one()
     targets = {"target_turn": "1.0", "overstock_days": "365", "understock_days": "60", "aged_days": "400",
-               "max_offer_discount_pct": "15"}
+               "max_offer_discount_pct": "15", "markdown_age_steps": "365, 730", "markdown_pct_steps": "5, 10, 15"}
     try:
         refused = anon.post("/settings/rules/Targets", data=targets, follow_redirects=False)  # not signed in: refused
         assert refused.status_code == 303 and refused.headers["location"].startswith("/login")
