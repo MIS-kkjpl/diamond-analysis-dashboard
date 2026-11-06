@@ -360,3 +360,12 @@ def test_sets_on_inventory_and_sales():
     sales = client.get("/sales?start=2026-04-01")
     assert sales.status_code == 200 and "Sets: sold whole or split" in sales.text
     assert client.get("/recommendations?group=sets").status_code == 200
+
+
+def test_stale_approvals_bills_to_check_and_outcomes():
+    inv = client.get("/inventory?approval_days=90")
+    assert inv.status_code == 200 and ("Stale approvals" in inv.text or "No piece has been out on approval" in inv.text)
+    chk = client.get("/checks")
+    assert chk.status_code == 200 and "Bills to check" in chk.text
+    out = client.get("/recommendations/outcomes")
+    assert out.status_code == 200 and "Outcomes" in out.text

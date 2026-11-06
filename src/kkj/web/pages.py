@@ -9,6 +9,8 @@ from kkj import rules as rules_mod
 from kkj.metrics.summary import headline
 from kkj.viz import MUTED_SERIES, SERIES, style
 from kkj import settings
+from kkj.db import queries as q
+from kkj.web import charts
 from kkj.web.common import engine, read, render
 
 router = APIRouter()
@@ -91,4 +93,23 @@ def checks(request: Request):
                                   candidates, created, updated, resolved, reopened, error
                            FROM brain.run_log ORDER BY run_id DESC LIMIT 20""").to_dict("records"),
         snapshots=read("""SELECT snapshot_date, source, status, reason, labels FROM stock_hist.snapshot_status
-                          ORDER BY snapshot_date DESC, source""").to_dict("records"))
+                          ORDER BY snapshot_date DESC, source""").to_dict("records"),
+        t_bills=_odd_bills(), big_discount=q.BIG_DISCOUNT)
+
+
+def _odd_bills():
+    """Sale lines worth a second look this financial year (kkj.db.queries.odd_bills)."""
+    import pandas as pd
+    from kkj.metrics.summary import fy_start
+    from kkj.salespeople import split_salesman
+    with engine().connect() as conn:
+        df = q.odd_bills(conn, fy_start(pd.Timestamp.today().normalize()).date())
+    if df.empty:
+        return None
+    df = df.assign(branch=df["branch"].map(lambda b: str(b).split(" / ")[0] if b else "–"),
+                   salesman=df["salesman"].map(lambda v: split_salesman(v)[1] if isinstance(v, str) and v.strip() else "–"),
+                   barcode=[(b, f"/lookup?q={b}") if isinstance(b, str) and b else ("–", "") for b in df["barcode"]])
+    return charts.table(df[["issue", "sale_date", "bill_no", "branch", "salesman", "barcode", "item_name", "label_value",
+                            "billed", "discount"]],
+                        {"sale_date": "date", "barcode": "link", "label_value": "money", "billed": "money", "discount": "pct"},
+                        {"sale_date": "date", "salesman": "salesperson", "item_name": "item"})

@@ -190,6 +190,26 @@ def sales_lines(conn, date_from):
     return df
 
 
+BIG_DISCOUNT = 0.30          # a discount above this on one line is worth a second look
+
+
+def odd_bills(conn, date_from):
+    """ERP sale lines worth a second look: billed above the label value, discounted more than BIG_DISCOUNT, or
+    billed at zero. Returns excluded (they mirror a sale)."""
+    df = read(conn, f"""
+        SELECT sale_date, bill_no, branch, salesman, barcode, item_name, item_amt AS label_value,
+               taxable_amount AS billed, 1 - taxable_amount / nullif(item_amt, 0) AS discount,
+               CASE WHEN taxable_amount = 0 THEN 'billed at zero'
+                    WHEN taxable_amount > item_amt * 1.001 THEN 'billed above the label'
+                    ELSE 'discount over {BIG_DISCOUNT:.0%}' END AS issue
+        FROM sales.v_sales_line
+        WHERE source = 'erp' AND pcs > 0 AND sale_date >= :d AND {own_goods()} AND taxable_amount IS NOT NULL
+          AND (taxable_amount = 0 OR taxable_amount > item_amt * 1.001 OR taxable_amount < item_amt * (1 - :big))
+        ORDER BY sale_date DESC""", d=date_from, big=BIG_DISCOUNT)
+    df["sale_date"] = pd.to_datetime(df["sale_date"])
+    return df
+
+
 def hist_daily(conn):
     """Pieces sold per day, item group and product over the five-year history (sales.hist_line), diamond groups
     only (kkj.scope): the history holds gold and silver too."""

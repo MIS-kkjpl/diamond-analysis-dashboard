@@ -70,6 +70,11 @@
   {% endif %}
 </div>
 
+{{ ui.section("Bills to check", "this financial year") }}
+<div class="mb-3">{% if t_bills %}{{ ui.table_card("Unusual sale lines", t_bills, icon="ti-receipt-2",
+    sub="Billed above the label value, more than " ~ (big_discount * 100) | round | int ~ "% off, or at zero. Often a correct exception (scheme, exchange, staff sale); worth confirming with the branch.") }}
+  {% else %}<div class="card"><div class="card-body text-secondary">No unusual bills this financial year.</div></div>{% endif %}</div>
+
 {{ ui.section("Run history", "every load and refresh") }}
 <div class="row row-cards">
   {{ table("Recommendation refreshes", "ti-refresh", brain_runs, "Each refresh re-runs every rule on the latest stock and sales and updates the recommendations.") }}

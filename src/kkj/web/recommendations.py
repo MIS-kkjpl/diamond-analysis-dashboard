@@ -127,6 +127,29 @@ def summary_part(request: Request):
     return templates.TemplateResponse(request, "_summary.html", {"summary": summary(), "oob": False})
 
 
+@router.get("/recommendations/outcomes", response_class=HTMLResponse)
+def outcomes_page(request: Request):
+    """Every decided recommendation and what happened since (kkj.brain.outcomes)."""
+    from kkj.brain import outcomes
+    from kkj.web import charts
+    with engine().connect() as conn:
+        followed = outcomes.follow(conn)
+    if followed.empty:
+        return render(request, "outcomes.html", "recommendations", empty=True)
+    kinds = outcomes.by_kind(followed).assign(kind=lambda d: d["kind"].map(lambda k: KINDS.get(k, (k,))[0]))
+    rows = followed.sort_values("decided_at", ascending=False).assign(
+        kind=lambda d: d["kind"].map(lambda k: KINDS.get(k, (k,))[0]),
+        status=lambda d: d["status"].map(STATUS),
+        title=lambda d: [(t, f"/recommendations/{i}") for t, i in zip(d["title"], d["action_id"])])
+    return render(request, "outcomes.html", "recommendations", empty=False,
+                  t_kinds=charts.table(kinds, {"recommendations": "num", "pieces": "num", "sold": "num", "sold_share": "pct",
+                                               "sold_value": "money"}, {"sold_share": "share sold", "sold_value": "sold for"}),
+                  t_rows=charts.table(rows[["title", "kind", "status", "decided_by", "decided_at", "days", "outcome", "sold_value"]],
+                                      {"title": "link", "decided_at": "date", "days": "num", "sold_value": "money"},
+                                      {"title": "recommendation", "decided_by": "by", "decided_at": "decided", "days": "days since",
+                                       "sold_value": "sold for"}))
+
+
 @router.get("/recommendations/{action_id}", response_class=HTMLResponse)
 def detail(request: Request, action_id: int):
     rows = read(f"SELECT {COLUMNS} FROM brain.action WHERE action_id = :a", a=action_id)
@@ -134,8 +157,17 @@ def detail(request: Request, action_id: int):
         return Response("No such recommendation", status_code=404)
     history = read("""SELECT at AT TIME ZONE 'Asia/Kolkata' AS at, by, event, note FROM brain.action_event
                       WHERE action_id = :a ORDER BY event_id DESC""", a=action_id).to_dict("records")
+    follow, follow_pieces = None, []
+    if rows.iloc[0]["status"] in ("approved", "done", "rejected"):
+        from kkj.brain import outcomes
+        with engine().connect() as conn:
+            f = outcomes.follow(conn, [action_id])
+            if len(f):
+                follow = f.iloc[0].to_dict()
+                p = outcomes.pieces(conn, f)
+                follow_pieces = p.astype(object).where(p.notna(), None).to_dict("records") if len(p) else []
     return render(request, "recommendation_detail.html", "recommendations", a=_prep(rows.iloc[0].to_dict()),
-                  history=history)
+                  history=history, follow=follow, follow_pieces=follow_pieces)
 
 
 @router.post("/recommendations/{action_id}/{verb}", response_class=HTMLResponse)

@@ -30,7 +30,7 @@ def _short(b):
 # ── Inventory health ──────────────────────────────────────────────────────────
 @router.get("/inventory", response_class=HTMLResponse)
 def inventory(request: Request, branch: list[str] = Query(default=[]), group: list[str] = Query(default=[]),
-              old_days: int = 365):
+              old_days: int = 365, approval_days: int = 90):
     branch, group = [b for b in branch if b], [g for g in group if g]
     stock = cached(q.stock_latest).copy()
     all_branches = sorted(stock["branch"].dropna().unique())
@@ -39,7 +39,8 @@ def inventory(request: Request, branch: list[str] = Query(default=[]), group: li
         stock = stock[stock["branch"].isin(branch)]
     if group:
         stock = stock[stock["item_class_group"].isin(group)]
-    ctx = {"f": {"branch": branch, "group": group, "old_days": old_days}, "branches": all_branches, "groups": all_groups}
+    ctx = {"f": {"branch": branch, "group": group, "old_days": old_days, "approval_days": approval_days},
+           "branches": all_branches, "groups": all_groups}
     if stock.empty:
         return render(request, "inventory.html", "inventory", empty=True, **ctx)
     stock["value"] = m.value(stock)
@@ -69,9 +70,17 @@ def inventory(request: Request, branch: list[str] = Query(default=[]), group: li
     ).sort_values("value", ascending=False)
 
     t_sets, t_broken = _sets_tables(stock)
+    # out on approval longer than approval_days: probably sold, lost or on consignment, yet still counted as stock
+    stale = approval[approval["days_from_branch_in"] > approval_days].sort_values("days_from_branch_in", ascending=False)
+    stale_kpi = (len(stale), stale["value"].sum())
+    t_stale = charts.table(stale[["barcode", "item_name", "item_class_group", "branch", "location", "days_from_branch_in",
+                                  "age_days", "value"]].assign(branch=lambda d: d["branch"].map(_short),
+                                                               barcode=lambda d: [(b, f"/lookup?q={b}") for b in d["barcode"]]),
+                           {"barcode": "link", "value": "money", "days_from_branch_in": "num", "age_days": "num"},
+                           {"days_from_branch_in": "days on approval", "age_days": "age (days)"}) if len(stale) else None
     return render(
         request, "inventory.html", "inventory", empty=False, kpis=kpis, as_of=stock["snapshot_date"].iloc[0], **ctx,
-        t_sets=t_sets, t_broken=t_broken,
+        t_sets=t_sets, t_broken=t_broken, t_stale=t_stale, stale_kpi=stale_kpi,
         fig_branch=charts.hbar(by_branch["branch"].map(_short), by_branch["value"] / 1e7, by_branch["labels"],
                                " · %{customdata:,} labels"),
         t_branch=charts.table(by_branch, {"value": "money", "labels": "num", "pcs": "num"}),

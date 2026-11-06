@@ -19,6 +19,28 @@
   </div>
 </div>
 <div class="row row-cards mt-1">
+  {% if follow %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header"><div><h3 class="card-title"><i class="ti ti-target-arrow me-2"></i>What happened since</h3>
+        <div class="card-subtitle small text-secondary">{{ follow.days }} days since it was {{ "dismissed" if a.status == "rejected" else "approved" }}
+          · <a href="/recommendations/outcomes">all outcomes</a></div></div></div>
+      <div class="card-body">
+        <div class="fs-3 mb-2">{{ follow.outcome }}</div>
+        {% if follow_pieces %}
+        <div class="table-responsive"><table class="table table-sm card-table">
+          <thead><tr><th>Piece</th><th>Then</th><th>Now</th><th>Outcome</th><th class="text-end">Sold for</th></tr></thead>
+          <tbody>{% for p in follow_pieces %}<tr>
+            <td><a href="/lookup?q={{ p.barcode | urlencode }}">{{ p.barcode }}</a> <span class="text-secondary small">{{ p.item_name or "" }}</span></td>
+            <td class="small">{{ p.location or "–" }}</td><td class="small">{{ p.now_where or "–" }}</td>
+            <td><span class="badge bg-{{ {'sold': 'green', 'moved': 'blue', 'unchanged': 'secondary', 'left stock, no sale': 'orange'}[p.outcome] }}-lt">{{ p.outcome }}</span>
+              {% if p.sale_date %}<span class="small text-secondary">{{ p.sale_date | date }}</span>{% endif %}</td>
+            <td class="text-end">{{ p.sold_value | money if p.sold_value is not none else "–" }}</td></tr>{% endfor %}</tbody>
+        </table></div>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
   <div class="col-lg-6">
     <div class="card">
       <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-dots me-2"></i>Supporting data</h3></div>

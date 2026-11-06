@@ -16,6 +16,11 @@
     <input type="number" name="old_days" aria-label="Old means over this many days" value="{{ f.old_days }}" min="90" max="1095" step="30"
            class="form-control form-control-sm" style="width: 6rem"><span class="small text-secondary">days</span>
   </div>
+  <div class="d-flex align-items-center gap-2">
+    <span class="small text-secondary">Approval is stale after</span>
+    <input type="number" name="approval_days" aria-label="Approval is stale after this many days" value="{{ f.approval_days }}"
+           min="15" max="730" step="15" class="form-control form-control-sm" style="width: 5.5rem"><span class="small text-secondary">days</span>
+  </div>
 {% endcall %}
 
 {% if empty %}
@@ -45,6 +50,11 @@
 {{ ui.section("Pieces to act on", "old stock, and stock away from a counter") }}
 <div class="mb-3">{{ ui.table_card("Oldest stock: over " ~ f.old_days ~ " days, highest value first", t_oldest,
                                     sub="Top 200", icon="ti-hourglass") }}</div>
+<div class="mb-3">{% if t_stale %}{{ ui.table_card("Stale approvals: out more than " ~ f.approval_days ~ " days", t_stale,
+    sub=(stale_kpi[0] | num) ~ " pieces, " ~ (stale_kpi[1] | money) ~ ". Still counted as stock: confirm each is with a customer, or close the approval in the ERP. Longest out first.",
+    icon="ti-clock-exclamation") }}{% else %}
+  <div class="card"><div class="card-body text-secondary"><i class="ti ti-clock-exclamation me-2"></i>No piece has been out on approval
+    for more than {{ f.approval_days }} days.</div></div>{% endif %}</div>
 <div class="mb-3">{{ ui.table_card("Not on a counter", t_away, sub="On approval, in transit or in repair; longest days since branch-in",
                                     icon="ti-truck") }}</div>
 {% endif %}
