@@ -12,7 +12,12 @@
     <a class="dropdown-item" href="/exports/buying.xlsx"><i class="ti ti-shopping-cart me-2"></i>Purchasing list</a>
   </div>
 </div>
-<a class="btn btn-outline-secondary" href="/recommendations/outcomes"><i class="ti ti-target-arrow"></i> Outcomes</a>
+{% if feature("outcomes") %}<a class="btn btn-outline-secondary" href="/recommendations/outcomes"><i class="ti ti-target-arrow"></i> Outcomes</a>{% endif %}
+{% if feature("ai_review") %}
+<form method="post" action="/recommendations/ai-review" class="d-inline" onsubmit="const b = this.querySelector('button'); b.disabled = true; b.innerHTML = '<span class=&quot;spinner-border spinner-border-sm me-2&quot;></span>Reviewing…'">
+  <button class="btn btn-outline-secondary" title="AI reads the most important open recommendations and flags conflicts, timing and duplicates"><i class="ti ti-sparkles"></i> AI second look</button>
+</form>
+{% endif %}
 <button class="btn btn-primary" hx-post="/refresh" hx-disabled-elt="this" hx-indicator="#refresh-spin">
   <i class="ti ti-refresh"></i> Refresh recommendations
   <span id="refresh-spin" class="spinner-border spinner-border-sm ms-2 htmx-indicator"></span>
@@ -22,6 +27,26 @@
 {% block intro %}What to do next, ranked by the money involved. Approve what you'll act on, dismiss what doesn't apply, snooze what can wait. Each card's Details link shows the numbers behind it.{% endblock %}
 {% block content %}
 {% set oob = False %}{% include "_summary.html" %}
+{% if feature("ai_review") %}{% set rv = ai_review() %}
+{% if request.query_params.get("ai_error") %}<div class="alert alert-warning" id="ai-notes">{{ request.query_params.get("ai_error") }}</div>{% endif %}
+{% if rv[0] %}
+<div class="card mb-3 sw-ai" id="ai-notes">
+  <div class="card-header"><div><h3 class="card-title"><i class="ti ti-sparkles me-2"></i>AI second look</h3>
+    <div class="card-subtitle small text-secondary">{{ rv[0] | date("%d %b %Y %H:%M") }} · notes on the most important open
+      recommendations; they don't change anything</div></div></div>
+  {% if rv[1] %}
+  <div class="list-group list-group-flush">
+    {% for n in rv[1] %}
+    <div class="list-group-item py-2 d-flex gap-3 align-items-start">
+      <span class="badge bg-{{ {'conflict': 'red', 'timing': 'orange', 'duplicate': 'blue', 'caution': 'yellow', 'data': 'secondary'}.get(n.note_type, 'secondary') }}-lt text-capitalize" style="min-width: 5.5rem">{{ n.note_type }}</span>
+      <div class="flex-grow-1">{{ n.note }}
+        <div class="small mt-1">{% for i in n.action_ids %}<a href="/recommendations/{{ i }}" class="me-2">#{{ i }}</a>{% endfor %}</div></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<div class="card-body text-secondary">Nothing worth flagging in the latest review.</div>{% endif %}
+</div>
+{% endif %}{% endif %}
 
 <form id="filters" class="card card-body py-2 mb-3" hx-get="/recommendations/feed" hx-target="#feed"
       hx-trigger="change, keyup changed delay:400ms from:#q">

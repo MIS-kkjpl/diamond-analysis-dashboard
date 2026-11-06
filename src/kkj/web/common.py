@@ -120,6 +120,42 @@ def asset_version():
 
 
 templates.env.globals.update(asset_version=asset_version)
+
+
+_MD = None
+
+
+def markdown(value):
+    """Markdown from the AI features as HTML. Raw HTML in the text is shown as text, never run (html=False)."""
+    global _MD
+    if _MD is None:
+        from markdown_it import MarkdownIt
+        _MD = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable("table")
+    from markupsafe import Markup
+    return Markup(_MD.render(value or ""))
+
+
+def _feature(key):
+    from kkj import features
+    return features.on(key)
+
+
+def _ai_text(kind):
+    """The latest AI text of a kind ('season', 'brief') as a dict, or None."""
+    from kkj.ai import brief
+    df = brief.latest(kind, 1)
+    return df.iloc[0].to_dict() if len(df) else None
+
+
+def _ai_review():
+    """(when, notes) of the latest AI second look at the recommendations."""
+    from kkj.ai import review
+    return review.latest()
+
+
+templates.env.filters.update(md=markdown)
+templates.env.globals.update(ai_text=_ai_text, ai_review=_ai_review)
+templates.env.globals.update(feature=_feature)
 templates.env.globals.update(flatten=flatten, choice_label=lambda c: CHOICE_LABELS.get(str(c), str(c)))
 
 

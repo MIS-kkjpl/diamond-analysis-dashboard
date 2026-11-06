@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Weekly brief · Stockwise{% endblock %}
+{% block pretitle %}Actions{% endblock %}
+{% block page_title %}Weekly brief{% endblock %}
+{% block actions %}
+<form method="post" action="/brief" onsubmit="const b = this.querySelector('button'); b.disabled = true; b.innerHTML = '<span class=&quot;spinner-border spinner-border-sm me-2&quot;></span>Writing… up to a minute'">
+  <button class="btn btn-primary"><i class="ti ti-sparkles"></i> Write this week's brief</button>
+</form>
+{% endblock %}
+{% block intro %}One page for management: what moved, the decisions that matter this week and what to watch. The figures are
+  computed by Stockwise; the writing is AI. Each brief keeps the figures it was written from.{% endblock %}
+{% block content %}
+{% if error %}<div class="alert alert-warning">{{ error }}</div>{% endif %}
+{% if not briefs %}
+<div class="empty">
+  <div class="empty-icon"><i class="ti ti-news"></i></div>
+  <p class="empty-title">No brief yet</p>
+  <p class="empty-subtitle text-secondary">Write the first one with the button above. It can also be written every Monday
+    by the morning refresh.</p>
+</div>
+{% else %}
+{% set b = briefs[0] %}
+<div class="card mb-3">
+  <div class="card-header"><div><h3 class="card-title"><i class="ti ti-news me-2"></i>Brief, {{ b.period }}</h3>
+    <div class="card-subtitle small text-secondary">Written {{ b.created_at | date("%d %b %Y %H:%M") }} for {{ b.created_by }}
+      {% if b.cost_usd %} · ≈ ${{ "%.2f" | format(b.cost_usd | float) }}{% endif %}</div></div>
+    <div class="card-actions"><button type="button" class="btn btn-sm btn-ghost-secondary" onclick="window.print()"><i class="ti ti-printer"></i> Print</button></div>
+  </div>
+  <div class="card-body sw-md sw-brief">{{ b.body_md | md }}</div>
+  <div class="card-footer small text-secondary">
+    <details><summary>The figures it was written from</summary>
+      <pre class="small mb-0 mt-2" style="white-space: pre-wrap">{{ b.facts | tojson(indent=2) }}</pre></details>
+  </div>
+</div>
+{% if briefs | length > 1 %}
+<div class="card">
+  <div class="card-header"><h3 class="card-title"><i class="ti ti-archive me-2"></i>Earlier briefs</h3></div>
+  <div class="list-group list-group-flush">
+    {% for e in briefs[1:] %}
+    <details class="list-group-item py-2"><summary><b>{{ e.period }}</b> <span class="small text-secondary">· written {{ e.created_at | date("%d %b %Y") }}</span></summary>
+      <div class="sw-md mt-2">{{ e.body_md | md }}</div></details>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

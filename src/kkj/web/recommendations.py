@@ -166,8 +166,13 @@ def detail(request: Request, action_id: int):
                 follow = f.iloc[0].to_dict()
                 p = outcomes.pieces(conn, f)
                 follow_pieces = p.astype(object).where(p.notna(), None).to_dict("records") if len(p) else []
+    from kkj import features
+    ai_notes = []
+    if features.on("ai_review"):
+        from kkj.ai import review
+        ai_notes = review.notes_for(action_id)
     return render(request, "recommendation_detail.html", "recommendations", a=_prep(rows.iloc[0].to_dict()),
-                  history=history, follow=follow, follow_pieces=follow_pieces)
+                  history=history, follow=follow, follow_pieces=follow_pieces, ai_notes=ai_notes)
 
 
 @router.post("/recommendations/{action_id}/{verb}", response_class=HTMLResponse)

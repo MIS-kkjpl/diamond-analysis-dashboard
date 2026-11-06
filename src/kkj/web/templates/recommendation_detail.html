@@ -19,7 +19,19 @@
   </div>
 </div>
 <div class="row row-cards mt-1">
-  {% if follow %}
+  {% if ai_notes %}
+  <div class="col-12">
+    <div class="card sw-ai">
+      <div class="card-header"><h3 class="card-title"><i class="ti ti-sparkles me-2"></i>AI second look</h3></div>
+      <div class="list-group list-group-flush">
+        {% for n in ai_notes %}<div class="list-group-item py-2"><span class="badge bg-secondary-lt text-capitalize me-2">{{ n.note_type }}</span>{{ n.note }}
+          {% set others = n.action_ids | reject("equalto", a.action_id) | list %}
+          {% if others %}<span class="small ms-1">Also: {% for i in others %}<a href="/recommendations/{{ i }}" class="me-1">#{{ i }}</a>{% endfor %}</span>{% endif %}</div>{% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if follow and feature("outcomes") %}
   <div class="col-12">
     <div class="card">
       <div class="card-header"><div><h3 class="card-title"><i class="ti ti-target-arrow me-2"></i>What happened since</h3>

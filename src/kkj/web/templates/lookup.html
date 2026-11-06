@@ -97,7 +97,7 @@
   {% if people %}
   <div class="col-md-6"><div class="card"><div class="card-header"><h3 class="card-title">Salespeople</h3></div>
     <div class="list-group list-group-flush">{% for r in people %}
-      <a class="list-group-item list-group-item-action py-2 d-flex justify-content-between" href="/salespeople/{{ r.sales_code | urlencode }}">
+      <a class="list-group-item list-group-item-action py-2 d-flex justify-content-between" href="{{ '/salespeople/' ~ (r.sales_code | urlencode) if feature('salespeople') else '/sales?salesperson=' ~ (r.sales_code | urlencode) }}">
         <span>{{ r.name }} <span class="text-secondary small">{{ r.sales_code }}</span>{% if not r.active %} <span class="badge bg-secondary-lt">inactive</span>{% endif %}</span>
         <span class="text-secondary small">{{ r.branch | short if r.branch else "" }}</span></a>{% endfor %}</div></div></div>
   {% endif %}
@@ -105,7 +105,7 @@
   <div class="col-md-6"><div class="card"><div class="card-header"><h3 class="card-title">{{ "Other bricks and groups" if product else "Bricks and brick groups" }}</h3></div>
     <div class="list-group list-group-flush">{% for r in groups %}
       <a class="list-group-item list-group-item-action py-2 d-flex justify-content-between"
-         href="/stock-turn?view={{ r.level }}&search={{ r.brick | urlencode }}">
+         href="{{ '/stock-turn?view=' ~ r.level ~ '&search=' ~ (r.brick | urlencode) if feature('stock_turn') else '/lookup?q=' ~ (r.brick | urlencode) }}">
         <span>{{ r.brick }} <span class="text-secondary small">{{ "group" if r.level == "group" else "brick" }}</span></span>
         <span class="text-secondary small">{{ r.current_pcs | num }} pcs · {{ r.status | replace("_", " ") }}</span></a>{% endfor %}</div></div></div>
   {% endif %}

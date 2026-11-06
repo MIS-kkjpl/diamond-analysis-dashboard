@@ -65,14 +65,16 @@
           {%- endmacro %}
           <li class="nav-section">Actions</li>
           {{ item("recommendations", "/recommendations", "ti-checklist", "Recommendations") }}
+          {% if feature("ai_ask") %}{{ item("ask", "/ask", "ti-sparkles", "Ask Stockwise") }}{% endif %}
+          {% if feature("ai_brief") %}{{ item("brief", "/brief", "ti-news", "Weekly brief") }}{% endif %}
           <li class="nav-section">Analytics</li>
           {{ item("overview", "/overview", "ti-chart-line", "Overview") }}
           {{ item("inventory", "/inventory", "ti-packages", "Inventory health") }}
           {{ item("sales", "/sales", "ti-receipt", "Sales") }}
-          {{ item("salespeople", "/salespeople", "ti-users", "Salespeople") }}
-          {{ item("stock_turn", "/stock-turn", "ti-refresh", "Stock turn") }}
-          {{ item("seasonality", "/seasonality", "ti-calendar-stats", "Seasonality") }}
-          {{ item("insights", "/insights", "ti-bulb", "Insights") }}
+          {% if feature("salespeople") %}{{ item("salespeople", "/salespeople", "ti-users", "Salespeople") }}{% endif %}
+          {% if feature("stock_turn") %}{{ item("stock_turn", "/stock-turn", "ti-refresh", "Stock turn") }}{% endif %}
+          {% if feature("seasonality") %}{{ item("seasonality", "/seasonality", "ti-calendar-stats", "Seasonality") }}{% endif %}
+          {% if feature("insights") %}{{ item("insights", "/insights", "ti-bulb", "Insights") }}{% endif %}
           <li class="nav-section">Admin</li>
           {{ item("checks", "/checks", "ti-database", "Data quality") }}
           {{ item("settings", "/settings", "ti-adjustments", "Settings") }}

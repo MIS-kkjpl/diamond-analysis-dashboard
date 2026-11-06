@@ -10,14 +10,25 @@ Run from the project folder:
   .venv\\Scripts\\uvicorn kkj.web.app:app --host 0.0.0.0 --port 8600
 """
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from kkj.web import admin, analytics, auth, exports, lookup, pages, recommendations, sellers
+from kkj import features
+from kkj.web import admin, ai, analytics, auth, exports, lookup, pages, recommendations, sellers
 from kkj.web.common import HERE, status, templates
 
 app = FastAPI(title="Stockwise", docs_url=None, redoc_url=None, openapi_url=None)
 app.middleware("http")(auth.middleware)
+
+
+@app.middleware("http")
+async def switched_off(request: Request, call_next):
+    """Pages of a feature switched off in .env don't exist (kkj.features)."""
+    if features.blocked(request.url.path):
+        return PlainTextResponse("Not found", status_code=404)
+    return await call_next(request)
+
+
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 app.include_router(auth.router)
 app.include_router(recommendations.router)
@@ -27,6 +38,7 @@ app.include_router(analytics.router)
 app.include_router(admin.router)
 app.include_router(lookup.router)
 app.include_router(sellers.router)
+app.include_router(ai.router)
 
 
 @app.get("/")

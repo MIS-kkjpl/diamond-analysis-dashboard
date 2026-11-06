@@ -243,3 +243,18 @@ a:focus-visible, button:focus-visible, .btn:focus-visible, input:focus-visible, 
 /* filter bars: the loading spinner floats in the corner instead of wrapping onto an empty line */
 .filter-bar { position: relative; }
 .filter-bar #filter-spin { position: absolute; right: .75rem; bottom: .55rem; }
+
+/* AI text (Ask Stockwise, weekly brief, season notes, second look) */
+.sw-ai { border-left: 3px solid #7c5cd6; }
+.sw-md h2 { font-size: 1.02rem; font-weight: 600; margin: 1.1rem 0 .4rem; }
+.sw-md h2:first-child, .sw-md h3:first-child, .sw-md p:first-child { margin-top: 0; }
+.sw-md h3 { font-size: .95rem; font-weight: 600; margin: .9rem 0 .3rem; }
+.sw-md p, .sw-md ul, .sw-md ol { margin-bottom: .6rem; }
+.sw-md ul, .sw-md ol { padding-left: 1.25rem; }
+.sw-md li { margin-bottom: .2rem; }
+.sw-md table { width: auto; max-width: 100%; margin: .4rem 0 .8rem; font-size: .875rem; border-collapse: collapse; display: block; overflow-x: auto; }
+.sw-md th, .sw-md td { padding: .3rem .7rem; border-bottom: 1px solid var(--sw-card-border); text-align: left; }
+.sw-md th { color: var(--sw-muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; }
+.sw-md > *:last-child { margin-bottom: 0; }
+.sw-brief { font-size: .95rem; line-height: 1.55; max-width: 52rem; }
+@media print { .sw-sidebar, .topbar, .page-header .col-md-auto, .card-footer, .card-actions { display: none !important; } }

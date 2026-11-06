@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Ask Stockwise · Stockwise{% endblock %}
+{% block pretitle %}Actions{% endblock %}
+{% block page_title %}Ask Stockwise{% endblock %}
+{% block intro %}Ask about stock, sales, stock turn, seasons, salespeople or a recommendation in plain words. Answers come
+  from the company's data, and each one lists the lookups behind it.{% endblock %}
+{% block content %}
+<form class="card mb-3" hx-post="/ask" hx-target="#answers" hx-swap="afterbegin" hx-disabled-elt="find button"
+      hx-indicator="#ask-spin" hx-on::after-request="if (event.detail.successful) this.reset()">
+  <div class="card-body">
+    <label for="question" class="form-label">Your question</label>
+    <textarea id="question" name="question" class="form-control" rows="2" maxlength="1000" required
+              placeholder="e.g. Why does KJ2 hold so much 14KT Diamond Half Set, and is it selling?"></textarea>
+    <div class="d-flex flex-wrap gap-2 mt-2" aria-label="Example questions">
+      {% for ex in ["Which products are we overstocked in, and where?",
+                    "How did sales in the last 4 weeks compare with the 4 weeks before?",
+                    "What should we prepare for the next festival?",
+                    "Which recommendations would free up the most cash?",
+                    "How is D RING selling by weight range?"] %}
+      <button type="button" class="btn btn-sm btn-ghost-secondary border" onclick="document.getElementById('question').value = this.textContent.trim()">{{ ex }}</button>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card-footer d-flex align-items-center gap-3">
+    <button class="btn btn-primary"><i class="ti ti-sparkles"></i> Ask</button>
+    <span id="ask-spin" class="htmx-indicator small text-secondary"><span class="spinner-border spinner-border-sm me-1"></span>
+      Looking it up… usually 15–60 seconds</span>
+    <span class="small text-secondary ms-auto">Read-only: it can't change anything.
+      {% if not names %}Salespeople are shown by code.{% endif %}</span>
+  </div>
+</form>
+
+<div id="answers">
+  {% for r in recent %}{% include "_answer.html" %}{% else %}
+  <div class="text-secondary small" id="no-answers">No questions yet. Ask the first one above.</div>{% endfor %}
+</div>
+{% endblock %}

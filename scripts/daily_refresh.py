@@ -6,6 +6,7 @@ The daily refresh (to be scheduled once the permanent setup is decided):
      day misses that evening's sales (4 Nov 2026: 20 of 29 lines)
   3. today's stock -> erp.stock_snapshot
   4. refresh the recommendations, then the accuracy audit (python -m kkj.brain.run)
+  5. if switched on (kkj.features): the AI second look; on Mondays the weekly brief
 
 Every step runs as its own process and is logged; a failed step doesn't stop the later ones, except
 that nothing runs without the backup. Log: logs/daily_<stamp>.log.
@@ -52,6 +53,12 @@ def main():
                                            "--to", f"{today:%d/%m/%Y}"], log),
           step("stock today", ["kkj.pipelines.stock"], log),
           step("recommendations + audit", ["kkj.brain.run", "--trigger", "pipeline"], log)]
+    # AI steps (kkj.features): only when switched on in .env with an API key; a failure here never fails the refresh
+    from kkj import features
+    if features.on("ai_review"):
+        step("AI second look", ["kkj.ai.review"], log)
+    if features.on("ai_brief") and today.weekday() == 0:
+        step("weekly brief (Monday)", ["kkj.ai.brief"], log)
     log(f"Done: {sum(ok)}/{len(ok)} steps succeeded.")
     sys.exit(0 if all(ok) else 1)
 

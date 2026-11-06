@@ -369,3 +369,27 @@ def test_stale_approvals_bills_to_check_and_outcomes():
     assert chk.status_code == 200 and "Bills to check" in chk.text
     out = client.get("/recommendations/outcomes")
     assert out.status_code == 200 and "Outcomes" in out.text
+
+
+def test_switched_off_pages_vanish(monkeypatch):
+    monkeypatch.setenv("FEATURE_SALESPEOPLE", "off")
+    assert client.get("/salespeople").status_code == 404
+    page = client.get("/overview").text
+    assert 'href="/salespeople"' not in page
+    monkeypatch.setenv("FEATURE_SALESPEOPLE", "on")
+    assert 'href="/salespeople"' in client.get("/overview").text
+
+
+def test_ai_pages_render_without_calling_the_api(monkeypatch):
+    monkeypatch.setenv("FEATURE_AI_ASK", "on")
+    monkeypatch.setenv("FEATURE_AI_BRIEF", "on")
+    monkeypatch.setenv("FEATURE_AI_REVIEW", "on")
+    monkeypatch.setenv("FEATURE_AI_SEASON", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    ask = client.get("/ask")
+    assert ask.status_code == 200 and "Ask Stockwise" in ask.text
+    assert client.get("/brief").status_code == 200
+    assert "AI second look" in client.get("/recommendations").text
+    assert "Season notes" in client.get("/seasonality").text
+    monkeypatch.setenv("FEATURE_AI_ASK", "off")
+    assert client.get("/ask").status_code == 404
