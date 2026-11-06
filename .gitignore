@@ -24,3 +24,6 @@ __pycache__/
 .idea/
 Thumbs.db
 desktop.ini
+
+# Downloaded tools (cloudflared.exe for phone access)
+tools/
