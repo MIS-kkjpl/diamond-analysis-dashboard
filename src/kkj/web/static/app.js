@@ -197,3 +197,13 @@
     });
   });
 })();
+
+/* A request the person's role doesn't allow (web/roles.py) answers with an "sw-refused" event: show it briefly. */
+document.body && document.body.addEventListener("sw-refused", e => {
+  const box = document.createElement("div");
+  box.className = "sw-toast";
+  box.setAttribute("role", "alert");
+  box.textContent = (e.detail && e.detail.value) || "Your role can't do this.";
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 5000);
+});

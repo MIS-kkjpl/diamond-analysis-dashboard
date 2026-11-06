@@ -19,9 +19,9 @@
 <div class="card mb-3 sw-ai" id="season-notes">
   <div class="card-header"><div><h3 class="card-title"><i class="ti ti-sparkles me-2"></i>Season notes</h3>
     <div class="card-subtitle small text-secondary">{% if sn %}Written {{ sn.created_at | date("%d %b %Y %H:%M") }} from the figures on this page{% else %}Plain-language notes on the season ahead, from the figures on this page{% endif %}</div></div>
-    <div class="card-actions">
+    <div class="card-actions">{% if can(request, "manager") %}
       <form method="post" action="/seasonality/notes" onsubmit="const b = this.querySelector('button'); b.disabled = true; b.innerHTML = '<span class=&quot;spinner-border spinner-border-sm me-2&quot;></span>Writing…'">
-        <button class="btn btn-sm btn-outline-secondary"><i class="ti ti-sparkles"></i> {{ "Write new notes" if sn else "Write notes" }}</button></form></div>
+        <button class="btn btn-sm btn-outline-secondary"><i class="ti ti-sparkles"></i> {{ "Write new notes" if sn else "Write notes" }}</button></form>{% endif %}</div>
   </div>
   {% if request.query_params.get("ai_error") %}<div class="card-body"><div class="alert alert-warning mb-0">{{ request.query_params.get("ai_error") }}</div></div>{% endif %}
   {% if sn %}<div class="card-body sw-md">{{ sn.body_md | md }}</div>{% endif %}

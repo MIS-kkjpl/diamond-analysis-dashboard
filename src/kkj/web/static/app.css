@@ -336,3 +336,5 @@ body.sw-ask-open .sw-ask-fab { display: none; }
   body.sw-ask-open .sw-user-name { display: none !important; }
   body.sw-ask-open .sw-kpi-value { font-size: clamp(1.15rem, 1.6vw, 1.6rem); white-space: nowrap; }
 }
+.sw-toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); z-index: 2000; background: #1d2433; color: #fff;
+  padding: .6rem 1rem; border-radius: 8px; font-size: .875rem; box-shadow: 0 6px 18px rgba(0,0,0,.2); max-width: 90vw; }

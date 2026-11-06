@@ -84,9 +84,12 @@ def _cell(value, kind):
         return f"{value:,.2f}"
     if kind == "date":
         return pd.Timestamp(value).strftime("%d %b %Y")
-    if kind == "link":                      # (text, href)
+    if kind == "link":                      # (text, href); plain text when the page it leads to is switched off
         text, href = value
-        return Markup(f'<a href="{escape(href)}">{escape(text)}</a>') if href else text
+        from kkj import features
+        if not href or features.blocked(str(href).split("?")[0]):
+            return text
+        return Markup(f'<a href="{escape(href)}">{escape(text)}</a>')
     return value
 
 

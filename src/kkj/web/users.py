@@ -2,7 +2,8 @@
 Stockwise accounts from the command line (the same as Settings -> Users in the app).
 
   python -m kkj.web.users list
-  python -m kkj.web.users add <username> --name "Display Name"   # asks for the password (hidden)
+  python -m kkj.web.users add <username> --name "Display Name" [--role admin|manager|viewer]   # asks for the password
+  python -m kkj.web.users role <username> admin|manager|viewer    # change someone's role
   python -m kkj.web.users reset <username>                        # new password; signs them out everywhere
   python -m kkj.web.users disable <username>                      # can't sign in; signed out now
   python -m kkj.web.users enable <username>                       # also clears a lock-out
@@ -51,6 +52,10 @@ def main(argv=None):
     a = sub.add_parser("add")
     a.add_argument("username")
     a.add_argument("--name", required=True, help="shown in the app and recorded with every approval")
+    a.add_argument("--role", choices=("admin", "manager", "viewer"), default="manager")
+    r = sub.add_parser("role")
+    r.add_argument("username")
+    r.add_argument("role", choices=("admin", "manager", "viewer"))
     for cmd in ("reset", "disable", "enable", "signout"):
         sub.add_parser(cmd).add_argument("username")
     sub.add_parser("log").add_argument("--limit", type=int, default=30)
@@ -59,7 +64,7 @@ def main(argv=None):
     with settings.etl_engine().begin() as conn:
         if args.cmd == "list":
             rows = conn.execute(text("""
-                SELECT u.username, u.display_name, u.active, u.last_login_at, u.locked_until > now() AS locked,
+                SELECT u.username, u.display_name, u.role, u.active, u.last_login_at, u.locked_until > now() AS locked,
                        (SELECT count(*) FROM auth.session s WHERE s.user_id = u.user_id AND s.expires_at > now()) AS sessions
                 FROM auth.app_user u ORDER BY u.username""")).all()
             if not rows:
@@ -68,17 +73,25 @@ def main(argv=None):
                 state = "active" if r.active else "disabled"
                 state += ", LOCKED" if r.locked else ""
                 last = f"{r.last_login_at:%d %b %Y %H:%M}" if r.last_login_at else "never"
-                print(f"{r.username:<16} {r.display_name:<24} {state:<16} last sign-in {last:<18} sessions {r.sessions}")
+                print(f"{r.username:<16} {r.display_name:<24} {r.role:<8} {state:<16} last sign-in {last:<18} sessions {r.sessions}")
         elif args.cmd == "add":
             username = args.username.strip()
             if not username.replace(".", "").replace("_", "").replace("-", "").isalnum():
                 sys.exit("Use letters, digits, '.', '_' or '-' in the username.")
             if conn.execute(text("SELECT 1 FROM auth.app_user WHERE lower(username) = lower(:u)"), {"u": username}).first():
                 sys.exit(f"{username} already exists (use reset to change the password).")
-            conn.execute(text("""INSERT INTO auth.app_user (username, display_name, password_hash)
-                                 VALUES (:u, :n, :h)"""),
-                         {"u": username, "n": args.name.strip(), "h": hash_password(_ask_password(username))})
-            print(f"Added {username} ({args.name.strip()}).")
+            conn.execute(text("""INSERT INTO auth.app_user (username, display_name, password_hash, role)
+                                 VALUES (:u, :n, :h, :r)"""),
+                         {"u": username, "n": args.name.strip(), "h": hash_password(_ask_password(username)), "r": args.role})
+            print(f"Added {username} ({args.name.strip()}, {args.role}).")
+        elif args.cmd == "role":
+            user = _user(conn, args.username)
+            admins = conn.execute(text("SELECT count(*) FROM auth.app_user WHERE role = 'admin' AND active")).scalar()
+            current = conn.execute(text("SELECT role FROM auth.app_user WHERE user_id = :id"), {"id": user.user_id}).scalar()
+            if current == "admin" and args.role != "admin" and admins <= 1:
+                sys.exit("Stockwise needs at least one admin. Make someone else admin first.")
+            conn.execute(text("UPDATE auth.app_user SET role = :r WHERE user_id = :id"), {"r": args.role, "id": user.user_id})
+            print(f"{user.username} is now {args.role}.")
         elif args.cmd == "log":
             for r in conn.execute(text("""SELECT at AT TIME ZONE 'Asia/Kolkata' AS at, username, success, reason, ip
                                           FROM auth.login_event ORDER BY event_id DESC LIMIT :n"""), {"n": args.limit}):

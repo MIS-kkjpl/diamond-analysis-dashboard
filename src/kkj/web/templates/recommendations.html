@@ -3,7 +3,7 @@
 {% block pretitle %}Actions{% endblock %}
 {% block page_title %}Recommendations{% endblock %}
 {% block actions %}
-<div class="dropdown">
+{% if feature("exports") %}<div class="dropdown">
   <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="ti ti-download"></i> Export</button>
   <div class="dropdown-menu dropdown-menu-end">
     <a class="dropdown-item" href="/exports/transfers.xlsx"><i class="ti ti-arrows-exchange me-2"></i>Transfer slips (to review + approved)</a>
@@ -11,17 +11,17 @@
     <a class="dropdown-item" href="/exports/offers.xlsx"><i class="ti ti-tag me-2"></i>Markdown lists by branch</a>
     <a class="dropdown-item" href="/exports/buying.xlsx"><i class="ti ti-shopping-cart me-2"></i>Purchasing list</a>
   </div>
-</div>
+</div>{% endif %}
 {% if feature("outcomes") %}<a class="btn btn-outline-secondary" href="/recommendations/outcomes"><i class="ti ti-target-arrow"></i> Outcomes</a>{% endif %}
-{% if feature("ai_review") %}
+{% if feature("ai_review") and can(request, "manager") %}
 <form method="post" action="/recommendations/ai-review" class="d-inline" onsubmit="const b = this.querySelector('button'); b.disabled = true; b.innerHTML = '<span class=&quot;spinner-border spinner-border-sm me-2&quot;></span>Reviewing…'">
   <button class="btn btn-outline-secondary" title="AI reads the most important open recommendations and flags conflicts, timing and duplicates"><i class="ti ti-sparkles"></i> AI second look</button>
 </form>
 {% endif %}
-<button class="btn btn-primary" hx-post="/refresh" hx-disabled-elt="this" hx-indicator="#refresh-spin">
+{% if can(request, "manager") %}<button class="btn btn-primary" hx-post="/refresh" hx-disabled-elt="this" hx-indicator="#refresh-spin">
   <i class="ti ti-refresh"></i> Refresh recommendations
   <span id="refresh-spin" class="spinner-border spinner-border-sm ms-2 htmx-indicator"></span>
-</button>
+</button>{% endif %}
 {% endblock %}
 
 {% block intro %}What to do next, ranked by the money involved. Approve what you'll act on, dismiss what doesn't apply, snooze what can wait. Each card's Details link shows the numbers behind it.{% endblock %}

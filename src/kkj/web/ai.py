@@ -18,6 +18,7 @@ from kkj.ai import brief as brief_mod
 from kkj.ai import client as ai
 from kkj.ai import review as review_mod
 from kkj.ai import season as season_mod
+from kkj.web import roles
 from kkj.web.common import templates, who
 
 router = APIRouter()
@@ -83,7 +84,7 @@ def ask_save_note(request: Request, qid: int, index: int):
 def _notes_card(request, error=None, saved=None):
     from kkj.ai import notes
     return templates.TemplateResponse(request, "_notes.html", {
-        "rows": notes.active().to_dict("records"), "admin": notes.is_admin(_user(request)["username"]),
+        "rows": notes.active().to_dict("records"), "admin": roles.at_least(_user(request).get("role"), "admin"),
         "error": error, "saved": saved})
 
 
@@ -106,7 +107,7 @@ def notes_add(request: Request, note: str = Form("")):
 def notes_change(request: Request, note_id: int, note: str = Form(""), verb: str = Form("save")):
     from kkj.ai import notes
     user = _user(request)
-    if not notes.is_admin(user["username"]):
+    if not roles.at_least(user.get("role"), "admin"):
         return _notes_card(request, error="Only an admin can edit or remove a note.")
     try:
         if verb == "remove":
@@ -124,7 +125,7 @@ def ai_usage(request: Request):
     from sqlalchemy import text
     from kkj.ai import notes
     from kkj.web.common import engine
-    if not notes.is_admin(_user(request)["username"]):
+    if not roles.at_least(_user(request).get("role"), "admin"):
         return HTMLResponse("")
     per_user, budget = ask_mod.limits()
     today = "(at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date"

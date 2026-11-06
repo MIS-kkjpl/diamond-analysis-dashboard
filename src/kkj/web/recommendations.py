@@ -186,8 +186,8 @@ def act(request: Request, action_id: int, verb: str, note: str = Form(default=""
     with engine().begin() as conn:
         store.decide(conn, action_id, ACTIONS[verb], name, note.strip() or None)
     a = _prep(read(f"SELECT {COLUMNS} FROM brain.action WHERE action_id = :a", a=action_id).iloc[0].to_dict())
-    card = templates.get_template("_card.html").render(a=a, who=name, just_acted=True)
-    oob = templates.get_template("_summary.html").render(summary=summary(), oob=True)
+    card = templates.get_template("_card.html").render(a=a, who=name, just_acted=True, request=request)
+    oob = templates.get_template("_summary.html").render(summary=summary(), oob=True, request=request)
     return HTMLResponse(card + oob)
 
 

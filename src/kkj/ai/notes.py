@@ -4,7 +4,7 @@ the AI second look, season notes). Shared by everyone: they are company knowledg
 
   - anyone signed in can add a note (in Settings, or by confirming one the AI offers to save from a chat);
   - each note records who added it and when; every change goes to config.change_log;
-  - only admins (STOCKWISE_ADMINS in .env, usernames) can edit or remove one.
+  - only admins (role, see kkj.web.roles) can edit or remove one.
 
 Notes change what the AI explains and comments on. They don't change the recommendations themselves: those come
 from rules and settings, so a fact that should change a recommendation becomes a setting (the AI points to it).
@@ -18,11 +18,6 @@ from kkj import settings
 
 MAX_LEN = 500
 MAX_NOTES_IN_PROMPT = 60
-
-
-def is_admin(username):
-    admins = {u.strip().lower() for u in settings.optional("STOCKWISE_ADMINS", "kartik").split(",") if u.strip()}
-    return (username or "").lower() in admins
 
 
 def _log(conn, by, key, old, new, note=None):

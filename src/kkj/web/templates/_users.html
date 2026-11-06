@@ -5,11 +5,11 @@
 
   <div class="card mb-3">
     <div class="card-header"><div><h3 class="card-title">Users</h3>
-      <div class="card-subtitle small text-secondary">Everyone here can see and do everything, including managing users.
-        A password you set for someone is temporary: they choose their own when they next sign in.</div></div></div>
+      <div class="card-subtitle small text-secondary">{% for r in roles %}<b>{{ role_labels[r] }}</b>: {{ role_help[r] }}.
+        {% endfor %}A password you set for someone is temporary: they choose their own when they next sign in.</div></div></div>
     <div class="table-responsive">
       <table class="table table-sm table-vcenter card-table">
-        <thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Last sign-in</th><th>Signed in on</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last sign-in</th><th>Signed in on</th><th></th></tr></thead>
         <tbody>
         {% for u in users %}
           <tr {% if not u.active %}class="text-secondary"{% endif %}>
@@ -20,6 +20,14 @@
               </form>
             </td>
             <td class="text-nowrap">{{ u.username }}{% if u.user_id == me %} <span class="badge bg-blue-lt">you</span>{% endif %}</td>
+            <td>
+              {% if u.user_id == me %}<span class="badge bg-purple-lt">{{ role_labels[u.role] }}</span>
+              {% else %}
+              <select name="role" class="form-select form-select-sm" style="width: auto" aria-label="Role of {{ u.display_name }}"
+                      hx-post="/settings/users/{{ u.user_id }}/role" hx-trigger="change" hx-target="#users" hx-swap="outerHTML">
+                {% for r in roles %}<option value="{{ r }}" {% if r == u.role %}selected{% endif %}>{{ role_labels[r] }}</option>{% endfor %}
+              </select>{% endif %}
+            </td>
             <td class="text-nowrap">
               {% if not u.active %}<span class="badge bg-secondary-lt">Disabled</span>
               {% elif u.locked %}<span class="badge bg-red-lt">Locked (wrong passwords)</span>
@@ -72,15 +80,19 @@
       {# fields align at the top (the password hint hangs below its box); the button gets an empty label so it
          lines up with the boxes, not with the hint #}
       <div class="row g-3 align-items-start">
-        <div class="col-sm-6 col-lg-3"><label class="form-label" for="new-name">Name</label>
+        <div class="col-sm-6 col-lg"><label class="form-label" for="new-name">Name</label>
           <input id="new-name" name="display_name" class="form-control" placeholder="Full name" required></div>
-        <div class="col-sm-6 col-lg-3"><label class="form-label" for="new-username">Username</label>
+        <div class="col-sm-6 col-lg"><label class="form-label" for="new-username">Username</label>
           <input id="new-username" name="username" class="form-control" placeholder="e.g. firstname" autocapitalize="none" autocomplete="off" required></div>
-        <div class="col-sm-6 col-lg-3"><label class="form-label" for="new-password">Temporary password</label>
+        <div class="col-sm-6 col-lg"><label class="form-label" for="new-role">Role</label>
+          <select id="new-role" name="role" class="form-select">
+            {% for r in roles %}<option value="{{ r }}" {% if r == "manager" %}selected{% endif %}>{{ role_labels[r] }}</option>{% endfor %}
+          </select></div>
+        <div class="col-sm-6 col-lg"><label class="form-label" for="new-password">Temporary password</label>
           <input id="new-password" name="password" type="text" class="form-control" minlength="{{ min_password }}" autocomplete="off" required
                  aria-describedby="new-password-hint">
           <div class="form-hint" id="new-password-hint">At least {{ min_password }} characters. They'll choose their own when they first sign in.</div></div>
-        <div class="col-sm-6 col-lg-3"><span class="form-label d-none d-sm-block" aria-hidden="true">&nbsp;</span>
+        <div class="col-sm-6 col-lg-2"><span class="form-label d-none d-sm-block" aria-hidden="true">&nbsp;</span>
           <button class="btn btn-primary w-100"><i class="ti ti-plus"></i> Add user</button></div>
       </div>
     </div>

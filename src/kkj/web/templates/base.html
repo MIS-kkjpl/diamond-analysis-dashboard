@@ -25,9 +25,11 @@
     <i class="ti ti-chevron-down d-none d-lg-inline" aria-hidden="true"></i>
   </button>
   <div class="dropdown-menu dropdown-menu-end" aria-labelledby="user-menu-{{ place }}">
-    <div class="dropdown-header"><div class="fw-semibold text-body">{{ who }}</div><div class="small">Signed in</div></div>
+    {% set my_role = role_of(request) %}
+    <div class="dropdown-header"><div class="fw-semibold text-body">{{ who }}</div>
+      <div class="small">Signed in{% if my_role %} · {{ my_role }}{% endif %}</div></div>
     <a class="dropdown-item" href="/account"><i class="ti ti-key me-2"></i>Account and password</a>
-    <a class="dropdown-item" href="/settings"><i class="ti ti-adjustments me-2"></i>Settings</a>
+    {% if can(request, "admin") %}<a class="dropdown-item" href="/settings"><i class="ti ti-adjustments me-2"></i>Settings</a>{% endif %}
     <div class="dropdown-divider"></div>
     <form method="post" action="/logout" class="m-0">
       <button class="dropdown-item text-danger"><i class="ti ti-logout me-2"></i>Sign out</button>
@@ -66,16 +68,16 @@
           <li class="nav-section">Actions</li>
           {{ item("recommendations", "/recommendations", "ti-checklist", "Recommendations") }}
           <li class="nav-section">Analytics</li>
-          {{ item("overview", "/overview", "ti-chart-line", "Overview") }}
-          {{ item("inventory", "/inventory", "ti-packages", "Inventory health") }}
-          {{ item("sales", "/sales", "ti-receipt", "Sales") }}
+          {% if feature("overview") %}{{ item("overview", "/overview", "ti-chart-line", "Overview") }}{% endif %}
+          {% if feature("inventory") %}{{ item("inventory", "/inventory", "ti-packages", "Inventory health") }}{% endif %}
+          {% if feature("sales") %}{{ item("sales", "/sales", "ti-receipt", "Sales") }}{% endif %}
           {% if feature("salespeople") %}{{ item("salespeople", "/salespeople", "ti-users", "Salespeople") }}{% endif %}
           {% if feature("stock_turn") %}{{ item("stock_turn", "/stock-turn", "ti-refresh", "Stock turn") }}{% endif %}
           {% if feature("seasonality") %}{{ item("seasonality", "/seasonality", "ti-calendar-stats", "Seasonality") }}{% endif %}
           {% if feature("insights") %}{{ item("insights", "/insights", "ti-bulb", "Insights") }}{% endif %}
           <li class="nav-section">Admin</li>
-          {{ item("checks", "/checks", "ti-database", "Data quality") }}
-          {{ item("settings", "/settings", "ti-adjustments", "Settings") }}
+          {% if feature("checks") %}{{ item("checks", "/checks", "ti-database", "Data quality") }}{% endif %}
+          {% if can(request, "admin") %}{{ item("settings", "/settings", "ti-adjustments", "Settings") }}{% endif %}
         </ul>
       </div>
     </div>
@@ -86,13 +88,14 @@
     <div class="topbar d-print-none">
       <div class="container-xl d-flex flex-wrap align-items-center gap-2 py-2">
         <div id="live" hx-get="/status" hx-trigger="every 60s" hx-swap="innerHTML">{% include "_status.html" %}</div>
+        {% if feature("lookup") %}
         <form action="/lookup" method="get" class="lookup-box order-last order-md-0 ms-md-3" role="search">
           <div class="input-icon">
             <span class="input-icon-addon"><i class="ti ti-search"></i></span>
             <input name="q" class="form-control form-control-sm" placeholder="Look up a barcode, product, salesperson…"
                    aria-label="Look up" {% if active == "lookup" %}value="{{ query }}"{% endif %}>
           </div>
-        </form>
+        </form>{% endif %}
         <div class="ms-auto d-none d-lg-flex align-items-center">{{ user_menu("desktop") }}</div>
       </div>
     </div>
@@ -100,7 +103,7 @@
     {% if notice %}
     <div class="container-xl mt-3">
       <div class="sw-notice" role="status">
-        <i class="ti ti-info-circle"></i><div><b>Data notice:</b> {{ notice }} <a href="/checks" class="ms-1">Details</a></div>
+        <i class="ti ti-info-circle"></i><div><b>Data notice:</b> {{ notice }}{% if feature("checks") %} <a href="/checks" class="ms-1">Details</a>{% endif %}</div>
       </div>
     </div>
     {% endif %}

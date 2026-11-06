@@ -38,13 +38,23 @@ FEATURES = [
             ai=True, paths=("/recommendations/ai-review",)),
     Feature("ai_season", "Season notes", False, "Plain-language notes on the festival and seasonal outlook.",
             ai=True, paths=("/seasonality/notes",)),
-    # ── analytics pages ──
+    # ── analytics pages ── (Recommendations, the home page, is always on)
+    Feature("overview", "Overview", True, "Headline numbers and trends.", paths=("/overview",)),
+    Feature("inventory", "Inventory health", True, "Stock by branch and age, sets, stale approvals, old stock.",
+            paths=("/inventory",)),
+    Feature("sales", "Sales", True, "Sales by month, branch, item and salesperson; returns.", paths=("/sales",)),
     Feature("salespeople", "Salespeople", True, "Salesperson scorecard and person pages.", paths=("/salespeople",)),
     Feature("outcomes", "Outcomes", True, "What happened after recommendations were decided.",
             paths=("/recommendations/outcomes",)),
     Feature("stock_turn", "Stock turn", True, "Stock turn by brick and brick group.", paths=("/stock-turn",)),
     Feature("seasonality", "Seasonality", True, "Yearly pattern, festivals and the 90-day outlook.", paths=("/seasonality",)),
     Feature("insights", "Insights", True, "Ageing, suppliers, assortment and exhibitions.", paths=("/insights",)),
+    # ── tools ──
+    Feature("lookup", "Look up", True, "Search for a piece, product, salesperson or recommendation (top bar).",
+            paths=("/lookup",)),
+    Feature("checks", "Data quality", True, "Accuracy audit, unusual bills, load history.", paths=("/checks",)),
+    Feature("exports", "Exports", True, "Excel downloads: transfer slips, markdown lists, purchasing, pieces.",
+            paths=("/exports",)),
 ]
 BY_KEY = {f.key: f for f in FEATURES}
 

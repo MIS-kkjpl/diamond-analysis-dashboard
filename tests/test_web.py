@@ -21,10 +21,15 @@ def _remove_test_accounts():
         c.execute(text("DELETE FROM auth.login_event WHERE username LIKE 'pytest%'"))
 
 
-def _add_account(username, password):
+def _add_account(username, password, role="admin"):
     with settings.etl_engine().begin() as c:
-        c.execute(text("INSERT INTO auth.app_user (username, display_name, password_hash) VALUES (:u, 'pytest', :h)"),
-                  {"u": username, "h": auth.hash_password(password)})
+        c.execute(text("INSERT INTO auth.app_user (username, display_name, password_hash, role) VALUES (:u, 'pytest', :h, :r)"),
+                  {"u": username, "h": auth.hash_password(password), "r": role})
+
+
+def _set_role(username, role):
+    with settings.etl_engine().begin() as c:
+        c.execute(text("UPDATE auth.app_user SET role = :r WHERE username = :u"), {"r": role, "u": username})
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -418,20 +423,21 @@ def test_chats_belong_to_one_account():
             c.execute(text("DELETE FROM ai.conversation WHERE conversation_id = :c"), {"c": cid})
 
 
-def test_business_notes_add_for_all_edit_for_admins(monkeypatch):
+def test_business_notes_add_for_all_edit_for_admins():
     from kkj.ai import notes
-    monkeypatch.setenv("STOCKWISE_ADMINS", "someone-else")
+    _set_role(USER, "manager")
     r = client.post("/settings/notes", data={"note": "pytest note: Test showroom is a franchise window."})
     assert r.status_code == 200 and "pytest note" in r.text
     nid = int(notes.active().query("note.str.startswith('pytest note')", engine="python")["note_id"].iloc[-1])
     try:
         assert "pytest note" in (notes.prompt_block() or "")
         denied = client.post(f"/settings/notes/{nid}", data={"verb": "remove"})
-        assert "Only an admin" in denied.text and nid in set(notes.active()["note_id"])
-        monkeypatch.setenv("STOCKWISE_ADMINS", USER)
+        assert "Ask an admin" in denied.text and nid in set(notes.active()["note_id"])
+        _set_role(USER, "admin")
         client.post(f"/settings/notes/{nid}", data={"verb": "remove"})
         assert nid not in set(notes.active()["note_id"])
     finally:
+        _set_role(USER, "admin")
         with settings.etl_engine().begin() as c:
             c.execute(text("DELETE FROM config.business_note WHERE note LIKE 'pytest note%'"))
             c.execute(text("DELETE FROM config.change_log WHERE table_name = 'business_note' AND changed_by = 'pytest'"))
@@ -459,8 +465,54 @@ def test_daily_question_limit_stops_before_any_ai_call(monkeypatch):
             c.execute(text("DELETE FROM ai.conversation WHERE user_id = :u"), {"u": uid})
 
 
-def test_ai_usage_is_for_admins_only(monkeypatch):
-    monkeypatch.setenv("STOCKWISE_ADMINS", "someone-else")
-    assert client.get("/settings/ai-usage").text.strip() == ""
-    monkeypatch.setenv("STOCKWISE_ADMINS", USER)
+def test_ai_usage_is_for_admins_only():
+    _set_role(USER, "manager")
+    try:
+        assert "AI usage" not in client.get("/settings/ai-usage").text      # refused (Settings is for admins)
+    finally:
+        _set_role(USER, "admin")
     assert "AI usage" in client.get("/settings/ai-usage").text
+
+
+def test_roles_are_enforced_by_the_server():
+    """A viewer changes nothing and doesn't see Settings; a manager acts on recommendations but can't change settings."""
+    action = None
+    with settings.app_engine().connect() as c:
+        action = c.execute(text("SELECT action_id FROM brain.action ORDER BY action_id LIMIT 1")).scalar()
+    _set_role(USER, "viewer")
+    try:
+        page = client.get("/recommendations").text
+        assert 'hx-post="/recommendations/' not in page and 'href="/settings"' not in page and "Viewer" in page
+        r = client.post(f"/recommendations/{action}/approve", headers={"hx-request": "true"})
+        assert r.status_code == 403 and "Viewer" in r.text
+        assert "Not available for your role" in client.get("/settings").text
+        assert client.post("/settings/rules/Targets", headers={"hx-request": "true"}).status_code == 403
+        _set_role(USER, "manager")
+        assert 'hx-post="/recommendations/' in client.get("/recommendations").text
+        assert client.post("/settings/users", data={"username": "pytest-x", "display_name": "x", "password": "long-enough-1"},
+                           headers={"hx-request": "true"}).status_code == 403
+    finally:
+        _set_role(USER, "admin")
+
+
+def test_role_rules():
+    from kkj.web import roles
+    assert roles.required("POST", "/recommendations/12/approve") == "manager"
+    assert roles.required("POST", "/settings/festivals") == "admin"
+    assert roles.required("POST", "/something/new") == "admin"          # unlisted changes need an admin
+    assert roles.required("GET", "/inventory") is None
+    assert roles.required("POST", "/ask") == "viewer"
+    assert roles.required("POST", "/ask/q/5/note/0") == "manager"
+    assert roles.at_least("admin", "manager") and not roles.at_least("viewer", "manager")
+
+
+def test_more_switches(monkeypatch):
+    monkeypatch.setenv("FEATURE_LOOKUP", "off")
+    monkeypatch.setenv("FEATURE_EXPORTS", "off")
+    page = client.get("/inventory").text
+    assert 'action="/lookup"' not in page and 'href="/lookup?q=' not in page    # no search box, barcodes as plain text
+    assert client.get("/lookup?q=D+RING").status_code == 404
+    assert client.get("/exports/buying.xlsx").status_code == 404
+    assert "/exports/" not in client.get("/recommendations").text
+    monkeypatch.setenv("FEATURE_INVENTORY", "off")
+    assert client.get("/inventory").status_code == 404 and 'href="/inventory"' not in client.get("/overview").text

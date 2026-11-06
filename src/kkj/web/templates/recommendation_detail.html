@@ -3,11 +3,11 @@
 {% block pretitle %}<a href="/recommendations"><i class="ti ti-arrow-left"></i> Recommendations</a> · {{ a.label }}{% endblock %}
 {% block page_title %}Recommendation #{{ a.action_id }}{% endblock %}
 {% block actions %}
-{% if a.pieces %}<a class="btn btn-outline-secondary" href="/exports/recommendation/{{ a.action_id }}.xlsx"><i class="ti ti-download"></i> Pieces (Excel)</a>{% endif %}
+{% if a.pieces and feature("exports") %}<a class="btn btn-outline-secondary" href="/exports/recommendation/{{ a.action_id }}.xlsx"><i class="ti ti-download"></i> Pieces (Excel)</a>{% endif %}
 {% endblock %}
 {% block content %}
 <div class="rec-detail">{% include "_card.html" %}</div>
-<div class="card mb-3" id="note">
+{% if can(request, "manager") %}<div class="card mb-3" id="note">
   <div class="card-body py-2">
     <form class="d-flex flex-wrap gap-2 align-items-center" hx-post="/recommendations/{{ a.action_id }}/comment"
           hx-target="#card-{{ a.action_id }}" hx-swap="outerHTML" hx-on::after-request="this.reset()">
@@ -17,7 +17,7 @@
       <button class="btn btn-sm btn-primary" {% if not who %}disabled{% endif %}>Save note</button>
     </form>
   </div>
-</div>
+</div>{% endif %}
 <div class="row row-cards mt-1">
   {% if ai_notes %}
   <div class="col-12">
@@ -43,7 +43,7 @@
         <div class="table-responsive"><table class="table table-sm card-table">
           <thead><tr><th>Piece</th><th>Then</th><th>Now</th><th>Outcome</th><th class="text-end">Sold for</th></tr></thead>
           <tbody>{% for p in follow_pieces %}<tr>
-            <td><a href="/lookup?q={{ p.barcode | urlencode }}">{{ p.barcode }}</a> <span class="text-secondary small">{{ p.item_name or "" }}</span></td>
+            <td>{% if feature("lookup") %}<a href="/lookup?q={{ p.barcode | urlencode }}">{{ p.barcode }}</a>{% else %}{{ p.barcode }}{% endif %} <span class="text-secondary small">{{ p.item_name or "" }}</span></td>
             <td class="small">{{ p.location or "–" }}</td><td class="small">{{ p.now_where or "–" }}</td>
             <td><span class="badge bg-{{ {'sold': 'green', 'moved': 'blue', 'unchanged': 'secondary', 'left stock, no sale': 'orange'}[p.outcome] }}-lt">{{ p.outcome }}</span>
               {% if p.sale_date %}<span class="small text-secondary">{{ p.sale_date | date }}</span>{% endif %}</td>

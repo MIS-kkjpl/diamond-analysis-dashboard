@@ -179,6 +179,20 @@ def _ai_briefs(n=12):
 
 templates.env.globals.update(ai_text=_ai_text, ai_review=_ai_review, ai_briefs=_ai_briefs)
 templates.env.globals.update(feature=_feature)
+
+
+def _can(request, minimum):
+    from kkj.web import roles
+    return roles.can(request, minimum)
+
+
+def _role_of(request):
+    from kkj.web import roles
+    user = getattr(request.state, "user", None) if request is not None else None
+    return roles.LABELS.get(user.get("role"), "") if user else ""
+
+
+templates.env.globals.update(can=_can, role_of=_role_of)
 templates.env.globals.update(flatten=flatten, choice_label=lambda c: CHOICE_LABELS.get(str(c), str(c)))
 
 

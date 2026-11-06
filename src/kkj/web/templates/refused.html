@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Not available · Stockwise{% endblock %}
+{% block page_title %}Not available for your role{% endblock %}
+{% block content %}
+<div class="empty">
+  <div class="empty-icon"><i class="ti ti-lock"></i></div>
+  <p class="empty-title">{{ message }}</p>
+  <div class="empty-action"><a href="/recommendations" class="btn btn-primary">Back to recommendations</a></div>
+</div>
+{% endblock %}

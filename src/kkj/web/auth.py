@@ -28,6 +28,7 @@ from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
 from kkj import settings
+from kkj.web import roles
 from kkj.web.common import engine, render, templates
 
 COOKIE = "stockwise_session"
@@ -129,7 +130,7 @@ def session_user(token, touch=True):
         return None
     with engine().begin() as conn:
         row = conn.execute(text(f"""
-            SELECT u.user_id, u.username, u.display_name, u.must_change_password
+            SELECT u.user_id, u.username, u.display_name, u.must_change_password, u.role
             FROM auth.session s JOIN auth.app_user u USING (user_id)
             WHERE s.token_hash = :t AND u.active AND s.expires_at > now()
               AND s.last_seen_at > now() - interval '{IDLE_HOURS} hours'"""), {"t": _digest(token)}).first()
@@ -174,6 +175,8 @@ async def middleware(request: Request, call_next):
                 return Response(status_code=403, headers={"HX-Redirect": "/account"})
             return RedirectResponse("/account", status_code=303)
         request.state.user = user
+        if not roles.allowed(user, request.method, path):
+            return _refused(request, user)
     response = await call_next(request)
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -181,6 +184,15 @@ async def middleware(request: Request, call_next):
     if not path.startswith("/static/"):
         response.headers.setdefault("Cache-Control", "no-store")     # no company data left in the browser cache
     return response
+
+
+def _refused(request, user):
+    """A request the person's role doesn't allow (web/roles.py)."""
+    msg = f"Your role ({roles.LABELS.get(user.get('role'), user.get('role'))}) can't do this. Ask an admin if you need it."
+    if request.headers.get("hx-request"):
+        return Response(msg, status_code=403, headers={"HX-Trigger": json.dumps({"sw-refused": msg})})
+    from kkj.web.common import render
+    return render(request, "refused.html", "", message=msg)
 
 
 router = APIRouter()
@@ -254,14 +266,14 @@ def change_password(request: Request, current: str = Form(default=""), new: str 
 # ── Settings -> Users: any signed-in person manages accounts (no roles) ─────────
 def _users_ctx(request, error=None, saved=None):
     users = conn_rows("""
-        SELECT u.user_id, u.username, u.display_name, u.active, u.must_change_password,
+        SELECT u.user_id, u.username, u.display_name, u.active, u.must_change_password, u.role,
                u.locked_until > now() AS locked, u.last_login_at AT TIME ZONE 'Asia/Kolkata' AS last_login_at,
                (SELECT count(*) FROM auth.session s WHERE s.user_id = u.user_id AND s.expires_at > now()) AS sessions
         FROM auth.app_user u ORDER BY u.active DESC, u.display_name""")
     attempts = conn_rows("""SELECT at AT TIME ZONE 'Asia/Kolkata' AS at, username, success, reason, ip
                             FROM auth.login_event ORDER BY event_id DESC LIMIT 25""")
     return {"users": users, "attempts": attempts, "me": request.state.user["user_id"], "error": error, "saved": saved,
-            "min_password": MIN_PASSWORD}
+            "min_password": MIN_PASSWORD, "roles": roles.ROLES[::-1], "role_labels": roles.LABELS, "role_help": roles.HELP}
 
 
 def conn_rows(sql, **params):
@@ -287,7 +299,7 @@ def users_card(request: Request):
 
 @router.post("/settings/users", response_class=HTMLResponse)
 def add_user(request: Request, username: str = Form(default=""), display_name: str = Form(default=""),
-             password: str = Form(default="")):
+             password: str = Form(default=""), role: str = Form(default="manager")):
     username, display_name = username.strip(), " ".join(display_name.split())
     if not username or not username.replace(".", "").replace("_", "").replace("-", "").isalnum() or len(username) > 40:
         return _users_card(request, error="Username: letters, digits, '.', '_' or '-' only.")
@@ -296,28 +308,36 @@ def add_user(request: Request, username: str = Form(default=""), display_name: s
     problem = password_problem(password, username)
     if problem:
         return _users_card(request, error=f"Temporary password: {problem}")
+    if role not in roles.ROLES:
+        return _users_card(request, error="Choose a role.")
     by = request.state.user["display_name"]
     with engine().begin() as conn:
         if conn.execute(text("SELECT 1 FROM auth.app_user WHERE lower(username) = lower(:u)"), {"u": username}).first():
             return _users_card(request, error=f"{username} already exists.")
-        conn.execute(text("""INSERT INTO auth.app_user (username, display_name, password_hash, must_change_password)
-                             VALUES (:u, :n, :h, true)"""), {"u": username, "n": display_name, "h": hash_password(password)})
-        _record(conn, by, username, None, {"added": display_name})
+        conn.execute(text("""INSERT INTO auth.app_user (username, display_name, password_hash, must_change_password, role)
+                             VALUES (:u, :n, :h, true, :r)"""),
+                     {"u": username, "n": display_name, "h": hash_password(password), "r": role})
+        _record(conn, by, username, None, {"added": display_name, "role": role})
     return _users_card(request, saved=f"Added {display_name}. Give them the temporary password; "
                                       "they choose their own at first sign-in.")
 
 
 @router.post("/settings/users/{user_id}/{verb}", response_class=HTMLResponse)
 def manage_user(request: Request, user_id: int, verb: str, password: str = Form(default=""),
-                display_name: str = Form(default="")):
+                display_name: str = Form(default=""), role: str = Form(default="")):
     me = request.state.user
     with engine().connect() as conn:
-        user = conn.execute(text("SELECT user_id, username, display_name, active FROM auth.app_user WHERE user_id = :id"),
+        user = conn.execute(text("SELECT user_id, username, display_name, active, role FROM auth.app_user WHERE user_id = :id"),
                             {"id": user_id}).first()
-    if user is None or verb not in ("password", "disable", "enable", "signout", "rename"):
+        admins = conn.execute(text("SELECT count(*) FROM auth.app_user WHERE role = 'admin' AND active")).scalar()
+    if user is None or verb not in ("password", "disable", "enable", "signout", "rename", "role"):
         return Response("Not found", status_code=404)
-    if user_id == me["user_id"] and verb in ("password", "disable", "signout"):
-        return _users_card(request, error="For your own account use Account (top right).")
+    if user_id == me["user_id"] and verb in ("password", "disable", "signout", "role"):
+        return _users_card(request, error="For your own account use Account (top right); another admin can change your role.")
+    if verb == "role" and role not in roles.ROLES:
+        return _users_card(request, error="Choose a role.")
+    if user.role == "admin" and user.active and admins <= 1 and (verb == "disable" or (verb == "role" and role != "admin")):
+        return _users_card(request, error="Stockwise needs at least one admin. Make someone else admin first.")
     if verb == "password":
         problem = password_problem(password, user.username)
         if problem:
@@ -329,18 +349,21 @@ def manage_user(request: Request, user_id: int, verb: str, password: str = Form(
             "disable": "active = false",
             "enable": "active = true, failed_logins = 0, locked_until = NULL",
             "rename": "display_name = :n",
+            "role": "role = :r",
             "signout": None}[verb]
     with engine().begin() as conn:
         if sets:
             conn.execute(text(f"UPDATE auth.app_user SET {sets} WHERE user_id = :id"),
                          {"id": user_id, "h": hash_password(password) if verb == "password" else None,
-                          "n": " ".join(display_name.split())})
+                          "n": " ".join(display_name.split()), "r": role})
         if verb in ("password", "disable", "signout"):
             conn.execute(text("DELETE FROM auth.session WHERE user_id = :id"), {"id": user_id})
         _record(conn, me["display_name"], user.username, None,
                 {"password": "temporary password set", "disable": "disabled", "enable": "enabled",
-                 "signout": "signed out everywhere", "rename": f"name: {' '.join(display_name.split())}"}[verb])
+                 "signout": "signed out everywhere", "rename": f"name: {' '.join(display_name.split())}",
+                 "role": f"role: {user.role} -> {role}"}[verb])
     done = {"password": f"Temporary password set for {user.display_name}; they choose their own at next sign-in.",
             "disable": f"{user.display_name} can no longer sign in.", "enable": f"{user.display_name} can sign in again.",
-            "signout": f"{user.display_name} has been signed out everywhere.", "rename": "Name saved."}[verb]
+            "signout": f"{user.display_name} has been signed out everywhere.", "rename": "Name saved.",
+            "role": f"{user.display_name} is now {roles.LABELS.get(role, role)}."}[verb]
     return _users_card(request, saved=done)

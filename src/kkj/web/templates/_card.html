@@ -33,7 +33,9 @@
     </div>
 
     <div class="rec-actions">
-      {% if a.status in ("open", "snoozed") %}
+      {% set act = can(request, "manager") %}
+      {% if not act %}
+      {% elif a.status in ("open", "snoozed") %}
         <button class="btn btn-sm btn-success" {% if not who %}disabled{% endif %}
                 hx-post="/recommendations/{{ a.action_id }}/approve" {{ post | safe }}><i class="ti ti-check"></i> Approve</button>
         <button class="btn btn-sm btn-outline-secondary" {% if not who %}disabled{% endif %}
@@ -49,12 +51,12 @@
         <button class="btn btn-sm btn-ghost-secondary" data-bs-toggle="dropdown" {% if not who %}disabled{% endif %}>
           More <i class="ti ti-chevron-down"></i></button>
         <div class="dropdown-menu">
-          {% if a.status == "open" %}
+          {% if a.status == "open" and act %}
           <button class="dropdown-item" hx-post="/recommendations/{{ a.action_id }}/snooze" {{ post | safe }}>
             <i class="ti ti-zzz me-2"></i>Snooze for 7 days</button>
           {% endif %}
-          <a class="dropdown-item" href="/recommendations/{{ a.action_id }}#note"><i class="ti ti-message me-2"></i>Add a note</a>
-          {% if a.pieces %}<a class="dropdown-item" href="/exports/recommendation/{{ a.action_id }}.xlsx">
+          {% if act %}<a class="dropdown-item" href="/recommendations/{{ a.action_id }}#note"><i class="ti ti-message me-2"></i>Add a note</a>{% endif %}
+          {% if a.pieces and feature("exports") %}<a class="dropdown-item" href="/exports/recommendation/{{ a.action_id }}.xlsx">
             <i class="ti ti-download me-2"></i>Download its {{ a.pieces | length }} pieces</a>{% endif %}
         </div>
       </div>
