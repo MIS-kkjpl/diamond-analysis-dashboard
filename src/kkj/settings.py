@@ -49,7 +49,10 @@ ERP_YEARS = {"2025-26": "54"}
 
 
 def erp_login_settings(year=None):
-    """Login for the current financial year, or for an earlier one (e.g. "2025-26") from ERP_<year>_* in .env."""
+    """Login for the current financial year, or for an earlier one (e.g. "2025-26") from ERP_<year>_* in .env.
+    The year can also come from the ERP_YEAR environment variable, so any pipeline can run against an earlier year:
+    set ERP_YEAR=2025-26 before `python -m kkj.pipelines.stock --as-on --date ...`."""
+    year = year or os.environ.get("ERP_YEAR")
     if not year:
         return {
             "username": require("ERP_USERNAME"),
@@ -64,6 +67,7 @@ def erp_login_settings(year=None):
         "x_key": require("ERP_API_KEY"),
         "role_code": optional(f"{tag}_ROLE_CODE", optional("ERP_ROLE_CODE", "2665")),
         "program_key": optional(f"{tag}_PROGRAM_KEY", ERP_YEARS.get(year, "")),
+        "token": optional(f"{tag}_TOKEN", ""),      # a browser session token, used instead of logging in
     }
 
 

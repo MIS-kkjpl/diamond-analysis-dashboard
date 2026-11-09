@@ -226,6 +226,53 @@ def run_step_b(session, cfg, filters, report_id, raw_path):
     raise ErpError(f"Step B did not return an Excel file (saved {other.name}). Server says: {msg}")
 
 
+# Columns an export may lack because that year's ERP program has a different saved report layout
+# (2025-26 has no Branch / Taxableamount / Othercharges); filled from the JSON details of the same report
+DETAILS_ENDPOINT = "acme-inventory-web/inv/getCriteriaStkRptDetails"
+FILL_FROM_DETAILS = {"Branch": "branch", "Taxableamount": "taxableamount", "Othercharges": "othercharges"}
+
+
+def fill_from_details(session, filters, report_id, raw_path):
+    """If the export lacks only columns in FILL_FROM_DETAILS, add them from the report's JSON rows (matched by
+    barcode; every row must match) and rewrite the file, so cleaning and every check run as usual."""
+    x = pd.read_excel(raw_path, header=None, dtype=object)
+    first = x[0].map(lambda v: v.strip() if isinstance(v, str) else v)
+    hits = first.index[first == HEADER_FIRST_CELL]
+    if hits.empty:
+        return
+    hdr = hits[0]
+    header = [v.strip() if isinstance(v, str) else None for v in x.loc[hdr]]
+    missing = [h for h in EXCEL_TO_DB if h not in header]
+    if not missing or set(missing) - FILL_FROM_DETAILS.keys():
+        return                                     # complete, or a real layout change: clean_export reports it
+    total_idx = next(i for i in x.index[hdr + 1:]
+                     if any(isinstance(v, str) and re.match(r"\s*Total \(\d+\)", v) for v in x.loc[i]))
+    log.info(f"  Export lacks {missing}; filling them from the report's JSON details...")
+    # The stock details endpoint ignores paging and returns every row in one answer
+    r = post(session, DETAILS_ENDPOINT, "details", headers=JSON_HEADERS, timeout=600,
+             json={"pg": {"offset": 0, "limit": 100000}, "params": {**filters, "reportID": report_id}})
+    if r.status_code in (401, 403):
+        raise Unauthorized(f"Details: HTTP {r.status_code}")
+    rows = ((r.json() or {}).get("data") or {}).get("data") or []
+    details = pd.DataFrame(rows).drop_duplicates("barcode").set_index("barcode")
+    barcodes = x.loc[hdr + 1: total_idx - 1, header.index("BarCode/BatchDesc")].map(
+        lambda v: v.strip() if isinstance(v, str) else v)
+    unmatched = (~barcodes.isin(details.index)).sum()
+    if unmatched or len(details) != len(barcodes):
+        raise ErpError(f"Could not fill {missing}: {unmatched} export rows not in the details "
+                       f"({len(details)} details rows, {len(barcodes)} export rows).")
+    for h in missing:
+        pos = x.shape[1]
+        x[pos] = None
+        x.loc[hdr, pos] = h
+        values = barcodes.map(details[FILL_FROM_DETAILS[h]])
+        x.loc[barcodes.index, pos] = values
+        if h != "Branch":
+            x.loc[total_idx, pos] = pd.to_numeric(values, errors="coerce").sum()
+    x.to_excel(raw_path, header=False, index=False)
+    log.info(f"  Filled {missing} for {len(barcodes)} rows from the details.")
+
+
 def fetch_report(cfg, erp_settings, raw_path, meta_path, run):
     """Login, step A, step B. On 401/403 log in again and retry the steps once."""
     session = new_session(erp_settings)
@@ -239,6 +286,7 @@ def fetch_report(cfg, erp_settings, raw_path, meta_path, run):
             run.record(report_id=report_id, record_count=record_count)
             run.at("step B")
             run_step_b(session, cfg, filters, report_id, raw_path)
+            fill_from_details(session, filters, report_id, raw_path)
             run.record(raw_file=str(rel(raw_path)))
             return
         except Unauthorized as e:

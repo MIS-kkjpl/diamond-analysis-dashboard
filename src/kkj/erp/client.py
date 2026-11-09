@@ -72,6 +72,10 @@ def server_messages(data):
 # ── Login (port of acmeLogin in utils/acme-token.ts) ─────────────────────────
 def login(session, settings):
     """Log in, store the token on the session, and return logCode (may be None)."""
+    if settings.get("token"):
+        session.headers["authorization"] = settings["token"]
+        log.info("Using the session token from .env (no login).")
+        return None
     log.info("Logging in to ERP...")
     session.headers.pop("authorization", None)
     r = post(session, "acme-document-web/login", "login", timeout=LOGIN_TIMEOUT,
