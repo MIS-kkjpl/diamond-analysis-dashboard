@@ -36,6 +36,8 @@ def new_session(settings):
     """One Session for login and all report calls; carries the shared headers."""
     session = requests.Session()
     session.verify = VERIFY_SSL
+    # Each financial year is its own ERP program (sProgramKey); the current year's is SPROGRAM_KEY
+    session.program_key = str(settings.get("program_key") or SPROGRAM_KEY)
     session.headers.update({
         "Accept": "application/json, text/plain, */*",
         "CustomLocale": CUSTOM_LOCALE,
@@ -46,7 +48,7 @@ def new_session(settings):
 
 def post(session, path, what, timeout=TIMEOUT, **kwargs):
     """POST to HOST/path, turning network failures into readable errors."""
-    kwargs.setdefault("params", {"sProgramKey": SPROGRAM_KEY})
+    kwargs.setdefault("params", {"sProgramKey": getattr(session, "program_key", SPROGRAM_KEY)})
     try:
         return session.post(f"{HOST}/{path}", timeout=timeout, **kwargs)
     except requests.exceptions.SSLError:
@@ -73,7 +75,8 @@ def login(session, settings):
     log.info("Logging in to ERP...")
     session.headers.pop("authorization", None)
     r = post(session, "acme-document-web/login", "login", timeout=LOGIN_TIMEOUT,
-             params={"applicationCode": 1, "sProgramKey": SPROGRAM_KEY, "tenantCode": 1},
+             params={"applicationCode": 1, "sProgramKey": getattr(session, "program_key", SPROGRAM_KEY),
+                     "tenantCode": 1},
              # requests form-encodes a dict: username=...&password=...
              data={"username": settings["username"], "password": settings["password"]})
     if not r.ok:

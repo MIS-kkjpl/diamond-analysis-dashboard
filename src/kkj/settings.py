@@ -44,12 +44,26 @@ def optional(name, default):
 
 
 # ── ERP login ────────────────────────────────────────────────────────────────
-def erp_login_settings():
+# Earlier financial years are separate ERP programs with their own login (set with scripts/set_erp_year.py)
+ERP_YEARS = {"2025-26": "54"}
+
+
+def erp_login_settings(year=None):
+    """Login for the current financial year, or for an earlier one (e.g. "2025-26") from ERP_<year>_* in .env."""
+    if not year:
+        return {
+            "username": require("ERP_USERNAME"),
+            "password": require("ERP_PASSWORD"),
+            "x_key": require("ERP_API_KEY"),
+            "role_code": optional("ERP_ROLE_CODE", "2665"),
+        }
+    tag = "ERP_" + year.replace("-", "_")
     return {
-        "username": require("ERP_USERNAME"),
-        "password": require("ERP_PASSWORD"),
+        "username": require(f"{tag}_USERNAME"),
+        "password": require(f"{tag}_PASSWORD"),
         "x_key": require("ERP_API_KEY"),
-        "role_code": optional("ERP_ROLE_CODE", "2665"),
+        "role_code": optional(f"{tag}_ROLE_CODE", optional("ERP_ROLE_CODE", "2665")),
+        "program_key": optional(f"{tag}_PROGRAM_KEY", ERP_YEARS.get(year, "")),
     }
 
 
