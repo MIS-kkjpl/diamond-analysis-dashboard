@@ -19,6 +19,8 @@ from kkj.pipelines.sales import PRODUCT_CODES as SALES_GROUPS
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--year", default="2025-26")
+ap.add_argument("--dates", default="")
+ap.add_argument("--no-sales", action="store_true")
 a = ap.parse_args()
 
 erp = settings.erp_login_settings(a.year)
@@ -35,7 +37,7 @@ def totals(r):
 
 
 print("\nStock as on (diamond groups, step A):")
-for d in ["31/03/2026", "01/01/2026", "01/10/2025", "01/07/2025", "15/06/2025", "01/04/2025", "31/03/2025"]:
+for d in (a.dates.split(",") if a.dates else ["31/03/2026", "01/01/2026", "01/10/2025", "01/07/2025", "15/06/2025", "01/04/2025", "31/03/2025"]):
     p = stock_report.build_filters({"locations": stock_report.LOCATION_CODES, "products": stock_report.PRODUCT_CODES,
                                     "items": stock_report.ITEM_CODES, "date": d, "as_on": True}, log_code)
     t, why = totals(post(s, stock_report.RUN_ENDPOINT, "stock step A", json={"params": p}, headers=JSON_HEADERS,

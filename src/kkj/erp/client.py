@@ -32,6 +32,14 @@ class Unauthorized(ErpError):
     """HTTP 401/403: the token was rejected."""
 
 
+def encode_password(plain):
+    """What the ERP login screen sends for a typed password: letters shifted 5 places, digits 4 places, then base64
+    (verified 2026-11-09 against browser captures for three financial-year programs). .env stores this form."""
+    import base64
+    shifted = "".join(chr(ord(c) + 5) if c.isalpha() else chr(ord(c) + 4) if c.isdigit() else c for c in plain)
+    return base64.b64encode(shifted.encode()).decode()
+
+
 def new_session(settings):
     """One Session for login and all report calls; carries the shared headers."""
     session = requests.Session()
