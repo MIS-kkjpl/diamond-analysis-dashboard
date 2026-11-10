@@ -86,8 +86,13 @@ def weight_band(weights, edges, unit="ct"):
 
 
 def _key(df, levels):
+    """'18KT · D RING · 0.25–0.5ct': the non-empty level values joined. Built once per distinct combination
+    (a row-by-row join took minutes over years of snapshots)."""
     levels = [lv for lv in LEVELS if lv in levels]
-    return df[levels].astype(str).agg(lambda r: " · ".join(v for v in r if v), axis=1)
+    values = df[levels].astype(str)
+    uniq = values.drop_duplicates()
+    keys = uniq.agg(lambda r: " · ".join(v for v in r if v), axis=1).rename("_key")
+    return pd.Series(values.merge(uniq.join(keys), on=levels, how="left")["_key"].to_numpy(), index=df.index)
 
 
 def add_brick(df, rules):

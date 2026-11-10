@@ -114,11 +114,57 @@ ALTER TABLE brain.brick_turn ADD COLUMN IF NOT EXISTS season_12m double precisio
 ALTER TABLE brain.brick_turn DROP CONSTRAINT IF EXISTS brick_turn_pkey;
 ALTER TABLE brain.brick_turn ADD PRIMARY KEY (as_of, scope, level, brick);   -- brick = the brick or group key
 
+-- Demand forecast and ideal stock (kkj.metrics.forecast / ideal_stock), one set per stock date. scope = a branch
+-- (rows per brick group at that branch) or 'Company' (the brick group: all stock, the sum of branch ideals).
+CREATE TABLE IF NOT EXISTS brain.ideal_stock (
+    as_of            date NOT NULL,
+    scope            text NOT NULL,
+    brick_group      text NOT NULL,
+    run_id           int REFERENCES brain.run_log (run_id),
+    item_class_group text, purity text, item_name text,
+    current_pcs      numeric,
+    rate             double precision,             -- forecast units in an average month
+    trend            double precision,
+    annual           double precision,             -- forecast for the next 12 months
+    own_rate         double precision, prior double precision, n_window numeric, exposure double precision,
+    replacement_days numeric, replacement_from text, cover_days numeric,
+    cover_demand     double precision,             -- forecast units over the cover
+    grade            text, grade_from text, service_pct double precision, dispersion double precision,
+    for_demand       numeric,                      -- stock for the service level over the cover
+    display_min      numeric,
+    choice_months    numeric, for_choice numeric,  -- stock held for choice: months of forecast demand
+    override_pcs     numeric, override_reason text,
+    ideal_pcs        numeric NOT NULL,
+    ideal_from       text,                         -- demand | display minimum | override
+    change_pcs       numeric,
+    implied_turn     double precision,
+    status           text NOT NULL,                -- increase, reduce, keep, phase_out
+    PRIMARY KEY (as_of, scope, brick_group)
+);
+
+-- The forecast's accuracy test, one set per stock date: level = company / item_group / product / product_branch /
+-- group_branch; key = the level's value ('' for company). WAPE = Σ|forecast − actual| / Σ actual over the test.
+CREATE TABLE IF NOT EXISTS brain.forecast_accuracy (
+    as_of            date NOT NULL,
+    level            text NOT NULL,
+    key              text NOT NULL,
+    run_id           int REFERENCES brain.run_log (run_id),
+    horizon_months   int, origins int,
+    actual           double precision, forecast double precision,
+    wape             double precision, wape_last_year double precision, wape_avg12 double precision,
+    bias             double precision,
+    better           boolean,                      -- beats both simple methods
+    PRIMARY KEY (as_of, level, key)
+);
+
 GRANT USAGE ON SCHEMA brain TO powerbi_reader, dashboard_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA brain TO powerbi_reader, dashboard_app;
 GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA brain TO dashboard_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA brain TO dashboard_app;
 GRANT DELETE ON brain.brick_turn TO dashboard_app;      -- a refresh replaces that stock date's set
+GRANT DELETE ON brain.ideal_stock, brain.forecast_accuracy TO dashboard_app;
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS choice_months numeric;
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS for_choice numeric;
 ALTER DEFAULT PRIVILEGES FOR ROLE erp_etl IN SCHEMA brain GRANT SELECT ON TABLES TO powerbi_reader, dashboard_app;
 
 RESET ROLE;

@@ -6,7 +6,7 @@
 {% block pretitle %}Analytics{% endblock %}
 {% block page_title %}Stock turn{% endblock %}
 {% block actions %}<a href="/settings#tab-rules" class="btn btn-outline-secondary"><i class="ti ti-adjustments"></i> Rules</a>{% endblock %}
-{% block intro %}How fast each group of similar pieces sells compared with its ideal. Increase = sells faster than we stock it; Reduce = more stock than its sales need.{% endblock %}
+{% block intro %}How fast each group of similar pieces sells, over 3, 6 and 12 months. A check on the ideal stock, which is what the Increase and Reduce recommendations follow.{% endblock %}
 {% block content %}
 <div id="page">
 {% if empty %}
@@ -37,9 +37,8 @@
 {{ ui.section("At a glance") }}
 <div class="row row-cards mb-2">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 <div class="small text-secondary mb-3">As of {{ as_of | date }} · {{ "brick group" if f.view == "group" else "brick" }} = {{ levels }} ·
-  default ideal {{ rules.target_turn }}× a year, {{ n_ideals }} specific ideal{{ "" if n_ideals == 1 else "s" }} set
-  (<a href="/settings#tab-ideals">Settings → Ideal turns</a>), kept within ±{{ rules.turn_band_pct | num }}% ·
-  recommendations are made per brick group</div>
+  compared with a reference turn of {{ rules.target_turn }}× a year (±{{ rules.turn_band_pct | num }}%) · analysis only:
+  Increase / Reduce recommendations follow the <a href="/ideal-stock">ideal stock</a></div>
 
 {{ ui.section("How it breaks down", "and how a verdict is reached") }}
 <div class="row row-cards mb-3">

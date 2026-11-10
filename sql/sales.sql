@@ -100,14 +100,28 @@ CREATE INDEX IF NOT EXISTS ix_sales_line_source_date ON sales.sales_line (source
 CREATE INDEX IF NOT EXISTS ix_sales_line_barcode     ON sales.sales_line (barcode);
 CREATE INDEX IF NOT EXISTS ix_sales_line_inv_code    ON sales.sales_line (item_inv_own_code);
 
+-- ERP sale lines of pieces booked against a customer order (the sales report run with "Show Order Labels:
+-- Only"), kept apart from sales_line so a sales re-pull does not lose them. Customer orders are custom work:
+-- the demand forecast leaves them out. Loaded by python -m kkj.pipelines.order_booked.
+CREATE TABLE IF NOT EXISTS sales.order_booked_line (
+    bill_no             text NOT NULL,
+    inventory_ref_code  bigint NOT NULL,
+    sale_date           date NOT NULL,          -- the sale (or return) date the order-only report gave
+    report_from         date NOT NULL,          -- the range of the order-only pull it came from
+    report_to           date NOT NULL,
+    marked_at           timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (bill_no, inventory_ref_code)
+);
+
 -- The sales to analyse: ERP rows wherever the ERP has been loaded, legacy CSV
--- rows only for dates before the first successfully loaded ERP date.
+-- rows only for dates before the first successfully loaded ERP date. order_booked: see above.
 CREATE OR REPLACE VIEW sales.v_sales_line AS
 WITH erp_start AS (
     SELECT min(date_from) AS d FROM sales.load_log WHERE source = 'erp' AND status = 'success'
 )
-SELECT s.*
-FROM sales.sales_line s, erp_start
+SELECT s.*, (ob.bill_no IS NOT NULL) AS order_booked
+FROM sales.sales_line s CROSS JOIN erp_start
+LEFT JOIN sales.order_booked_line ob ON ob.bill_no = s.bill_no AND ob.inventory_ref_code = s.inventory_ref_code
 WHERE s.source = 'erp'
    OR (s.source = 'csv_legacy' AND (erp_start.d IS NULL OR s.sale_date < erp_start.d));
 

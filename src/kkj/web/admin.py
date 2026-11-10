@@ -50,66 +50,143 @@ def _branches():
                           ORDER BY kind, short_name"""))
 
 
-IDEAL_LEVELS = {"item_group": "Item group", "product": "Product", "group": "Brick group", "brick": "Brick"}
+# ── Settings -> Ideal stock by group (config.stock_param, config.ideal_stock_override) ──
+STOCK_LEVELS = {"item_group": "Item group", "product": "Product", "group": "Brick group"}
+FIX_LEVELS = {"group": "Brick group", "product": "Product"}
+STOCK_PARAMS = {  # param -> (label, unit, rule it overrides, parse/validate)
+    "choice_months": ("Hold for choice", "months of forecast demand", "choice_months"),
+    "replacement_days": ("Replacement time", "days", "replacement_days"),
+    "display_min": ("Display minimum", "pieces", "display_min_pcs"),
+    "grade": ("Service grade", "A, B or C", None),
+}
 
 
-def _ideals_ctx(error=None, saved=None, level="group", key="", ideal=""):
-    """The ideal-turn table, plus the keys that exist at each level (from the latest stock turn) for the picker."""
-    rows = _plain(read("""SELECT level, key, ideal::float AS ideal, note, updated_by, updated_at AT TIME ZONE 'Asia/Kolkata' AS updated_at
-                          FROM config.ideal_turn ORDER BY CASE level WHEN 'item_group' THEN 1 WHEN 'product' THEN 2
-                          WHEN 'group' THEN 3 ELSE 4 END, key"""))
-    latest = read("""SELECT level, brick, item_name, item_class_group, blended_turn FROM brain.brick_turn
-                     WHERE scope = 'Company' AND as_of = (SELECT max(as_of) FROM brain.brick_turn)""")
-    keys = {"group": sorted(latest.loc[latest["level"] == "group", "brick"]),
-            "brick": sorted(latest.loc[latest["level"] == "brick", "brick"]),
-            "product": sorted(latest["item_name"].dropna().replace("", None).dropna().unique()),
-            "item_group": sorted(latest["item_class_group"].dropna().unique())}
-    # today's turn at each key, as a reference next to the ideal
-    now = {**latest[latest["level"] == "group"].set_index("brick")["blended_turn"].to_dict(),
-           **latest[latest["level"] == "brick"].set_index("brick")["blended_turn"].to_dict()}
-    now = {k: v for k, v in now.items() if v is not None and math.isfinite(v)}
-    return {"ideals": rows, "keys": keys, "levels": IDEAL_LEVELS, "now": now, "error": error, "saved": saved,
-            "form": {"level": level, "key": key, "ideal": ideal}}
+def _check_param(param, raw):
+    """(stored text, None) or (None, error message)."""
+    raw = (raw or "").strip()
+    if param == "grade":
+        return (raw.upper(), None) if raw.upper() in ("A", "B", "C") else (None, "Service grade: A, B or C.")
+    limits = {"choice_months": (0, 60), "replacement_days": (1, 365), "display_min": (0, 50)}[param]
+    try:
+        v = float(raw)
+    except ValueError:
+        return None, f"{STOCK_PARAMS[param][0]}: a number."
+    if not limits[0] <= v <= limits[1]:
+        return None, f"{STOCK_PARAMS[param][0]}: between {limits[0]} and {limits[1]} {STOCK_PARAMS[param][1]}."
+    return f"{v:g}", None
 
 
-@router.get("/ideal-turns", response_class=HTMLResponse)
-def ideals_card(request: Request, level: str = "group", key: str = ""):
-    return templates.TemplateResponse(request, "_ideals.html", _ideals_ctx(level=level, key=key))
+def _stock_ctx(error=None, saved=None, form=None):
+    """Values set per group, fixed ideals, and pickers from the latest ideal stock run."""
+    params = _plain(read("""SELECT param, level, key, value, note, updated_by, updated_at AT TIME ZONE 'Asia/Kolkata' AS updated_at
+                            FROM config.stock_param ORDER BY param, CASE level WHEN 'item_group' THEN 1
+                            WHEN 'product' THEN 2 ELSE 3 END, key"""))
+    overrides = _plain(read("""
+        WITH latest AS (SELECT * FROM brain.ideal_stock WHERE as_of = (SELECT max(as_of) FROM brain.ideal_stock)
+                        AND scope <> 'Company')
+        SELECT o.level, o.key, o.branch, o.pcs, o.reason, o.updated_by, o.updated_at AT TIME ZONE 'Asia/Kolkata' AS updated_at,
+               (SELECT sum(l.ideal_pcs) FROM latest l
+                WHERE (CASE o.level WHEN 'group' THEN l.brick_group ELSE l.item_name END) = o.key
+                  AND (o.branch = '*' OR l.scope = o.branch)) AS applied
+        FROM config.ideal_stock_override o ORDER BY o.level DESC, o.key, o.branch"""))
+    latest = read("""SELECT scope, brick_group, item_name, item_class_group FROM brain.ideal_stock
+                     WHERE as_of = (SELECT max(as_of) FROM brain.ideal_stock)""")
+    company = latest[latest["scope"] == "Company"]
+    keys = {"group": sorted(company["brick_group"].dropna().unique()),
+            "product": sorted(company["item_name"].dropna().unique()),
+            "item_group": sorted(company["item_class_group"].dropna().unique())}
+    branches = sorted(latest.loc[latest["scope"] != "Company", "scope"].dropna().unique())
+    with engine().connect() as conn:
+        rules = rules_mod.load(conn)
+    defaults = {k: (rules[v[2]] if v[2] else "by sales value") for k, v in STOCK_PARAMS.items()}
+    return {"params": params, "overrides": overrides, "keys": keys, "branches": branches, "levels": STOCK_LEVELS,
+            "fix_levels": FIX_LEVELS,
+            "kinds": STOCK_PARAMS, "defaults": defaults, "error": error, "saved": saved,
+            "form": form or {"param": "choice_months", "level": "product", "key": "", "value": ""}}
 
 
-@router.post("/ideal-turns", response_class=HTMLResponse)
-async def save_ideal(request: Request):
+@router.get("/ideal-stock", response_class=HTMLResponse)
+def stock_card(request: Request):
+    return templates.TemplateResponse(request, "_stock_params.html", _stock_ctx())
+
+
+@router.post("/ideal-stock", response_class=HTMLResponse)
+async def save_stock_param(request: Request):
     form = await request.form()
-    level, key, note = form.get("level", ""), (form.get("key") or "").strip(), (form.get("note") or "").strip() or None
-    delete = form.get("delete") == "1"
+    param, level = form.get("param", ""), form.get("level", "")
+    key, note = (form.get("key") or "").strip(), (form.get("note") or "").strip() or None
+    keep = {"param": param, "level": level, "key": key, "value": form.get("value", "")}
     def again(error=None, saved=None):
-        return templates.TemplateResponse(request, "_ideals.html",
-                                          _ideals_ctx(error, saved, level, key, form.get("ideal", "")))
-    if level not in IDEAL_LEVELS or not key:
-        return again("Choose a level and what it applies to.")
+        return templates.TemplateResponse(request, "_stock_params.html", _stock_ctx(error, saved, keep))
+    if param not in STOCK_PARAMS or level not in STOCK_LEVELS or not key:
+        return again("Choose what to set, a level and what it applies to.")
     by = who(request)
     with engine().begin() as conn:
-        old = conn.execute(text("SELECT ideal::float FROM config.ideal_turn WHERE level = :l AND key = :k"),
-                           {"l": level, "k": key}).scalar()
-        if delete:
-            conn.execute(text("DELETE FROM config.ideal_turn WHERE level = :l AND key = :k"), {"l": level, "k": key})
-            new, msg = None, f"Removed the ideal for {key}; it now uses the next level up."
+        old = conn.execute(text("SELECT value FROM config.stock_param WHERE param = :p AND level = :l AND key = :k"),
+                           {"p": param, "l": level, "k": key}).scalar()
+        if form.get("delete") == "1":
+            conn.execute(text("DELETE FROM config.stock_param WHERE param = :p AND level = :l AND key = :k"),
+                         {"p": param, "l": level, "k": key})
+            new, msg = None, f"Removed {STOCK_PARAMS[param][0].lower()} for {key}; it now uses the next level up."
         else:
+            new, error = _check_param(param, form.get("value"))
+            if error:
+                return again(error)
+            conn.execute(text("""INSERT INTO config.stock_param (param, level, key, value, note, updated_by)
+                                 VALUES (:p, :l, :k, :v, :n, :by)
+                                 ON CONFLICT (param, level, key) DO UPDATE SET value = EXCLUDED.value, note = EXCLUDED.note,
+                                 updated_at = now(), updated_by = EXCLUDED.updated_by"""),
+                         {"p": param, "l": level, "k": key, "v": new, "n": note, "by": by})
+            msg = (f"{STOCK_LEVELS[level]} {key}: {STOCK_PARAMS[param][0].lower()} {new} {STOCK_PARAMS[param][1]}. "
+                   "Ideals update at the next refresh.")
+        conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value, note)
+                             VALUES (:by, 'stock_param', :k, CAST(:old AS jsonb), CAST(:new AS jsonb), :note)"""),
+                     {"by": by, "k": f"{param} / {level}: {key}", "old": json.dumps(old), "new": json.dumps(new),
+                      "note": note})
+    return templates.TemplateResponse(request, "_stock_params.html", _stock_ctx(saved=msg))
+
+
+@router.post("/ideal-stock/override", response_class=HTMLResponse)
+async def save_override(request: Request):
+    form = await request.form()
+    level, key = form.get("level", ""), (form.get("key") or "").strip()
+    branch, reason = (form.get("branch") or "").strip(), (form.get("reason") or "").strip()
+    def again(error=None):
+        return templates.TemplateResponse(request, "_stock_params.html", _stock_ctx(error))
+    if level not in FIX_LEVELS or not key or not branch:
+        return again("Choose a brick group or product, and a branch (or all branches).")
+    where = "all branches" if branch == "*" else branch
+    by = who(request)
+    with engine().begin() as conn:
+        old = conn.execute(text("""SELECT pcs FROM config.ideal_stock_override
+                                   WHERE level = :l AND key = :k AND branch = :b"""),
+                           {"l": level, "k": key, "b": branch}).scalar()
+        if form.get("delete") == "1":
+            conn.execute(text("DELETE FROM config.ideal_stock_override WHERE level = :l AND key = :k AND branch = :b"),
+                         {"l": level, "k": key, "b": branch})
+            new, msg = None, f"Removed the fixed ideal for {key} at {where}; it is calculated again from the next refresh."
+        else:
+            if not reason:
+                return again("A fixed ideal needs a reason, so the correction stays visible.")
             try:
-                new = float(form.get("ideal", ""))
-                if not 0.05 <= new <= 24:
+                new = int(form.get("pcs", ""))
+                if not 0 <= new <= 100_000:
                     raise ValueError
             except ValueError:
-                return again("Ideal turn: a number between 0.05 and 24 (times a year).")
-            conn.execute(text("""INSERT INTO config.ideal_turn (level, key, ideal, note, updated_by) VALUES (:l, :k, :i, :n, :by)
-                                 ON CONFLICT (level, key) DO UPDATE SET ideal = EXCLUDED.ideal, note = EXCLUDED.note,
-                                 updated_at = now(), updated_by = EXCLUDED.updated_by"""),
-                         {"l": level, "k": key, "i": new, "n": note, "by": by})
-            msg = f"{IDEAL_LEVELS[level]} {key}: ideal {new:g}× a year. Verdicts update at the next refresh."
-        conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value)
-                             VALUES (:by, 'ideal_turn', :k, CAST(:old AS jsonb), CAST(:new AS jsonb))"""),
-                     {"by": by, "k": f"{level}: {key}", "old": json.dumps(old), "new": json.dumps(new)})
-    return templates.TemplateResponse(request, "_ideals.html", _ideals_ctx(saved=msg, level=level))
+                return again("Pieces: a whole number from 0.")
+            conn.execute(text("""INSERT INTO config.ideal_stock_override (level, key, branch, pcs, reason, updated_by)
+                                 VALUES (:l, :k, :b, :p, :r, :by)
+                                 ON CONFLICT (level, key, branch) DO UPDATE SET pcs = EXCLUDED.pcs,
+                                 reason = EXCLUDED.reason, updated_at = now(), updated_by = EXCLUDED.updated_by"""),
+                         {"l": level, "k": key, "b": branch, "p": new, "r": reason, "by": by})
+            msg = (f"{FIX_LEVELS[level]} {key} at {where}: ideal fixed at {new}"
+                   + (", split by the calculated ideals" if level == "product" or branch == "*" else "")
+                   + ". Recommendations follow at the next refresh.")
+        conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value, note)
+                             VALUES (:by, 'ideal_stock_override', :k, CAST(:old AS jsonb), CAST(:new AS jsonb), :note)"""),
+                     {"by": by, "k": f"{level}: {key} @ {where}", "old": json.dumps(old), "new": json.dumps(new),
+                      "note": reason or None})
+    return templates.TemplateResponse(request, "_stock_params.html", _stock_ctx(saved=msg))
 
 
 def _festivals_ctx(error=None, saved=None):
@@ -151,14 +228,13 @@ async def save_festival(request: Request):
 
 
 @router.get("", response_class=HTMLResponse)
-def page(request: Request, ideal_level: str = "group", ideal_key: str = ""):
+def page(request: Request):
     people = _people()
     history = read("""SELECT changed_at AT TIME ZONE 'Asia/Kolkata' AS changed_at, changed_by, table_name, row_key,
                              old_value, new_value FROM config.change_log ORDER BY change_id DESC LIMIT 200""").to_dict("records")
     return render(request, "settings.html", "settings", sections=[_section_ctx(s) for s in SECTIONS], people=people,
                   to_review=sum(p["match_status"] in ("unmapped", "name_match") for p in people), branches=_branches(),
-                  person_kinds=PERSON_KINDS, branch_kinds=BRANCH_KINDS, history=history,
-                  ideal_level=ideal_level if ideal_level in IDEAL_LEVELS else "group", ideal_key=ideal_key)
+                  person_kinds=PERSON_KINDS, branch_kinds=BRANCH_KINDS, history=history)
 
 
 def _parse(rule, form):

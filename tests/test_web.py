@@ -99,7 +99,9 @@ def test_response_needs_sign_in_then_records_and_is_undone():
                                   "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings",
                                   "/stock-turn", "/stock-turn?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
                                   "/stock-turn?group=Diamond+Jewellery&group=", "/stock-turn?view=brick&search=D+RING",
-                                  "/settings/ideal-turns", "/seasonality", "/seasonality?group=Gold", "/recommendations?sort=money", "/recommendations/feed?sort=newest&offset=25", "/lookup", "/lookup?q=D+RING", "/lookup?q=DRN21585", "/lookup?q=zzqqxx",
+                                  "/settings/ideal-stock", "/ideal-stock",
+                                  "/ideal-stock?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
+                                  "/ideal-stock?group=Diamond+Jewellery&group=", "/seasonality", "/seasonality?group=Gold", "/recommendations?sort=money", "/recommendations/feed?sort=newest&offset=25", "/lookup", "/lookup?q=D+RING", "/lookup?q=DRN21585", "/lookup?q=zzqqxx",
                                   "/lookup?q=Kothari", "/sales?salesperson=K0057&branch=&group=", "/settings/festivals",
                                   "/recommendations?group=festival", "/recommendations?group=purchasing"])
 def test_analytics_and_settings_pages_render(path):
@@ -266,22 +268,39 @@ def test_users_tab_adds_resets_disables_and_forces_a_new_password():
         c.execute(text("DELETE FROM config.change_log WHERE table_name = 'user' AND row_key LIKE 'pytest%'"))
 
 
-def test_ideal_turn_save_validate_and_remove():
-    key = "D RING"
+def test_ideal_stock_values_and_fixed_ideals_save_validate_and_remove():
     try:
-        assert "between 0.05 and 24" in client.post("/settings/ideal-turns", data={"level": "product", "key": key,
-                                                                                    "ideal": "0"}).text
-        r = client.post("/settings/ideal-turns", data={"level": "product", "key": key, "ideal": "0.8", "note": "pytest"})
-        assert "ideal 0.8× a year" in r.text and "pytest" in r.text
+        assert "between 0 and 60" in client.post("/settings/ideal-stock", data={
+            "param": "choice_months", "level": "product", "key": "D NOSE PIN", "value": "99"}).text
+        assert "A, B or C" in client.post("/settings/ideal-stock", data={
+            "param": "grade", "level": "product", "key": "D NOSE PIN", "value": "Z"}).text
+        r = client.post("/settings/ideal-stock", data={"param": "choice_months", "level": "product", "key": "D NOSE PIN",
+                                                        "value": "4", "note": "pytest"})
+        assert "hold for choice 4 months" in r.text and "pytest" in r.text
         with settings.app_engine().connect() as c:
-            assert c.execute(text("SELECT ideal FROM config.ideal_turn WHERE level = 'product' AND key = :k"),
-                             {"k": key}).scalar() == Decimal("0.80")
-        assert "Removed" in client.post("/settings/ideal-turns", data={"level": "product", "key": key, "delete": "1"}).text
+            assert c.execute(text("SELECT value FROM config.stock_param WHERE param = 'choice_months' AND level = 'product' "
+                                  "AND key = 'D NOSE PIN'")).scalar() == "4"
+        assert "needs a reason" in client.post("/settings/ideal-stock/override", data={
+            "level": "group", "key": "18KT · D RING · 0.25–0.5ct", "branch": "KJ2 / Branch Dharampeth", "pcs": "5",
+            "reason": " "}).text
+        r = client.post("/settings/ideal-stock/override", data={"level": "group", "key": "18KT · D RING · 0.25–0.5ct",
+                                                                "branch": "KJ2 / Branch Dharampeth", "pcs": "5",
+                                                                "reason": "pytest display"})
+        assert "ideal fixed at 5" in r.text and "pytest display" in r.text
+        r = client.post("/settings/ideal-stock/override", data={"level": "product", "key": "D NOSE PIN", "branch": "*",
+                                                                "pcs": "120", "reason": "pytest product"})
+        assert "split by the calculated ideals" in r.text and "All branches" in r.text
+        for lv, k, br in (("group", "18KT · D RING · 0.25–0.5ct", "KJ2 / Branch Dharampeth"), ("product", "D NOSE PIN", "*")):
+            assert "Removed" in client.post("/settings/ideal-stock/override", data={
+                "level": lv, "key": k, "branch": br, "delete": "1"}).text
+        assert "Removed" in client.post("/settings/ideal-stock", data={
+            "param": "choice_months", "level": "product", "key": "D NOSE PIN", "delete": "1"}).text
     finally:
         with settings.etl_engine().begin() as c:
-            c.execute(text("DELETE FROM config.ideal_turn WHERE note = 'pytest' OR (level = 'product' AND key = :k "
-                           "AND updated_by = 'pytest')"), {"k": key})
-            c.execute(text("DELETE FROM config.change_log WHERE table_name = 'ideal_turn' AND changed_by = 'pytest'"))
+            c.execute(text("DELETE FROM config.stock_param WHERE updated_by = 'pytest' OR note = 'pytest'"))
+            c.execute(text("DELETE FROM config.ideal_stock_override WHERE updated_by = 'pytest' OR reason LIKE 'pytest%'"))
+            c.execute(text("DELETE FROM config.change_log WHERE table_name IN ('stock_param', 'ideal_stock_override') "
+                           "AND changed_by = 'pytest'"))
 
 
 def test_data_quality_shows_the_audit_and_its_workbook():
@@ -346,7 +365,8 @@ def test_stock_turn_shows_its_table_when_calculated():
                                   "/insights", "/checks", "/settings", "/lookup?q=D+TOPS"])
 def test_no_missing_value_leaks_onto_pages(path):
     import re
-    page = re.sub("<[^>]+>", " ", client.get(path).text)
+    html = re.sub(r'id="brief".*?<!-- /brief -->', "", client.get(path).text, flags=re.S)  # AI-written prose
+    page = re.sub("<[^>]+>", " ", html)
     assert not re.search(r"(?<![A-Za-z])(nan|NaN|NaT|None)(?![A-Za-z])", page), path
 
 

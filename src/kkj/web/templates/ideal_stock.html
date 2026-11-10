@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% import "_filters.html" as flt %}
+{% block title %}Ideal stock · Stockwise{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
+{% block pretitle %}Analytics{% endblock %}
+{% block page_title %}Ideal stock{% endblock %}
+{% block actions %}<a href="/settings#tab-stock" class="btn btn-outline-secondary"><i class="ti ti-adjustments"></i> By group</a>
+<a href="/settings#rules-ideal-stock" class="btn btn-outline-secondary"><i class="ti ti-adjustments"></i> Rules</a>{% endblock %}
+{% block intro %}How much of each group of similar pieces to hold, from forecast demand: enough until replacement stock arrives, enough choice on the counter, and never below the display minimum. Increase and Reduce recommendations follow it.{% endblock %}
+{% block content %}
+<div id="page">
+{% if empty %}
+<div class="empty"><p class="empty-title">Not calculated yet</p>
+  <p class="empty-subtitle text-secondary">Ideal stock is worked out with each recommendation refresh.</p></div>
+{% else %}
+{% call flt.form("/ideal-stock") %}
+  <select name="scope" aria-label="Whole company or one branch" class="form-select form-select-sm" style="width: auto">
+    {% for s in scopes %}<option value="{{ s }}" {% if s == f.scope %}selected{% endif %}>{{ s | short if s != "Company" else "Whole company" }}</option>{% endfor %}
+  </select>
+  {{ flt.toggles("group", groups, f.group, placeholder="All item groups") }}
+  <input type="hidden" name="status" value="">
+  <div class="filter-pick">
+    <select name="status" multiple aria-label="Verdict" class="form-select form-select-sm js-multi" data-placeholder="Any verdict">
+      {% for key, label in statuses.items() %}<option value="{{ key }}" {% if key in f.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <input type="search" name="search" aria-label="Find a group" value="{{ f.search }}" placeholder="Find a group, e.g. D RING" class="form-control form-control-sm"
+         style="width: 14rem">
+{% endcall %}
+
+{{ ui.section("At a glance") }}
+<div class="row row-cards mb-2">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
+<div class="small text-secondary mb-3">As of {{ as_of | date }} · units = selling units (a set counts once) · ₹ at each group's
+  average piece value · {{ n_params }} value{{ "" if n_params == 1 else "s" }} set for groups and {{ n_fixed }} fixed
+  ideal{{ "" if n_fixed == 1 else "s" }} (<a href="/settings#tab-stock">Settings → Ideal stock by group</a>)</div>
+
+{{ ui.section("How it breaks down", "and how an ideal is set") }}
+<div class="row row-cards mb-3">
+  <div class="col-lg-5">{{ ui.chart("c-status", fig, "Stock value by verdict", "₹ Cr held now") }}</div>
+  <div class="col-lg-7">
+    <div class="card h-100"><div class="card-body small">
+      <h3 class="card-title">How an ideal is set, per group and branch</h3>
+      <ol class="mb-2 ps-3">
+        <li><b>Forecast:</b> the branch's recent selling rate (last {{ rules.fc_level_months }} months, recent months counting more),
+          leaning on the product and item group where the group sells rarely{% if rules.fc_trend %}, scaled by the product's trend
+          (capped at ±{{ rules.fc_trend_cap_pct | num }}%){% endif %}.{% if rules.fc_exclude_orders %} Customer-order sales are left out.{% endif %}</li>
+        <li><b>Demand cover:</b> enough to meet demand for {{ rules.replacement_days }} days (replacement) + {{ rules.review_days }}
+          (review), {{ rules.service_a_pct | num }}% of the time for grade A groups, {{ rules.service_b_pct | num }}% for B,
+          {{ rules.service_c_pct | num }}% for C.</li>
+        <li><b>Choice:</b> at least {{ rules.choice_months | num }} months of forecast demand: customers choose among designs, and
+          branches holding more of a group sell more of it.</li>
+        <li><b>Display minimum:</b> {{ rules.display_min_pcs }} piece{{ "" if rules.display_min_pcs == 1 else "s" }} of every group the branch
+          sold in the last {{ rules.display_min_months }} months.</li>
+        <li>The ideal is the largest of these, unless fixed by hand. The company ideal is the sum of its branches'; stock elsewhere
+          (Head Office, wholesale) counts as held. Within ±{{ rules.ideal_band_pct | num }}% of the ideal (and at least
+          {{ rules.turn_min_change_pcs }} units) it is left as it is.</li>
+      </ol>
+    </div></div>
+  </div>
+</div>
+
+{{ ui.section("Is the forecast any good?", "tested on the past, against two simple methods") }}
+<div class="small text-secondary mb-2">The forecast was replayed as of each of the last {{ origins }} month-ends, using only what was
+  known then, for the next {{ horizon }} months, and compared with what actually sold. Error = total miss ÷ pieces sold
+  (lower is better). At each group and branch, the finest level, the error is {{ "%.0f%%" | format(100 * fine_err) if fine_err is not none else "–" }}
+  against {{ "%.0f%%" | format(100 * fine_avg) if fine_avg is not none else "–" }} for the 12-month average: single groups sell
+  0, 1 or 2 pieces in two months, so much of that is chance, and the safety margin is sized from it.</div>
+<div class="mb-3">{{ ui.table_card("Forecast accuracy", acc, icon="ti-target-arrow") }}</div>
+
+{{ ui.section("Group by group", "biggest changes first; search, sort or download") }}
+<div class="mb-3">{{ ui.table_card("Brick groups: biggest changes first", t,
+     sub=("Top " ~ n_shown ~ " of " ~ n_total ~ ". ") if n_total > n_shown else "", icon="ti-stack-2") }}</div>
+{% endif %}
+</div>
+{% endblock %}

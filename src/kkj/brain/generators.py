@@ -364,6 +364,86 @@ def stock_turn(turns, rules):
     return actions
 
 
+def _pct(x):
+    return "–" if x is None or pd.isna(x) else f"{100 * x:.0f}%"
+
+
+def ideal_stock(ideal, turns, rules):
+    """Increase / reduce / phase out per brick GROUP (company), from the ideal stock (kkj.brain.run.demand_and_ideal):
+    company stock against the sum of its branches' ideals. The forecast, its tested accuracy, the service grade and
+    each branch's ideal are the evidence; today's turn is shown as a check."""
+    min_change = rules["turn_min_change_pcs"]
+    comp, branch, acc = ideal["company"], ideal["branch"], ideal["accuracy"]
+    groups = turns[(turns["level"] == "group") & (turns["scope"] == "Company")].set_index("brick")
+    product_acc = acc[acc["level"] == "product"].set_index("key") if len(acc) else pd.DataFrame()
+    item_acc = acc[acc["level"] == "item_group"].set_index("key") if len(acc) else pd.DataFrame()
+    actions = []
+    for _, r in comp.iterrows():
+        status, change = r["status"], r["change_pcs"]
+        g = groups.loc[r["brick_group"]] if r["brick_group"] in groups.index else None
+        piece_value = float(g["avg_piece_value"]) if g is not None and pd.notna(g["avg_piece_value"]) else 0.0
+        current_value = float(g["current_value"]) if g is not None and pd.notna(g["current_value"]) else 0.0
+        u = unit_word(r["item_name"])
+        buy = r["item_class_group"] not in rules["no_buy_groups"]
+        ideal_pcs = r["ideal_pcs"]
+        if status == "increase" and change >= min_change and buy:
+            kind, title = "turn_increase", f"Increase {r['brick_group']} to {ideal_pcs:.0f} {u}"
+            impact = change * piece_value
+            label = f"≈{money(impact)} more stock ({change:+.0f} {u})"
+        elif status == "reduce" and -change >= min_change:
+            kind, title = "turn_reduce", f"Reduce {r['brick_group']} to {ideal_pcs:.0f} {u}"
+            impact = -change * piece_value
+            label = f"≈{money(impact)} more than demand needs ({change:+.0f} {u})"
+        elif status == "phase_out" and r["current_pcs"] > 0:
+            kind, title = "turn_phase_out", f"Phase out {r['brick_group']}"
+            impact, label = current_value, f"{money(current_value)} held ({r['current_pcs']:.0f} {u}), no demand expected"
+        else:
+            continue
+        rows = branch[branch["brick_group"] == r["brick_group"]]
+        selling = rows[rows["ideal_pcs"] > 0]
+        why = selling["ideal_from"].value_counts()
+        reasons = {"choice": "months of demand held for choice", "demand": "demand until replacement stock arrives",
+                   "display minimum": "the display minimum", "override": "an ideal fixed by hand"}
+        set_by = "; ".join(f"{n} branch{'es' if n > 1 else ''} by {reasons.get(k, k)}" for k, n in why.items())
+        summary = (f"Forecast to sell about {r['annual']:.1f} {u} in the next 12 months. Holding {r['current_pcs']:.0f}, "
+                   f"ideal {ideal_pcs:.0f} (grade {r['grade']}, implied turn {_turn(r['implied_turn'])})"
+                   + (f": set at {set_by}." if set_by else "."))
+        pa = product_acc.loc[r["item_name"]] if r["item_name"] in product_acc.index else None
+        ia = item_acc.loc[r["item_class_group"]] if r["item_class_group"] in item_acc.index else None
+        def tested(a):
+            if a is None:
+                return "not tested (too little history)"
+            if pd.isna(a["wape"]):
+                return "no sales during the test period, so no error to measure"
+            verdict = "better than" if a["better"] else "not better than"
+            return (f"error {_pct(a['wape'])} vs {_pct(a['wape_last_year'])} (same months last year) and "
+                    f"{_pct(a['wape_avg12'])} (12-month average): {verdict} both; bias {a['bias']:+.0%}")
+        evidence = {
+            f"now ({u})": float(r["current_pcs"]), f"ideal ({u})": float(ideal_pcs),
+            f"forecast, next 12 months ({u})": round(float(r["annual"]), 1),
+            f"forecast over {r['cover_days']:.0f} days ({u})": round(float(r["cover_demand"]), 2),
+            "grade": f"{r['grade']}: have enough {r['service_pct']:.0f}% of the time",
+            "ideal is the largest of": (f"demand over {r['cover_days']:.0f} days at that service level; "
+                                        f"{rows['choice_months'].max():g} months of forecast demand for choice; "
+                                        f"the display minimum where the branch sold in the last year"),
+            "implied turn at the ideal": _turn(r["implied_turn"]),
+            "turn today (check)": _turn(g["blended_turn"]) if g is not None else "–",
+            f"accuracy test, {r['item_name']}": tested(pa),
+            f"accuracy test, {r['item_class_group']}": tested(ia),
+            "by branch": {
+                short(b["branch"]): (f"{b['current_pcs']:.0f} → {b['ideal_pcs']:.0f} {u} "
+                                     f"(forecast {b['annual']:.1f} a year; ideal from {b['ideal_from']}"
+                                     + (f": {b['override_reason']}" if b["ideal_from"] == "override" else "") + ")")
+                for _, b in rows.sort_values(["ideal_pcs", "current_pcs"], ascending=False).iterrows()
+                if b["current_pcs"] > 0 or b["ideal_pcs"] > 0},
+        }
+        conf = confidence(float(rows["n_window"].fillna(0).sum()))
+        actions.append(_action(kind, r["brick_group"], title, summary, impact, label, conf, evidence,
+                               subject={"group": r["brick_group"], "item": r["item_name"],
+                                        "item_group": r["item_class_group"]}))
+    return actions
+
+
 # ── broken sets ───────────────────────────────────────────────────────────────
 TEMPORARY = ("approval", "transit", "repair")
 

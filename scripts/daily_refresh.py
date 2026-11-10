@@ -4,6 +4,8 @@ The daily refresh (to be scheduled once the permanent setup is decided):
   1. pg_dump kkj_erp_stock (safety copy)
   2. sales for YESTERDAY and today: yesterday is always re-pulled in full, because a load during the
      day misses that evening's sales (4 Nov 2026: 20 of 29 lines)
+  2b. the same days' order-booked sales (the report with "Show Order Labels: Only"), marked so the demand
+      forecast leaves customer orders out (kkj.pipelines.order_booked)
   3. today's stock -> erp.stock_snapshot
   4. refresh the recommendations, then the accuracy audit (python -m kkj.brain.run)
   5. if switched on (kkj.features): the AI second look; on Mondays the weekly brief
@@ -51,6 +53,10 @@ def main():
     today = date.today()
     ok = [step("sales yesterday + today", ["kkj.pipelines.sales", "--from", f"{today - timedelta(days=1):%d/%m/%Y}",
                                            "--to", f"{today:%d/%m/%Y}"], log),
+          step("order-booked sales yesterday + today", ["kkj.pipelines.sales", "--from",
+                                                        f"{today - timedelta(days=1):%d/%m/%Y}", "--to",
+                                                        f"{today:%d/%m/%Y}", "--order-labels", "3"], log),
+          step("mark order-booked sales", ["kkj.pipelines.order_booked", "--pulled-on", f"{today:%Y%m%d}"], log),
           step("stock today", ["kkj.pipelines.stock"], log),
           step("recommendations + audit", ["kkj.brain.run", "--trigger", "pipeline"], log)]
     # AI steps (kkj.features): only when switched on in .env with an API key; a failure here never fails the refresh

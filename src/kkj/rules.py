@@ -68,10 +68,9 @@ RULES = [
          choices=("Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND", "Broken Dia Jew",
                   "Customer Diamond")),
     # ── weighted stock turn per brick (kkj.metrics.brick_turn) ──
-    Rule("target_turn", "Stock turn", "Default ideal stock turn", 1.0, "× a year",
-         "How many times a year stock should sell through, for every brick without its own ideal (set ideals per "
-         "brick, group, product or item group under Settings → Ideal turns). The company turns about 0.6× today.",
-         min=0.1, max=12),
+    Rule("target_turn", "Stock turn", "Reference stock turn", 1.0, "× a year",
+         "The turn the Stock turn page compares each brick with. Analysis only: Increase / Reduce recommendations "
+         "follow the ideal stock (Ideal stock section). The company turns about 0.5x today.", min=0.1, max=12),
     Rule("turn_band_pct", "Stock turn", "Keep stock as it is when the turn is within", 10.0, "% of the ideal",
          "Inside this band a brick is left alone; below it is a candidate to reduce, above it to increase.",
          min=0, max=50),
@@ -109,6 +108,81 @@ RULES = [
     Rule("turn_min_change_pcs", "Stock turn", "Smallest change worth recommending", 2, "pieces",
          "Increase / reduce recommendations are raised only when the ideal stock differs by at least this.",
          "int", min=1, max=50),
+    # ── demand forecast (kkj.metrics.forecast) ──
+    Rule("fc_exclude_orders", "Demand forecast", "Leave customer-order sales out of demand", True, "",
+         "Sales of pieces booked against a customer order are custom work, not demand the stock on the counter has "
+         "to meet. When on, the forecast and ideal stock ignore them (they stay in every sales figure).", "bool"),
+    Rule("fc_level_months", "Demand forecast", "Recent selling rate measured over the last", 12, "months",
+         "Longer = steadier, slower to react to a change.", "int", min=3, max=36),
+    Rule("fc_half_life_months", "Demand forecast", "Recent months count more: a month's weight halves every", 6,
+         "months", "6 = a month half a year ago counts half as much as last month. Higher = all months count "
+         "more evenly.", min=1, max=60),
+    Rule("fc_stockout_correction", "Demand forecast", "Correct for months a group was out of stock", False, "",
+         "A group that sold 2 while in stock half the month was selling at a rate of 4. Off by default: with about "
+         "two stock readings a month, pieces that arrive and sell between readings make groups look out of stock, "
+         "and the accuracy test (Nov 2026) showed the correction overstating demand by 10-40%. Worth trying again "
+         "once a year of daily stock is in.", "bool"),
+    Rule("fc_availability_basis", "Demand forecast", "Out of stock means out of stock", "company", "",
+         "company = nowhere in the company (branches sell pieces brought in from Head Office or another branch, so a "
+         "group missing from one counter was still on offer); branch = not at that branch.", "choice",
+         choices=("company", "branch")),
+    Rule("fc_min_availability_pct", "Demand forecast", "Ignore months in stock less than", 25.0, "% of the month",
+         "Such months (if nothing sold) say nothing about demand. Availability is never taken below this either, "
+         "so one lucky sale cannot blow up the rate.", min=5, max=100),
+    Rule("fc_shrink_months", "Demand forecast", "A group relies on its own history after about", 6,
+         "months of selling data", "Before that it leans on its parent (product, then item group) at the branch: "
+         "with this many months observed, own history and parent count equally. Higher = more borrowing, steadier "
+         "forecasts.", min=0.5, max=60),
+    Rule("fc_seasonal", "Demand forecast", "Follow the seasonal pattern", False, "",
+         "Forecast each month with the item group's (or product's) monthly pattern from five years of sales. Off by "
+         "default: Diwali moves between October and November, so a calendar-month pattern made the 2-month forecast "
+         "less accurate in the accuracy test (Nov 2026). Festival stock is planned by the festival recommendations "
+         "instead.", "bool"),
+    Rule("fc_season_level", "Demand forecast", "Seasonal pattern taken from", "item_group", "",
+         "item_group = the item group's pattern for all its products (steadier); product = each product's own "
+         "pattern where it sells enough (Seasonality section), else its item group's.", "choice",
+         choices=("item_group", "product")),
+    Rule("fc_trend", "Demand forecast", "Follow the trend", True, "",
+         "Scale the forecast by the change in a product's sales at the branch over the last year against the year "
+         "before (steadied by its item group's trend).", "bool"),
+    Rule("fc_trend_cap_pct", "Demand forecast", "Limit the trend to", 30.0, "% up or down",
+         "A product growing fast is not assumed to keep growing without limit.", min=0, max=200),
+    Rule("fc_trend_pseudo_pcs", "Demand forecast", "Steady a product's trend with its item group's over", 20,
+         "pieces", "Higher = products follow their item group's trend more closely.", min=0, max=500),
+    Rule("fc_backtest_months", "Demand forecast", "Accuracy test over the last", 24, "months",
+         "The forecast is replayed as of each past month-end in this period, using only what was known then, and "
+         "compared with what actually sold and with two simple methods.", "int", min=6, max=48),
+    # ── ideal stock (kkj.metrics.ideal_stock) ──
+    Rule("replacement_days", "Ideal stock", "Replacement time", 45, "days",
+         "From deciding to restock until the new piece is on the counter. Stock must cover demand for this long. "
+         "Set it per product or item group under Settings → Ideal stock by group.", "int", min=1, max=365),
+    Rule("review_days", "Ideal stock", "Stock is reviewed every", 7, "days",
+         "Recommendations refresh this often, so stock also has to last until the next review.", "int", min=1, max=90),
+    Rule("service_a_pct", "Ideal stock", "Grade A groups: have enough stock", 95.0, "% of the time",
+         "The chance of meeting demand until replacement stock arrives. Higher = fewer lost sales, more stock.",
+         min=50, max=99.9),
+    Rule("service_b_pct", "Ideal stock", "Grade B groups: have enough stock", 90.0, "% of the time", "", min=50, max=99.9),
+    Rule("service_c_pct", "Ideal stock", "Grade C groups: have enough stock", 80.0, "% of the time", "", min=50, max=99.9),
+    Rule("grade_a_pct", "Ideal stock", "Grade A = the top", 20.0, "% of groups by sales value",
+         "Groups ranked by the last 12 months' sales value. Override a group's grade under Settings → Ideal stock "
+         "by group.", min=0, max=100),
+    Rule("grade_b_pct", "Ideal stock", "Grade B = the next", 30.0, "% of groups by sales value",
+         "Everything below is grade C, including groups with no sales.", min=0, max=100),
+    Rule("display_min_pcs", "Ideal stock", "Display minimum", 1, "pieces",
+         "The least a branch holds of a group it sells, for choice on the counter, whatever the forecast says. "
+         "Set it per product or group under Settings → Ideal stock by group.", "int", min=0, max=50),
+    Rule("display_min_months", "Ideal stock", "Display minimum applies to groups the branch sold in the last", 12,
+         "months", "Groups a branch has not sold for longer get no minimum: their ideal comes from the forecast "
+         "alone.", "int", min=1, max=60),
+    Rule("choice_months", "Ideal stock", "Hold for choice at least", 18, "months of forecast demand",
+         "Jewellery is not interchangeable: customers choose among designs, and branch-months holding more of a group "
+         "sold more of it (about +3% sales for +10% pieces, Nov 2026 analysis). So a branch holds at least this many "
+         "months of its forecast sales, whatever the replacement time. 12 = an implied turn of about 1x, 18 about "
+         "0.67x (chosen Nov 2026: leaner without a shock). Set it per "
+         "product or group under Settings → Ideal stock by group (e.g. longer for bridal sets).", min=0, max=60),
+    Rule("ideal_band_pct", "Ideal stock", "Leave stock as it is when within", 20.0, "% of the ideal",
+         "Small differences are not worth acting on. A change also has to be at least the smallest change worth "
+         "recommending (Stock turn section).", min=0, max=100),
     # ── seasonality (kkj.metrics.seasonality) ──
     Rule("turn_seasonal_adjust", "Seasonality", "Adjust stock turn for the season", True, "",
          "A 3-month window over Diwali holds far more than a quarter of the year's sales. When on, each window's "

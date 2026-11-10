@@ -121,3 +121,50 @@ GRANT SELECT ON config.business_note TO dashboard_app;
 GRANT INSERT, UPDATE ON config.business_note TO dashboard_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA config TO dashboard_app;
 RESET ROLE;
+
+-- Ideal stock settings per item group, product or brick group (added after the first version): replacement time
+-- (days), display minimum (pieces) and service grade (A/B/C). The most specific row wins; anything without one
+-- uses the rule (Settings -> Ideal stock). Edited in Settings -> Ideal stock by group.
+SET ROLE erp_etl;
+CREATE TABLE IF NOT EXISTS config.stock_param (
+    param       text NOT NULL CHECK (param IN ('replacement_days', 'display_min', 'grade', 'choice_months')),
+    level       text NOT NULL CHECK (level IN ('group', 'product', 'item_group')),
+    key         text NOT NULL,
+    value       text NOT NULL,
+    note        text,
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    updated_by  text,
+    PRIMARY KEY (param, level, key)
+);
+GRANT SELECT ON config.stock_param TO powerbi_reader, dashboard_app;
+GRANT INSERT, UPDATE, DELETE ON config.stock_param TO dashboard_app;
+
+-- A fixed ideal stock, overriding the calculated one, for a brick group or a whole product (item), at one branch or
+-- at all branches ('*'). A product's or an all-branch number is split over its brick groups / branches in proportion
+-- to their calculated ideals. The reason is required, so systematic corrections become visible.
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'config'
+             AND table_name = 'ideal_stock_override' AND column_name = 'brick_group') THEN
+    DROP TABLE config.ideal_stock_override;      -- first shape (brick group only), replaced the same day while empty
+  END IF;
+END $$;
+CREATE TABLE IF NOT EXISTS config.ideal_stock_override (
+    level       text NOT NULL CHECK (level IN ('group', 'product')),
+    key         text NOT NULL,                 -- the brick group, or the product (item name)
+    branch      text NOT NULL,                 -- a branch, or '*' for all branches
+    pcs         int NOT NULL CHECK (pcs >= 0),
+    reason      text NOT NULL CHECK (length(trim(reason)) > 0),
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    updated_by  text,
+    PRIMARY KEY (level, key, branch)
+);
+GRANT SELECT ON config.ideal_stock_override TO powerbi_reader, dashboard_app;
+GRANT INSERT, UPDATE, DELETE ON config.ideal_stock_override TO dashboard_app;
+RESET ROLE;
+
+-- choice_months added after the table was first created
+SET ROLE erp_etl;
+ALTER TABLE config.stock_param DROP CONSTRAINT IF EXISTS stock_param_param_check;
+ALTER TABLE config.stock_param ADD CONSTRAINT stock_param_param_check
+    CHECK (param IN ('replacement_days', 'display_min', 'grade', 'choice_months'));
+RESET ROLE;

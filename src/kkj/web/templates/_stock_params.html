@@ -1,0 +1,111 @@
+{# Settings -> Ideal stock by group. Every form posts back and this whole card is swapped. #}
+<div id="stock-params">
+  {% if error %}<div class="alert alert-danger"><i class="ti ti-alert-circle"></i> {{ error }}</div>{% endif %}
+  {% if saved %}<div class="alert alert-success"><i class="ti ti-check"></i> {{ saved }}</div>{% endif %}
+
+  <form class="card mb-3" hx-post="/settings/ideal-stock" hx-target="#stock-params" hx-swap="outerHTML">
+    <div class="card-header"><div><h3 class="card-title"><i class="ti ti-adjustments-horizontal me-1"></i>Set a value for a group</h3>
+      <div class="card-subtitle small text-secondary">For an item group, a product or a brick group, instead of the rule
+        (Business rules → Ideal stock). The most specific value wins: brick group, then product, then item group.</div></div></div>
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-6 col-lg-3"><label class="form-label">Set</label>
+          <select name="param" class="form-select">
+            {% for k, v in kinds.items() %}<option value="{{ k }}" {% if form.param == k %}selected{% endif %}>{{ v[0] }} ({{ v[1] }})</option>{% endfor %}
+          </select></div>
+        <div class="col-sm-6 col-lg-2"><label class="form-label">For a</label>
+          <select name="level" class="form-select" onchange="document.getElementById('stock-key').setAttribute('list', 'skeys-' + this.value)">
+            {% for k, label in levels.items() %}<option value="{{ k }}" {% if form.level == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select></div>
+        <div class="col-sm-6 col-lg-3"><label class="form-label">Which one</label>
+          <input id="stock-key" name="key" class="form-control" list="skeys-{{ form.level }}" value="{{ form.key }}"
+                 placeholder="Start typing, e.g. D NOSE PIN" autocomplete="off" required></div>
+        <div class="col-sm-6 col-lg-1"><label class="form-label">Value</label>
+          <input name="value" class="form-control" value="{{ form.value }}" required></div>
+        <div class="col-sm-12 col-lg-3"><label class="form-label">Note</label>
+          <input name="note" class="form-control" placeholder="Why (optional)"></div>
+      </div>
+      <div class="small text-secondary mt-2">Defaults now:
+        {% for k, v in kinds.items() %}{{ v[0] | lower }} <strong>{{ defaults[k] }}</strong>{% if v[2] %} {{ v[1] }}{% endif %}{{ "; " if not loop.last }}{% endfor %}.</div>
+      <div class="mt-2 text-end"><button class="btn btn-primary"><i class="ti ti-device-floppy"></i> Save</button></div>
+    </div>
+  </form>
+  {% for k, values in keys.items() %}<datalist id="skeys-{{ k }}">{% for v in values %}<option value="{{ v }}">{% endfor %}</datalist>{% endfor %}
+
+  <div class="card mb-3">
+    <div class="card-header"><h3 class="card-title">Values set for groups</h3></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-vcenter card-table">
+        <thead><tr><th>Setting</th><th>Level</th><th>Applies to</th><th class="text-end">Value</th><th>Note</th><th>Set by</th><th></th></tr></thead>
+        <tbody>
+        {% for r in params %}
+          <tr><td>{{ kinds[r.param][0] }}</td><td>{{ levels[r.level] }}</td><td>{{ r.key }}</td>
+            <td class="text-end">{{ r.value }} <span class="text-secondary small">{{ kinds[r.param][1] if r.param != "grade" else "" }}</span></td>
+            <td class="small">{{ r.note or "" }}</td>
+            <td class="small text-secondary">{{ r.updated_by or "" }}, {{ r.updated_at | date("%d %b %Y") }}</td>
+            <td class="text-end">
+              <form hx-post="/settings/ideal-stock" hx-target="#stock-params" hx-swap="outerHTML" class="d-inline"
+                    hx-confirm="Remove this value for {{ r.key }}?">
+                <input type="hidden" name="param" value="{{ r.param }}"><input type="hidden" name="level" value="{{ r.level }}">
+                <input type="hidden" name="key" value="{{ r.key }}"><input type="hidden" name="delete" value="1">
+                <button class="btn btn-sm btn-ghost-danger" title="Remove"><i class="ti ti-trash"></i></button>
+              </form></td></tr>
+        {% else %}<tr><td colspan="7" class="text-secondary">None yet: every group uses the rules.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <form class="card mb-3" hx-post="/settings/ideal-stock/override" hx-target="#stock-params" hx-swap="outerHTML">
+    <div class="card-header"><div><h3 class="card-title"><i class="ti ti-hand-stop me-1"></i>Fix the ideal stock</h3>
+      <div class="card-subtitle small text-secondary">For a brick group or a whole product, at one branch or all branches;
+        replaces the calculated ideal until removed. A product's or an all-branch number is split over its brick groups and
+        branches in proportion to their calculated ideals. A reason is required, so corrections stay visible.</div></div></div>
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-6 col-lg-2"><label class="form-label">For a</label>
+          <select name="level" class="form-select" onchange="document.getElementById('fix-key').setAttribute('list', 'skeys-' + this.value)">
+            {% for k, label in fix_levels.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}
+          </select></div>
+        <div class="col-sm-6 col-lg-3"><label class="form-label">Which one</label>
+          <input id="fix-key" name="key" class="form-control" list="skeys-group" autocomplete="off"
+                 placeholder="e.g. 18KT · D RING · 0.25–0.5ct" required></div>
+        <div class="col-sm-6 col-lg-2"><label class="form-label">Branch</label>
+          <select name="branch" class="form-select" required>
+            <option value="*">All branches</option>
+            {% for b in branches %}<option value="{{ b }}">{{ b | short }}</option>{% endfor %}</select></div>
+        <div class="col-sm-6 col-lg-1"><label class="form-label">Pieces</label>
+          <input name="pcs" type="number" min="0" step="1" class="form-control" required></div>
+        <div class="col-sm-12 col-lg-4"><label class="form-label">Reason</label>
+          <input name="reason" class="form-control" placeholder="e.g. bridal season display" required></div>
+      </div>
+      <div class="mt-2 text-end"><button class="btn btn-primary"><i class="ti ti-device-floppy"></i> Fix ideal</button></div>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">Fixed ideals</h3></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-vcenter card-table">
+        <thead><tr><th>Level</th><th>Applies to</th><th>Branch</th><th class="text-end">Fixed at</th>
+          <th class="text-end">In the last refresh</th><th>Reason</th><th>Set by</th><th></th></tr></thead>
+        <tbody>
+        {% for r in overrides %}
+          <tr><td>{{ fix_levels[r.level] }}</td><td>{{ r.key }}</td><td>{{ "All branches" if r.branch == "*" else r.branch | short }}</td>
+            <td class="text-end">{{ r.pcs }}</td>
+            <td class="text-end text-secondary">{{ ("%.0f" | format(r.applied)) if r.applied is not none else "–" }}</td>
+            <td class="small">{{ r.reason }}</td>
+            <td class="small text-secondary">{{ r.updated_by or "" }}, {{ r.updated_at | date("%d %b %Y") }}</td>
+            <td class="text-end">
+              <form hx-post="/settings/ideal-stock/override" hx-target="#stock-params" hx-swap="outerHTML" class="d-inline"
+                    hx-confirm="Remove the fixed ideal for {{ r.key }}?">
+                <input type="hidden" name="level" value="{{ r.level }}"><input type="hidden" name="key" value="{{ r.key }}">
+                <input type="hidden" name="branch" value="{{ r.branch }}"><input type="hidden" name="delete" value="1">
+                <button class="btn btn-sm btn-ghost-danger" title="Remove"><i class="ti ti-trash"></i></button>
+              </form></td></tr>
+        {% else %}<tr><td colspan="8" class="text-secondary">None: every ideal is calculated.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

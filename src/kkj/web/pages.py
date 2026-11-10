@@ -90,7 +90,9 @@ def checks(request: Request):
                                    date_to, status, rows_loaded, error FROM sales.load_log ORDER BY load_id DESC LIMIT 20"""
                          ).to_dict("records"),
         brain_runs=read("""SELECT run_id, started_at AT TIME ZONE 'Asia/Kolkata' AS started, trigger, status,
-                                  candidates, created, updated, resolved, reopened, error
+                                  coalesce(candidates::text, '–') AS candidates, coalesce(created::text, '–') AS created,
+                                  coalesce(updated::text, '–') AS updated, coalesce(resolved::text, '–') AS resolved,
+                                  coalesce(reopened::text, '–') AS reopened, error
                            FROM brain.run_log ORDER BY run_id DESC LIMIT 20""").to_dict("records"),
         snapshots=read("""SELECT snapshot_date, source, status, reason, labels FROM stock_hist.snapshot_status
                           ORDER BY snapshot_date DESC, source""").to_dict("records"),

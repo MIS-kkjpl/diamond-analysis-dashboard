@@ -91,7 +91,9 @@ def build_params(cfg, item_codes, log_code=None):
              salesType=cfg["sales_type"], considerSalesReturn=cfg["sales_return"],
              showOrderItem=cfg.get("order_labels", "1"),
              filterStr=[f" Date From: {cfg['from']} To: {cfg['to']} Location:All  Product Group:Diamond"
-                        "      Show Labels In:Both  Show Order Labels:Yes ", "Items:All         "])
+                        "      Show Labels In:Both  Show Order Labels:"
+                        + {"1": "Yes", "2": "No", "3": "Only"}.get(cfg.get("order_labels", "1"), "Yes") + " ",
+                        "Items:All         "])
     if log_code:
         p["logCode"] = log_code
     return p

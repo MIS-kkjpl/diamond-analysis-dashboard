@@ -22,6 +22,8 @@ from kkj.brain import store
 from kkj.db import queries as q
 from kkj.metrics import brick_turn as bt
 from kkj.metrics import core as m
+from kkj.metrics import forecast as fc
+from kkj.metrics import ideal_stock as ist
 from kkj.metrics import insights as ins
 from kkj.metrics import seasonality as sn
 from kkj.metrics import sets
@@ -74,6 +76,92 @@ def brick_turns(conn, rules, as_of, showrooms):
                 df = df.assign(brick=df["brick_group"])
             parts.append(df.assign(level=name))
     return pd.concat(parts, ignore_index=True)
+
+
+FORECAST_FROM = date(2021, 4, 1)          # the start of the ERP sales history
+ACCURACY_LEVELS = {"company": [], "item_group": ["item_class_group"], "product": ["item_name"],
+                   "product_branch": ["item_name", "branch"], "group_branch": ["brick_group", "branch"]}
+
+
+def forecast_dates(dates, as_of):
+    """Stock dates for the forecast panel: per month the one nearest mid-month and the last, plus as_of (two
+    readings a month are enough for availability, and keep five years of snapshots quick to read)."""
+    d = pd.DataFrame({"d": pd.to_datetime(pd.Series(list(dates)))})
+    d = d[d["d"] <= as_of]
+    pick = {pd.Timestamp(as_of)}
+    for month, g in d.groupby(d["d"].dt.to_period("M")):
+        pick.add(g["d"].max())
+        mid = month.start_time + pd.Timedelta(days=14)
+        pick.add(g.loc[(g["d"] - mid).abs().idxmin(), "d"])
+    return sorted(pick)
+
+
+def demand_and_ideal(conn, rules, as_of):
+    """Demand forecast, its accuracy test and the ideal stock (kkj.metrics.forecast / ideal_stock).
+
+    Returns {"branch": rows per (brick group, branch), "company": rows per brick group, "accuracy": rows per
+    level and key}; empty frames without enough history."""
+    as_of = pd.Timestamp(as_of)
+    dates = q.stock_dates(conn)
+    stock = bt.add_brick(sets.stock_units(q.brick_stock(conn, forecast_dates(dates["snapshot_date"], as_of))), rules)
+    sales = bt.add_brick(sets.sales_units(q.brick_sales(conn, FORECAST_FROM)), rules)
+    sales = sales[sales["sale_date"] <= as_of]
+    last = as_of.to_period("M") - 1                          # the last complete month
+    p, attrs = fc.panel(stock, sales, rules, last)
+    if p.empty:
+        return {"branch": pd.DataFrame(), "company": pd.DataFrame(), "accuracy": pd.DataFrame()}
+    f = fc.forecast_at(p, attrs, last, rules, fc.season_tables(sales, rules, until=last.end_time))
+
+    horizon = max(1, round((rules["replacement_days"] + rules["review_days"]) / 30.4375))
+    n = int(rules["fc_backtest_months"])
+    origins = [last - horizon - i for i in range(n - horizon, -1, -1)]
+    test = fc.backtest(p, attrs, sales, rules, origins, horizon)
+    acc = []
+    for level, by in ACCURACY_LEVELS.items():
+        a = fc.accuracy(test, by) if len(test) else pd.DataFrame()
+        if len(a):
+            a["key"] = a[by].astype(str).agg(" @ ".join, axis=1) if by else ""
+            acc.append(a.assign(level=level, horizon_months=horizon)[
+                ["level", "key", "horizon_months", "origins", "actual", "forecast", "wape", "wape_last_year",
+                 "wape_avg12", "bias", "better"]])
+    accuracy = pd.concat(acc, ignore_index=True) if acc else pd.DataFrame()
+
+    now = stock[stock["snapshot_date"] == as_of]
+    current = now.groupby(["brick_group", "branch"])["pcs"].sum()
+    demand = sales[~sales["order_booked"].fillna(False).astype(bool)] if rules["fc_exclude_orders"] else sales
+    year = demand[(demand["pcs"] > 0) & (demand["sale_date"] > as_of - pd.DateOffset(months=12))]
+    value = year.groupby("brick_group")["value"].sum()
+    months = int(rules["display_min_months"])
+    recent = demand[(demand["pcs"] > 0) & (demand["sale_date"] > as_of - pd.DateOffset(months=months))]
+    sold_recently = set(zip(recent["brick_group"], recent["branch"]))
+    rows = ist.compute(f, current, value, sold_recently, rules, q.stock_params(conn), q.ideal_overrides(conn),
+                       fc.dispersion(test) if len(test) else ({}, 1.5))
+    # attributes also for groups held but never forecast (stock with no sales history)
+    info = now.drop_duplicates(["brick_group", "branch"]).set_index(["brick_group", "branch"])
+    for c in ("item_class_group", "purity", "item_name"):
+        miss = rows[c].isna()
+        if miss.any():
+            look = pd.MultiIndex.from_frame(rows.loc[miss, ["brick_group", "branch"]])
+            rows.loc[miss, c] = info[c].reindex(look).to_numpy()
+    return {"branch": rows, "company": ist.company(rows, rules), "accuracy": accuracy}
+
+
+def save_ideal_stock(conn, result, as_of, run_id):
+    """Replace this stock date's ideal stock and accuracy rows."""
+    for table in ("ideal_stock", "forecast_accuracy"):
+        conn.execute(text(f"DELETE FROM brain.{table} WHERE as_of = :a"), {"a": as_of})
+    cols = [r[0] for r in conn.execute(text("""SELECT column_name FROM information_schema.columns
+                                                WHERE table_schema = 'brain' AND table_name = 'ideal_stock'"""))]
+    parts = [result["branch"].rename(columns={"branch": "scope"}), result["company"].assign(scope="Company")]
+    df = pd.concat([x for x in parts if len(x)], ignore_index=True)
+    if len(df):
+        df = df.assign(as_of=as_of, run_id=run_id).replace([np.inf, -np.inf], np.nan)
+        df[[c for c in cols if c in df]].to_sql("ideal_stock", conn, schema="brain", if_exists="append", index=False,
+                                                 method="multi", chunksize=1000)
+    acc = result["accuracy"]
+    if len(acc):
+        acc.assign(as_of=as_of, run_id=run_id).replace([np.inf, -np.inf], np.nan).to_sql(
+            "forecast_accuracy", conn, schema="brain", if_exists="append", index=False, method="multi", chunksize=1000)
 
 
 def festival_outlook(conn, rules, as_of, stock):
@@ -134,10 +222,11 @@ def save_brick_turns(conn, table, as_of, run_id):
 
 
 def candidates(conn, rules):
-    """Every generator over the current data; returns (candidates, stock_as_of, sales_to, brick turn table)."""
+    """Every generator over the current data; returns (candidates, stock_as_of, sales_to, brick turn table,
+    demand forecast and ideal stock)."""
     stock = q.stock_latest(conn)
     if stock.empty:
-        return [], None, None, None
+        return [], None, None, None, None
     stock = stock.assign(value=m.value(stock))
     as_of = pd.Timestamp(stock["snapshot_date"].iloc[0])
     window_start = (as_of - timedelta(days=rules["demand_window_days"])).date()
@@ -168,10 +257,14 @@ def candidates(conn, rules):
     actions += gen.suppliers(card, stock)
 
     turns = brick_turns(conn, rules, as_of, showrooms)
-    actions += gen.stock_turn(turns, rules)
+    ideal = demand_and_ideal(conn, rules, as_of)
+    if len(ideal["company"]):            # increase / reduce follow the ideal stock
+        actions += gen.ideal_stock(ideal, turns, rules)
+    else:                                # no forecast possible (no history): the turn method as a fallback
+        actions += gen.stock_turn(turns, rules)
     actions += festival_candidates(conn, rules, as_of, stock)
     actions += gen.broken_sets(broken_sets(conn, stock), rules)
-    return actions, as_of.date(), sales["sale_date"].max().date() if len(sales) else None, turns
+    return actions, as_of.date(), sales["sale_date"].max().date() if len(sales) else None, turns, ideal
 
 
 def refresh(trigger="manual"):
@@ -183,9 +276,11 @@ def refresh(trigger="manual"):
     try:
         with engine.begin() as conn:
             rules = rules_mod.load(conn)
-            cands, as_of, sales_to, turns = candidates(conn, rules)
+            cands, as_of, sales_to, turns, ideal = candidates(conn, rules)
             if turns is not None:
                 save_brick_turns(conn, turns, as_of, run_id)
+            if ideal is not None:
+                save_ideal_stock(conn, ideal, as_of, run_id)
             existing = q.read(conn, "SELECT action_key, status, snoozed_until FROM brain.action")
             counts = store.apply(conn, store.reconcile(existing, cands, date.today()), run_id)
             conn.execute(text("""UPDATE brain.run_log SET finished_at = now(), status = 'success', stock_as_of = :a,

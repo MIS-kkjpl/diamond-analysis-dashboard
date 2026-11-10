@@ -164,7 +164,8 @@ def brick_sales(conn, date_from):
                CASE WHEN s.barcode IS NOT NULL THEN s.sub_category ELSE l.sub_category END AS sub_category,
                CASE WHEN s.barcode IS NOT NULL THEN s.dia_wt ELSE l.dia_wt END AS dia_wt,
                CASE WHEN s.barcode IS NOT NULL THEN s.gross_wt ELSE l.gross_wt END AS gross_wt,
-               l.pcs, coalesce(l.taxable_amount, l.item_amt) AS value, s.barcode IS NOT NULL AS from_label
+               l.pcs, coalesce(l.taxable_amount, l.item_amt) AS value, s.barcode IS NOT NULL AS from_label,
+               coalesce(l.order_booked, false) AS order_booked
         FROM line l LEFT JOIN label s ON s.barcode = l.label_barcode
              LEFT JOIN label_set ls ON ls.barcode = l.label_barcode""", d=date_from)
     df["sale_date"] = pd.to_datetime(df["sale_date"])
@@ -233,7 +234,7 @@ def festivals(conn):
 
 
 def ideal_turns(conn):
-    """config.ideal_turn: (level, key, ideal) set in Settings -> Ideal turns."""
+    """config.ideal_turn: (level, key, ideal); no longer edited in the app (the reference turn rule is used)."""
     return read(conn, "SELECT level, key, ideal::float AS ideal, note, updated_at, updated_by FROM config.ideal_turn")
 
 
@@ -243,3 +244,14 @@ def branches(conn):
 
 def salespeople(conn):
     return read(conn, "SELECT sales_code, name, branch, kind, active FROM config.salesperson")
+
+
+def stock_params(conn):
+    """config.stock_param: (param, level, key, value) set in Settings -> Ideal stock by group."""
+    return read(conn, "SELECT param, level, key, value, note, updated_at, updated_by FROM config.stock_param")
+
+
+def ideal_overrides(conn):
+    """config.ideal_stock_override: a fixed ideal for a brick group or product (level, key) at a branch or all ('*')."""
+    return read(conn, """SELECT level, key, branch, pcs, reason, updated_at, updated_by
+                         FROM config.ideal_stock_override""")

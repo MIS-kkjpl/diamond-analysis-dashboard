@@ -116,6 +116,9 @@ def parse_args(argv=None):
     ap.add_argument("--sales-return", default="2",
                     help="ERP considerSalesReturn: 2 includes returns as negative rows (0/1 leave them out)")
     ap.add_argument("--no-load", action="store_true", help="fetch + check only; no database writes")
+    ap.add_argument("--order-labels", default="1", choices=("1", "2", "3"),
+                    help="ERP showOrderItem: 1 all sales (default), 2 without order-booked pieces, 3 ONLY order-booked "
+                         "pieces (implies --no-load; used to mark them, see kkj.pipelines.order_booked)")
     ap.add_argument("--from-file", type=Path, help="clean + check (+ load) a saved .json.gz; no ERP")
     args = ap.parse_args(argv)
     if not args.from_file and not args.date_from:
@@ -149,8 +152,9 @@ def main(argv=None):
         if i:
             time.sleep(args.pause)
         cfg = {"products": products, "from": a.strftime(DATE_FORMAT), "to": b.strftime(DATE_FORMAT),
-               "sales_type": args.sales_type, "sales_return": args.sales_return}
-        raw_path = SALES_RAW_DIR / f"sales_{a:%Y%m%d}_{b:%Y%m%d}_t{args.sales_type}r{args.sales_return}_{stamp}.json.gz"
+               "sales_type": args.sales_type, "sales_return": args.sales_return, "order_labels": args.order_labels}
+        tag = "" if args.order_labels == "1" else f"o{args.order_labels}"
+        raw_path = SALES_RAW_DIR / f"sales_{a:%Y%m%d}_{b:%Y%m%d}_t{args.sales_type}r{args.sales_return}{tag}_{stamp}.json.gz"
         try:
             try:
                 saved = fetch(session, cfg, log_code, raw_path, item_codes)
@@ -158,7 +162,7 @@ def main(argv=None):
                 log.warning("  Not authorised; logging in again and retrying once...")
                 log_code = login(session, erp_settings)
                 saved = fetch(session, cfg, log_code, raw_path, item_codes)
-            results.append(process(saved, raw_path, args.no_load))
+            results.append(process(saved, raw_path, args.no_load or args.order_labels != "1"))
         except (ErpError, settings.ConfigError) as e:
             log.error(f"{a} to {b}: {e}")
             results.append(False)

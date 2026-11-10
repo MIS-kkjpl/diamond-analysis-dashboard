@@ -72,7 +72,7 @@ Remembering facts
   which come from settings. If the fact should change what gets recommended, name the setting in setting_hint:
   Settings > Transfers > "Never transfer to or from" (branches left out of transfers); Settings > Demand >
   "Never suggest buying" (item groups); Settings > Scope > "Leave out these item groups / products";
-  Settings > Ideal turns (an ideal stock turn per product or group); Settings > Festivals (festival dates)."""
+  Settings > Ideal stock by group (replacement time, choice cover, display minimum and grade per product or group, and ideals fixed by hand); Settings > Festivals (festival dates)."""
 
 PROPOSE_NOTE = {
     "name": "propose_note",

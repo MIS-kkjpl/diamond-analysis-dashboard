@@ -321,6 +321,94 @@ def insights(request: Request, group: list[str] = Query(default=["Diamond Jewell
         recovery_pct=rules["diamond_recovery_pct"], liq_days=rules["liquidation_age_days"])
 
 
+# ── Ideal stock (demand forecast) ─────────────────────────────────────────────
+IDEAL_STATUS = {"increase": ("Increase", "green"), "reduce": ("Reduce", "orange"), "keep": ("Keep as is", "blue"),
+                "phase_out": ("Phase out", "red")}
+
+
+@router.get("/ideal-stock", response_class=HTMLResponse)
+def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Query(default=[]),
+                status: list[str] = Query(default=[]), search: str = ""):
+    rules = _rules()
+    t = read("SELECT * FROM brain.ideal_stock WHERE as_of = (SELECT max(as_of) FROM brain.ideal_stock)")
+    if t.empty:
+        return render(request, "ideal_stock.html", "ideal_stock", empty=True, f={}, rules=rules)
+    as_of = t["as_of"].iloc[0]
+    value = read("""SELECT brick, avg_piece_value FROM brain.brick_turn WHERE level = 'group' AND scope = 'Company'
+                    AND as_of = (SELECT max(as_of) FROM brain.brick_turn)""").set_index("brick")["avg_piece_value"]
+    t["unit_value"] = t["brick_group"].map(value).astype(float).fillna(float(value.median() or 0))
+    for c in ("current_pcs", "ideal_pcs", "change_pcs", "annual"):
+        t[c] = t[c].astype(float)
+    t["held_value"], t["ideal_value"] = t["current_pcs"] * t["unit_value"], t["ideal_pcs"] * t["unit_value"]
+    t["change_value"] = t["change_pcs"] * t["unit_value"]
+    scopes = ["Company"] + sorted(x for x in t["scope"].unique() if x != "Company")
+    scope = scope if scope in scopes else "Company"
+    t = t[t["scope"] == scope]
+    groups = sorted(t["item_class_group"].dropna().unique())
+    group, status = [g for g in group if g], [x for x in status if x in IDEAL_STATUS]
+    if group:
+        t = t[t["item_class_group"].isin(group)]
+    if search:
+        t = t[t["brick_group"].str.contains(search, case=False, regex=False)]
+
+    by = t.groupby("status").agg(n=("brick_group", "size"), held=("held_value", "sum"), change=("change_value", "sum"))
+    def n(x):
+        return int(by.loc[x, "n"]) if x in by.index else 0
+    def v(x, col):
+        return float(by.loc[x, col]) if x in by.index else 0.0
+    held, ideal = t["held_value"].sum(), t["ideal_value"].sum()
+    annual_value = (t["annual"] * t["unit_value"]).sum()
+    kpis = [("Held vs ideal", f"{money(held)} → {money(ideal)}", f"{(ideal / held - 1):+.0%} · implied turn "
+             f"{annual_value / ideal:.2f}× (now {annual_value / held:.2f}×)" if held and ideal else "", "ti-scale", "azure"),
+            ("Increase", f"{n('increase'):,} groups", f"{money(v('increase', 'change'))} more stock", "ti-trending-up", "green"),
+            ("Reduce", f"{n('reduce'):,} groups", f"{money(-v('reduce', 'change'))} more than needed", "ti-trending-down", "orange"),
+            ("Phase out", f"{n('phase_out'):,} groups", f"{money(v('phase_out', 'held'))} held, no demand", "ti-trash", "red"),
+            ("Keep as is", f"{n('keep'):,} groups", f"{money(v('keep', 'held'))} held", "ti-check", "blue")]
+
+    acc = read("""SELECT level, key, horizon_months, origins, actual, wape, wape_last_year, wape_avg12, bias, better
+                  FROM brain.forecast_accuracy WHERE as_of = (SELECT max(as_of) FROM brain.forecast_accuracy)""")
+    top = pd.concat([acc[acc["level"] == "company"].assign(key="Whole company"),
+                     acc[acc["level"] == "item_group"].sort_values("actual", ascending=False),
+                     acc[acc["level"] == "product"].sort_values("actual", ascending=False).head(15)])
+    top = top.assign(level=top["level"].map({"company": "Company", "item_group": "Item group", "product": "Product"}),
+                     verdict=np.where(top["better"], "better than both", "not better than both"))
+    acc_table = charts.table(top[["level", "key", "actual", "wape", "wape_last_year", "wape_avg12", "bias", "verdict"]],
+                             {"actual": "num", "wape": "pct", "wape_last_year": "pct", "wape_avg12": "pct", "bias": "pct"},
+                             {"key": "what", "actual": "pieces sold in the test", "wape": "forecast error",
+                              "wape_last_year": "same months last year", "wape_avg12": "12-month average",
+                              "bias": "bias", "verdict": "verdict"})
+    fine = acc[acc["level"] == "group_branch"]
+    fine_err = ((fine["wape"] * fine["actual"]).sum() / fine["actual"].sum()) if len(fine) and fine["actual"].sum() else None
+    fine_avg = ((fine["wape_avg12"] * fine["actual"]).sum() / fine["actual"].sum()) if fine_err is not None else None
+    horizon = int(acc["horizon_months"].iloc[0]) if len(acc) else None
+    origins = int(acc["origins"].max()) if len(acc) else None
+
+    shown = t[t["status"].isin(status)] if status else t
+    shown = shown.assign(order=shown["change_value"].abs().where(shown["status"] != "phase_out", shown["held_value"]))
+    shown = shown.sort_values("order", ascending=False).head(300)
+    shown = shown.assign(verdict=shown["status"].map(lambda x: IDEAL_STATUS.get(x, (x,))[0]),
+                         set_by=shown["ideal_from"].fillna("by branch"))
+    table = charts.table(
+        shown[["brick_group", "current_pcs", "ideal_pcs", "change_pcs", "change_value", "annual", "grade", "implied_turn",
+               "set_by", "verdict"]],
+        {"current_pcs": "num", "ideal_pcs": "num", "change_pcs": "num", "change_value": "money", "annual": "dec",
+         "implied_turn": "dec"},
+        {"brick_group": "brick group", "current_pcs": "now (units)", "ideal_pcs": "ideal (units)", "change_pcs": "change",
+         "change_value": "change (₹)", "annual": "forecast, 12 months", "grade": "grade", "implied_turn": "turn at ideal",
+         "set_by": "ideal set by", "verdict": "verdict"})
+    chart = by.reindex(list(IDEAL_STATUS)).dropna(how="all").reset_index()
+    chart["label"] = chart["status"].map(lambda x: IDEAL_STATUS[x][0])
+    n_params = int(read("SELECT count(*) AS n FROM config.stock_param")["n"].iloc[0])
+    n_fixed = int(read("SELECT count(*) AS n FROM config.ideal_stock_override")["n"].iloc[0])
+    return render(request, "ideal_stock.html", "ideal_stock", empty=False, rules=rules, as_of=as_of, kpis=kpis,
+                  scopes=scopes, groups=groups, statuses={k: v[0] for k, v in IDEAL_STATUS.items()},
+                  f={"scope": scope, "group": group, "status": status, "search": search},
+                  fig=charts.hbar(chart["label"], chart["held"] / 1e7, np.c_[chart["n"]], "<br>%{customdata[0]:,.0f} groups"),
+                  t=table, n_shown=len(shown), n_total=len(t[t["status"].isin(status)] if status else t),
+                  acc=acc_table, fine_err=fine_err, fine_avg=fine_avg, horizon=horizon, origins=origins,
+                  n_params=n_params, n_fixed=n_fixed)
+
+
 # ── Stock turn (weighted, per brick) ──────────────────────────────────────────
 @router.get("/stock-turn", response_class=HTMLResponse)
 def stock_turn(request: Request, view: str = "group", scope: str = "Company", group: list[str] = Query(default=[]),
