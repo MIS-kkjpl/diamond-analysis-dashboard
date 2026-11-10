@@ -45,7 +45,7 @@ def optional(name, default):
 
 # ── ERP login ────────────────────────────────────────────────────────────────
 # Earlier financial years are separate ERP programs with their own login (set with scripts/set_erp_year.py)
-ERP_YEARS = {"2025-26": "54", "2024-25": "32"}
+ERP_YEARS = {"2025-26": "54", "2024-25": "32", "2023-24": "22", "2022-23": "12", "2021-22": "12"}   # 2021-22 and 2022-23 share one program
 
 
 def erp_login_settings(year=None):
