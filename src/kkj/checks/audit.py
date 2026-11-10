@@ -288,9 +288,10 @@ def same_dates(a, st, sa):
                     a.check(2, "Labels differing within the day are that day's new labels and sales", scope, 0, unexplained,
                             note=f"{len(only_a)} only end-of-day ({int(new_ok.sum())} labelled that day), "
                                  f"{len(only_b)} only mid-day ({int(gone_ok.sum())} sold that day)")
-                else:
-                    a.check(2, "Same labels in both", scope, 0, len(only_a) + len(only_b),
-                            note=f"{len(only_a)} only in {SOURCE_NAME[x]}, {len(only_b)} only in {SOURCE_NAME[y]}")
+                else:               # legacy file vs ERP as-on: the app uses the ERP figure, the file is only a cross-check
+                    a.info(2, "Same labels in both", scope, len(only_a) + len(only_b),
+                           note=f"{len(only_a)} only in {SOURCE_NAME[x]}, {len(only_b)} only in {SOURCE_NAME[y]} "
+                                f"(of {len(both):,} in both; the app uses {SOURCE_NAME[y]})")
                 diff_rows = []
                 for col in ("pcs", "gross_wt", "net_wt", "dia_wt", "branch", "location"):
                     va, vb = A.loc[both, col], B.loc[both, col]
@@ -298,6 +299,9 @@ def same_dates(a, st, sa):
                     if y == "erp" and col in ("branch", "location"):
                         a.info(2, f"Moved {col} during the day", scope, int(neq.sum()),
                                note="mid-day vs end-of-day position (e.g. dispatched from Head Office to branches)")
+                    elif x == "csv_legacy":
+                        a.info(2, f"Same {col} on matching labels", scope, int(neq.sum()),
+                               note=f"of {len(both):,} labels; the app uses {SOURCE_NAME[y]}")
                     else:
                         a.check(2, f"Same {col} on matching labels", scope, 0, int(neq.sum()))
                     if neq.any():
