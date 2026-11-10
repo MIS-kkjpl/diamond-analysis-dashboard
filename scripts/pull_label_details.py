@@ -172,7 +172,11 @@ def main():
     for d in DIRS.values():
         d.mkdir(parents=True, exist_ok=True)
     index = CACHE / "index.csv"
-    done = set(pd.read_csv(index)["barcode"]) if index.exists() else set()
+    if index.exists():                                   # a label whose last try failed is tried again
+        last = pd.read_csv(index).drop_duplicates("barcode", keep="last")
+        done = set(last.loc[last["error"].isna(), "barcode"])
+    else:
+        done = set()
     todo = targets(a.sold_all)
     todo = todo[~todo["barcode"].isin(done)]
     if a.limit:
