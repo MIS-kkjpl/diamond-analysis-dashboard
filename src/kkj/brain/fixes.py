@@ -1,7 +1,7 @@
 """
 Ideals fixed by hand (config.ideal_stock_override): the people half of the ideal-stock loop.
 
-The system calculates an ideal for every brick group at every branch (kkj.metrics.ideal_stock). Management can fix
+The system calculates an ideal for every brick group at every branch (kkj.metrics.ideal_stock). A person can fix
 it for a brick group or a whole product, at a branch or all branches, with a reason. Each fix records what the
 system calculated at that moment (ideal, 12-month forecast, units held) and a review date (override_review_days).
 On that date it comes back as a recommendation (kkj.brain.generators.ideal_reviews) with what sold since, to keep,
@@ -11,6 +11,8 @@ stock page. So the engine corrects itself, with people supplying what the data c
 import json
 from datetime import date, timedelta
 
+import numpy as np
+import pandas as pd
 from sqlalchemy import text
 
 FIX_LEVELS = {"group": "Brick group", "product": "Product"}
@@ -102,3 +104,117 @@ def suggestions(overrides, latest, choice_months):
         result.append({"product": product, "fixes": len(items), "ratio": typical,
                        "months": round(choice_months * typical, 1), "reasons": "; ".join(sorted({r for _, r in items}))})
     return sorted(result, key=lambda r: -r["fixes"])
+
+
+def save_many(conn, level, changes, reason, by, rules):
+    """Save several numbers typed on one page with one reason. changes: [(key, branch, pcs)], branch '*' = all
+    branches. A number equal to the calculated ideal removes that fix (back to the suggestion). Then the fixes are
+    applied to the latest ideal stock at once (apply_now). Returns (message, None) or (None, error). Caller commits."""
+    reason = (reason or "").strip()
+    if level not in FIX_LEVELS:
+        return None, "Unknown level."
+    if not changes:
+        return None, "Nothing changed: type a new number in the Your ideal column first."
+    parsed = []
+    for key, branch, pcs in changes:
+        try:
+            n = int(float(pcs))
+            if not 0 <= n <= 100_000:
+                raise ValueError
+        except (TypeError, ValueError):
+            return None, f"{key}: the ideal must be a whole number from 0."
+        parsed.append((key, branch or "*", n))
+    saved, back = 0, 0
+    for key, branch, n in parsed:
+        calc = calculated(conn, level, key, branch)[0]
+        if calc is not None and n == round(calc):
+            exists = conn.execute(text("""SELECT 1 FROM config.ideal_stock_override
+                                          WHERE level = :l AND key = :k AND branch = :b"""),
+                                  {"l": level, "k": key, "b": branch}).scalar()
+            if exists:
+                remove(conn, level, key, branch, by)
+                back += 1
+            continue
+        if not reason:
+            return None, "Add a short reason (why your number differs), so it can be checked later."
+        msg, err = save(conn, level, key, branch, n, reason, by, rules["override_review_days"])
+        if err:
+            return None, f"{key}: {err}"
+        saved += 1
+    apply_now(conn, rules)
+    parts = []
+    if saved:
+        review = date.today() + timedelta(days=int(rules["override_review_days"]))
+        parts.append(f"Saved {saved} number{'s' if saved != 1 else ''}. "
+                     f"{'It is' if saved == 1 else 'They are'} used from now on and will come back to you "
+                     f"for a check on {review:%d %b %Y}")
+    if back:
+        parts.append(f"{back} set back to the suggested number{'s' if back != 1 else ''}")
+    return ". ".join(parts) + ". Recommendations catch up at the next refresh.", None
+
+
+def reset(conn, level, key, branch, by, rules):
+    """Back to the calculated ideal for one fix, applied at once."""
+    remove(conn, level, key, branch, by)
+    apply_now(conn, rules)
+    place = "all branches" if branch == "*" else branch.split(" / ")[0]
+    return f"{key} at {place}: back to the suggested number."
+
+
+def apply_now(conn, rules):
+    """Re-apply every fix to the latest ideal stock (brain.ideal_stock) without re-forecasting: the calculated ideal
+    (calc_pcs) stays, fixes go on top, and change / status / implied turn and the company rows follow. So a number
+    typed in is what the pages show straight away; recommendations follow at the next refresh."""
+    from kkj.metrics import ideal_stock as ist
+    rows = pd.read_sql(text("""SELECT * FROM brain.ideal_stock
+                               WHERE as_of = (SELECT max(as_of) FROM brain.ideal_stock)"""), conn)
+    if rows.empty:
+        return 0
+    br = rows[rows["scope"] != "Company"].rename(columns={"scope": "branch"}).copy()
+    if br.empty:
+        return 0
+    for c in ("current_pcs", "ideal_pcs", "calc_pcs", "annual", "for_demand", "display_min", "for_choice"):
+        br[c] = pd.to_numeric(br[c], errors="coerce").astype(float)
+    br["ideal_pcs"] = br["calc_pcs"].fillna(br["ideal_pcs"])
+    parts = br[["for_demand", "display_min", "for_choice"]].fillna(0)
+    br["ideal_from"] = parts.idxmax(axis=1).map({"for_demand": "demand", "display_min": "display minimum",
+                                                 "for_choice": "choice"})
+    br.loc[br["ideal_pcs"] == 0, "ideal_from"] = "no demand"
+    overrides = pd.read_sql(text("SELECT level, key, branch, pcs, reason FROM config.ideal_stock_override"), conn)
+    ist.apply_overrides(br, overrides)
+    br["change_pcs"] = br["ideal_pcs"] - br["current_pcs"]
+    br["implied_turn"] = np.where(br["ideal_pcs"] > 0, br["annual"] / br["ideal_pcs"].where(br["ideal_pcs"] > 0), np.nan)
+    br["status"] = ist.status(br["current_pcs"], br["ideal_pcs"], rules)
+    comp = rows[rows["scope"] == "Company"].set_index("brick_group")
+    agg = br.groupby("brick_group").agg(ideal_pcs=("ideal_pcs", "sum"), calc_pcs=("calc_pcs", "sum"),
+                                        n_fixed=("override_pcs", lambda s: int(s.notna().sum())))
+    agg = agg[agg.index.isin(comp.index)]
+    cur = pd.to_numeric(comp.loc[agg.index, "current_pcs"], errors="coerce").astype(float)
+    annual = pd.to_numeric(comp.loc[agg.index, "annual"], errors="coerce").astype(float)
+    agg["change_pcs"] = agg["ideal_pcs"] - cur
+    agg["implied_turn"] = np.where(agg["ideal_pcs"] > 0, annual / agg["ideal_pcs"].where(agg["ideal_pcs"] > 0), np.nan)
+    agg["status"] = ist.status(cur, agg["ideal_pcs"], rules)
+    as_of = rows["as_of"].iloc[0]
+    clean = lambda v: None if v is None or (isinstance(v, float) and np.isnan(v)) else (float(v) if isinstance(v, (int, float, np.number)) else v)
+    old = rows.set_index(["scope", "brick_group"])
+    params = []
+    for r in br.itertuples():
+        o = old.loc[(r.branch, r.brick_group)]
+        new = (clean(r.ideal_pcs), r.ideal_from, clean(r.override_pcs), r.override_reason, r.status)
+        if (clean(float(o["ideal_pcs"])), o["ideal_from"], clean(o["override_pcs"] if pd.notna(o["override_pcs"]) else None),
+                o["override_reason"], o["status"]) != new:
+            params.append({"a": as_of, "s": r.branch, "g": r.brick_group, "i": clean(r.ideal_pcs), "f": r.ideal_from,
+                           "op": clean(r.override_pcs), "or": r.override_reason, "c": clean(r.change_pcs),
+                           "t": clean(r.implied_turn), "st": r.status})
+    for g, r in agg.iterrows():
+        o = old.loc[("Company", g)]
+        if (float(o["ideal_pcs"]), o["status"]) != (float(r["ideal_pcs"]), r["status"]):
+            params.append({"a": as_of, "s": "Company", "g": g, "i": float(r["ideal_pcs"]), "f": None, "op": None,
+                           "or": None, "c": clean(r["change_pcs"]), "t": clean(r["implied_turn"]), "st": r["status"]})
+    if params:
+        conn.execute(text("""UPDATE brain.ideal_stock SET ideal_pcs = :i, ideal_from = coalesce(:f, ideal_from),
+                                    override_pcs = CASE WHEN scope = 'Company' THEN override_pcs ELSE :op END,
+                                    override_reason = CASE WHEN scope = 'Company' THEN override_reason ELSE :or END,
+                                    change_pcs = :c, implied_turn = :t, status = :st
+                             WHERE as_of = :a AND scope = :s AND brick_group = :g"""), params)
+    return len(params)

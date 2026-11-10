@@ -2,43 +2,51 @@
 {% import "_macros.html" as ui %}
 {% block title %}{{ g }} · Ideal stock · Stockwise{% endblock %}
 {% block pretitle %}<a href="/ideal-stock"><i class="ti ti-arrow-left"></i> Ideal stock</a>{% endblock %}
-{% block page_title %}{{ g }}{% endblock %}
-{% block intro %}How the ideal is worked out at each branch, how well the forecast has done for this product, and adjusting it.{% endblock %}
+{% block page_title %}{{ ("All of " ~ g) if level == "product" else g }}{% endblock %}
+{% block intro %}{% if not empty %}Expected to sell about <b>{{ "%.0f" | format(annual) if annual >= 1 else "%.1f" | format(annual) }}</b>
+a year across all branches. We have <b>{{ ed.total.held | num }}</b>; the ideal is <b>{{ ed.total.ideal | num }}</b>.
+Change any branch's number below and press Save.{% endif %}{% endblock %}
 {% block content %}
 {% if empty %}
-<div class="empty"><p class="empty-title">Not in the latest ideal stock</p>
-  <p class="empty-subtitle text-secondary">{{ g }} has no stock and no forecast demand.</p></div>
+<div class="empty"><p class="empty-title">Nothing to show</p>
+  <p class="empty-subtitle text-secondary">{{ g }} has no stock and no expected sales.</p></div>
 {% else %}
-{% include "_adjust_ideal.html" %}
+{% include "_ideal_editor.html" %}
 
-{{ ui.section("How the ideal is set", "the largest of demand, choice and the display minimum, unless fixed") }}
-<div class="small text-secondary mb-2">Demand cover: forecast over {{ first.cover_days | num }} days at grade {{ first.grade }}
-  ({{ first.service_pct | num }}% of the time; spread {{ "%.1f" | format(first.dispersion or 1) }}×). Choice: {{ first.choice_months | num }} months of
-  forecast demand. Display minimum: {{ rules.display_min_pcs }} where the branch sold in the last {{ rules.display_min_months }} months.
-  Implied turn at the ideal: {{ "%.2f" | format(first.implied_turn) if first.implied_turn is not none else "–" }}×.</div>
-<div class="mb-3">{{ ui.table_card("By branch", t, icon="ti-building-store") }}</div>
-
-{{ ui.section("Has the forecast been right?", "the accuracy test for its product and item group") }}
-<div class="row row-cards mb-3">
-  {% for a in acc %}
-  <div class="col-md-6"><div class="card"><div class="card-body small">
-    <div class="text-secondary">{{ "Product" if a.level == "product" else "Item group" }}</div>
-    <div class="h3 mb-1">{{ a.key }}</div>
-    {% if a.wape is none %}No sales during the test period.{% else %}
-    Forecast error <b>{{ "%.0f%%" | format(100 * a.wape) }}</b> against {{ "%.0f%%" | format(100 * a.wape_last_year) }} (same months last year)
-    and {{ "%.0f%%" | format(100 * a.wape_avg12) }} (12-month average); bias {{ "%+.0f%%" | format(100 * a.bias) }} over {{ a.actual | num }} pieces sold.
-    <span class="badge {{ 'bg-green-lt' if a.better else 'bg-secondary-lt' }}">{{ "better than both" if a.better else "not better than both" }}</span>{% endif %}
-  </div></div></div>
-  {% else %}<div class="col-12 text-secondary small">Not tested (too little history).</div>{% endfor %}
-</div>
-
+{{ ui.section("Behind the suggestion") }}
+<details class="sw-fold">
+  <summary><i class="ti ti-calculator"></i> How each branch's suggestion is worked out</summary>
+  <div class="sw-fold-body">
+    <div class="small text-secondary mb-2">The suggestion is the largest of A, B and C.
+      <b>A</b>: enough to keep selling until new stock arrives ({{ first.cover_days | num }} days), with a safety margin.
+      <b>B</b>: {{ first.choice_months | num }} months of expected sales, for choice on the counter.
+      <b>C</b>: {{ rules.display_min_pcs }} on display where the branch sold one in the last {{ rules.display_min_months }} months.</div>
+    {{ ui.data_table(t) }}
+  </div>
+</details>
+<details class="sw-fold">
+  <summary><i class="ti ti-target-arrow"></i> Has the sales estimate been right for this kind of piece?</summary>
+  <div class="sw-fold-body small">
+    {% for a in acc %}
+    <div class="mb-2"><b>{{ a.key }}</b> ({{ "item" if a.level == "product" else "item group" }}):
+      {% if a.wape is none %}no sales during the test, so nothing to measure.{% else %}
+      our estimate was off by <b>{{ "%.0f%%" | format(100 * a.wape) }}</b>, against {{ "%.0f%%" | format(100 * a.wape_avg12) }} for a plain
+      12-month average and {{ "%.0f%%" | format(100 * a.wape_last_year) }} for last year's sales.
+      {% if a.bias > 0.1 %}It tended to guess too high.{% elif a.bias < -0.1 %}It tended to guess too low.{% endif %}
+      <span class="badge {{ 'bg-green-lt' if a.better else 'bg-secondary-lt' }}">{{ "better than both" if a.better else "not better than both" }}</span>{% endif %}
+    </div>
+    {% else %}<div class="text-secondary">Not tested: too little history.</div>{% endfor %}
+  </div>
+</details>
 {% if history %}
-{{ ui.section("Adjustment history") }}
-<div class="card mb-3"><div class="list-group list-group-flush small">
-  {% for h in history %}<div class="list-group-item py-2">{{ h.changed_at | date("%d %b %Y %H:%M") }} · {{ h.changed_by }} ·
-    {{ h.row_key }}: {{ h.old_value if h.old_value is not none else "calculated" }} → {{ h.new_value if h.new_value is not none else "calculated" }}
-    {% if h.note %}· “{{ h.note }}”{% endif %}</div>{% endfor %}
-</div></div>
+<details class="sw-fold">
+  <summary><i class="ti ti-history"></i> Changes made by hand <span class="text-secondary small">{{ history | length }}</span></summary>
+  <div class="list-group list-group-flush small">
+    {% for h in history %}<div class="list-group-item py-2">{{ h.changed_at | date("%d %b %Y %H:%M") }} · {{ h.changed_by }} ·
+      {{ h.row_key.split(": ", 1)[-1] }}: {{ h.old_value if h.old_value is not none else "suggested" }} → {{ h.new_value if h.new_value is not none else "suggested" }}
+      {% if h.note %}· “{{ h.note }}”{% endif %}</div>{% endfor %}
+  </div>
+</details>
 {% endif %}
 {% endif %}
 {% endblock %}

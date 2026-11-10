@@ -51,12 +51,12 @@ LEVELS = ("purity", "item_name", "category", "sub_category", "weight_band")
 LEVEL_LABELS = {"purity": "Purity", "item_name": "Product", "category": "Variety", "sub_category": "Type",
                 "weight_band": "Weight range"}
 STATUS = {  # status -> (label, colour, what to do)
-    "increase": ("Increase", "green", "sells faster than it is stocked"),
-    "reduce": ("Reduce", "orange", "more stock than its sales need"),
-    "keep": ("Keep as is", "blue", "turning at the ideal rate"),
+    "increase": ("Buy more", "green", "sells faster than it is stocked"),
+    "reduce": ("Too much", "orange", "more stock than its sales need"),
+    "keep": ("About right", "blue", "turning at the ideal rate"),
     "new": ("Too new", "cyan", "only the last 3 months qualify; watch"),
     "hold": ("Hold", "yellow", "out of range on thin data, but its neighbouring weight ranges are healthy"),
-    "phase_out": ("Phase out", "red", "out of range on thin data, and so are its neighbours"),
+    "phase_out": ("Stop stocking", "red", "out of range on thin data, and so are its neighbours"),
     "stock_up": ("Sells when stocked", "purple", "rarely in stock, but sells fast when it is"),
     "no_history": ("Not enough history", "secondary", "too few stock snapshots to judge"),
 }

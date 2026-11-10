@@ -3,10 +3,11 @@
 {% import "_filters.html" as flt %}
 {% block title %}Stock turn · Stockwise{% endblock %}
 {% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
-{% block pretitle %}Analytics{% endblock %}
+{% block pretitle %}Stock{% endblock %}
 {% block page_title %}Stock turn{% endblock %}
-{% block actions %}<a href="/settings#tab-rules" class="btn btn-outline-secondary"><i class="ti ti-adjustments"></i> Rules</a>{% endblock %}
-{% block intro %}How fast each group of similar pieces sells, over 3, 6 and 12 months. A check on the ideal stock, which is what the Increase and Reduce recommendations follow.{% endblock %}
+{% block actions %}<a href="/ideal-stock" class="btn btn-outline-primary"><i class="ti ti-scale"></i> Ideal stock</a>{% endblock %}
+{% block intro %}How fast each group of similar pieces sells. 1× means a year's sales equal what we hold. Nobody sets a target here:
+it is the result of the <a href="/ideal-stock">ideal stock</a>, which is where you change things.{% endblock %}
 {% block content %}
 <div id="page">
 {% if empty %}
@@ -26,7 +27,7 @@
   {{ flt.toggles("group", groups, f.group, placeholder="All item groups") }}
   <input type="hidden" name="status" value="">
   <div class="filter-pick">
-    <select name="status" multiple aria-label="Verdict" class="form-select form-select-sm js-multi" data-placeholder="Any verdict">
+    <select name="status" multiple aria-label="What to do" class="form-select form-select-sm js-multi" data-placeholder="Anything to do">
       {% for key, st in statuses.items() %}<option value="{{ key }}" {% if key in f.status %}selected{% endif %}>{{ st[0] }}</option>{% endfor %}
     </select>
   </div>
@@ -40,12 +41,12 @@
   each brick group compared with the turn its <a href="/ideal-stock">ideal stock</a> implies (±{{ rules.ideal_band_pct | num }}%):
   turn is a result, not a target anyone sets</div>
 
-{{ ui.section("How it breaks down", "and how a verdict is reached") }}
+{{ ui.section("How it breaks down") }}
 <div class="row row-cards mb-3">
-  <div class="col-lg-5">{{ ui.chart("c-status", fig, "Stock value by verdict", "₹ Cr held now") }}</div>
+  <div class="col-lg-5">{{ ui.chart("c-status", fig, "Stock value by what to do", "₹ Cr held now") }}</div>
   <div class="col-lg-7">
-    <div class="card h-100"><div class="card-body small">
-      <h3 class="card-title">How a brick is judged</h3>
+    <details class="sw-fold"><summary><i class="ti ti-calculator"></i> How turn is measured <span class="text-secondary small">the method</span></summary>
+      <div class="sw-fold-body small">
       <ol class="mb-2 ps-3">
         <li>Over the last <b>3, 6 and 12 months</b>, stock is read once a fortnight (6, 13 and 26 fortnights).
           A window counts when the brick was in stock in at least <b>{{ rules.turn_availability_pct | num }}%</b> of the
@@ -60,11 +61,11 @@
           <b>hold</b> for 3 months; otherwise phase out (or, if it sells whenever stocked, stock it properly).</li>
       </ol>
       <div class="text-secondary">Turns are a year's sales rate from each window; the 3-month figure is seasonal (October is about twice a normal month).</div>
-    </div></div>
+    </div></details>
   </div>
 </div>
 
-{{ ui.section("Group by group", "biggest changes first; search, sort or download") }}
+{{ ui.section("Group by group", "biggest differences first; search, sort or download") }}
 <div class="mb-3">{{ ui.table_card(("Brick groups" if f.view == "group" else "Bricks") ~ ": biggest changes first", t,
      sub=("Top " ~ n_shown ~ " of " ~ n_total ~ ". ") if n_total > n_shown else "", icon="ti-stack-2") }}</div>
 {% endif %}

@@ -30,7 +30,7 @@ RULES = [
     ("POST", r"^/recommendations/ai-review$", "manager"),
     ("POST", r"^/recommendations/\d+/[a-z]+$", "manager"),
     ("POST", r"^/refresh$", "manager"),
-    ("POST", r"^/ideal-stock/adjust$", "manager"),          # fixing an ideal by hand (kkj.brain.fixes)
+    ("POST", r"^/ideal-stock/(save|reset)$", "manager"),    # changing an ideal by hand (kkj.brain.fixes)
     ("POST", r"^/brief$", "manager"),
     ("POST", r"^/seasonality/notes$", "manager"),
     ("POST", r"^/settings/notes$", "manager"),

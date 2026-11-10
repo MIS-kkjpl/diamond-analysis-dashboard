@@ -38,7 +38,7 @@
   <div class="card-body d-flex flex-wrap align-items-center gap-3">
     <i class="ti ti-news fs-2 text-secondary"></i>
     <div class="flex-grow-1 min-w-0" style="flex-basis: 20rem"><b>Weekly brief</b>
-      <div class="small text-secondary">One page for management: what moved, the decisions that matter this week, what to watch.
+      <div class="small text-secondary">One page for you: what moved, the decisions that matter this week, what to watch.
         Written every Monday by the morning refresh, or now.</div></div>
     {% if can(request, "manager") %}<form method="post" action="/brief" onsubmit="const x = this.querySelector('button'); x.disabled = true; x.innerHTML = '<span class=&quot;spinner-border spinner-border-sm me-2&quot;></span>Writing… up to a minute'">
       <button class="btn btn-outline-secondary"><i class="ti ti-sparkles"></i> Write this week's brief</button></form>{% endif %}

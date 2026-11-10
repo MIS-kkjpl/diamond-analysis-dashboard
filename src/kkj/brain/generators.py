@@ -326,19 +326,19 @@ def ideal_stock(ideal, turns, rules):
             impact = -change * piece_value
             label = f"≈{money(impact)} more than demand needs ({change:+.0f} {u})"
         elif status == "phase_out" and r["current_pcs"] > 0:
-            kind, title = "turn_phase_out", f"Phase out {r['brick_group']}"
+            kind, title = "turn_phase_out", f"Stop stocking {r['brick_group']}"
             impact, label = current_value, f"{money(current_value)} held ({r['current_pcs']:.0f} {u}), no demand expected"
         else:
             continue
         rows = branch[branch["brick_group"] == r["brick_group"]]
         selling = rows[rows["ideal_pcs"] > 0]
         why = selling["ideal_from"].value_counts()
-        reasons = {"choice": "months of demand held for choice", "demand": "demand until replacement stock arrives",
-                   "display minimum": "the display minimum", "override": "an ideal fixed by hand"}
-        set_by = "; ".join(f"{n} branch{'es' if n > 1 else ''} by {reasons.get(k, k)}" for k, n in why.items())
-        summary = (f"Forecast to sell about {r['annual']:.1f} {u} in the next 12 months. Holding {r['current_pcs']:.0f}, "
-                   f"ideal {ideal_pcs:.0f} (grade {r['grade']}, implied turn {_turn(r['implied_turn'])})"
-                   + (f": set at {set_by}." if set_by else "."))
+        reasons = {"choice": "choice on the counter", "demand": "enough until new stock arrives",
+                   "display minimum": "one on display", "override": "a number set by hand"}
+        set_by = "; ".join(f"{reasons.get(k, k)} at {n} branch{'es' if n > 1 else ''}" for k, n in why.items())
+        summary = (f"Expected to sell about {r['annual']:.1f} {u} in the next 12 months. We have {r['current_pcs']:.0f}; "
+                   f"the ideal is {ideal_pcs:.0f}" + (f" ({set_by})." if set_by else ".")
+                   + " Check or change each branch's number on the Details page.")
         pa = product_acc.loc[r["item_name"]] if r["item_name"] in product_acc.index else None
         ia = item_acc.loc[r["item_class_group"]] if r["item_class_group"] in item_acc.index else None
         def tested(a):

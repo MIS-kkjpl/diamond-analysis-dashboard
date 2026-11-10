@@ -56,35 +56,10 @@
     </div>
   </div>
 
-  <form class="card mb-3" hx-post="/settings/ideal-stock/override" hx-target="#stock-params" hx-swap="outerHTML">
-    <div class="card-header"><div><h3 class="card-title"><i class="ti ti-hand-stop me-1"></i>Fix the ideal stock</h3>
-      <div class="card-subtitle small text-secondary">For a brick group or a whole product, at one branch or all branches;
-        replaces the calculated ideal until removed. A product's or an all-branch number is split over its brick groups and
-        branches in proportion to their calculated ideals. A reason is required, so corrections stay visible.</div></div></div>
-    <div class="card-body">
-      <div class="row g-2 align-items-end">
-        <div class="col-sm-6 col-lg-2"><label class="form-label">For a</label>
-          <select name="level" class="form-select" onchange="document.getElementById('fix-key').setAttribute('list', 'skeys-' + this.value)">
-            {% for k, label in fix_levels.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}
-          </select></div>
-        <div class="col-sm-6 col-lg-3"><label class="form-label">Which one</label>
-          <input id="fix-key" name="key" class="form-control" list="skeys-group" autocomplete="off"
-                 placeholder="e.g. 18KT · D RING · 0.25–0.5ct" required></div>
-        <div class="col-sm-6 col-lg-2"><label class="form-label">Branch</label>
-          <select name="branch" class="form-select" required>
-            <option value="*">All branches</option>
-            {% for b in branches %}<option value="{{ b }}">{{ b | short }}</option>{% endfor %}</select></div>
-        <div class="col-sm-6 col-lg-1"><label class="form-label">Pieces</label>
-          <input name="pcs" type="number" min="0" step="1" class="form-control" required></div>
-        <div class="col-sm-12 col-lg-4"><label class="form-label">Reason</label>
-          <input name="reason" class="form-control" placeholder="e.g. bridal season display" required></div>
-      </div>
-      <div class="mt-2 text-end"><button class="btn btn-primary"><i class="ti ti-device-floppy"></i> Fix ideal</button></div>
-    </div>
-  </form>
-
   <div class="card">
-    <div class="card-header"><h3 class="card-title">Fixed ideals</h3></div>
+    <div class="card-header"><div><h3 class="card-title"><i class="ti ti-user-edit me-1"></i>Ideal numbers set by hand</h3>
+      <div class="card-subtitle small text-secondary">Set and change these on the <a href="/ideal-stock">Ideal stock</a> page, where the
+        suggested number is filled in next to each one.</div></div></div>
     <div class="table-responsive">
       <table class="table table-sm table-vcenter card-table">
         <thead><tr><th>Level</th><th>Applies to</th><th>Branch</th><th class="text-end">Fixed at</th>
@@ -103,7 +78,7 @@
                 <input type="hidden" name="branch" value="{{ r.branch }}"><input type="hidden" name="delete" value="1">
                 <button class="btn btn-sm btn-ghost-danger" title="Remove"><i class="ti ti-trash"></i></button>
               </form></td></tr>
-        {% else %}<tr><td colspan="8" class="text-secondary">None: every ideal is calculated.</td></tr>{% endfor %}
+        {% else %}<tr><td colspan="8" class="text-secondary">None: every ideal is the suggested number.</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>

@@ -65,16 +65,18 @@
             </a>
           </li>
           {%- endmacro %}
-          <li class="nav-section">Actions</li>
+          <li class="nav-section">Start here</li>
           {{ item("recommendations", "/recommendations", "ti-checklist", "Recommendations") }}
-          <li class="nav-section">Analytics</li>
+          {% if feature("stock_turn") %}{{ item("ideal_stock", "/ideal-stock", "ti-scale", "Ideal stock") }}{% endif %}
+          {{ item("help", "/help", "ti-help-circle", "How to use Stockwise") }}
+          <li class="nav-section">Stock</li>
+          {% if feature("inventory") %}{{ item("inventory", "/inventory", "ti-packages", "Stock on hand") }}{% endif %}
+          {% if feature("stock_turn") %}{{ item("stock_turn", "/stock-turn", "ti-refresh", "Stock turn") }}{% endif %}
+          <li class="nav-section">Sales</li>
           {% if feature("overview") %}{{ item("overview", "/overview", "ti-chart-line", "Overview") }}{% endif %}
-          {% if feature("inventory") %}{{ item("inventory", "/inventory", "ti-packages", "Inventory health") }}{% endif %}
           {% if feature("sales") %}{{ item("sales", "/sales", "ti-receipt", "Sales") }}{% endif %}
           {% if feature("salespeople") %}{{ item("salespeople", "/salespeople", "ti-users", "Salespeople") }}{% endif %}
-          {% if feature("stock_turn") %}{{ item("ideal_stock", "/ideal-stock", "ti-scale", "Ideal stock") }}{% endif %}
-          {% if feature("stock_turn") %}{{ item("stock_turn", "/stock-turn", "ti-refresh", "Stock turn") }}{% endif %}
-          {% if feature("seasonality") %}{{ item("seasonality", "/seasonality", "ti-calendar-stats", "Seasonality") }}{% endif %}
+          {% if feature("seasonality") %}{{ item("seasonality", "/seasonality", "ti-calendar-stats", "Seasons and festivals") }}{% endif %}
           {% if feature("insights") %}{{ item("insights", "/insights", "ti-bulb", "Insights") }}{% endif %}
           <li class="nav-section">Admin</li>
           {% if feature("checks") %}{{ item("checks", "/checks", "ti-database", "Data quality") }}{% endif %}

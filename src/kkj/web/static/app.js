@@ -207,3 +207,53 @@ document.body && document.body.addEventListener("sw-refused", e => {
   document.body.appendChild(box);
   setTimeout(() => box.remove(), 5000);
 });
+
+/* Ideal stock tables (templates/_ideal_editor.html): the suggested numbers are filled in; changing one highlights it
+   and shows the save bar (count, one reason, quick reasons, Undo). Leaving with unsaved numbers asks first. */
+(function () {
+  function refresh(form) {
+    let n = 0;
+    form.querySelectorAll(".ideal-input").forEach(i => {
+      const changed = i.value.trim() !== i.dataset.orig;
+      i.classList.toggle("is-changed", changed);
+      if (changed) n++;
+    });
+    const bar = form.querySelector(".ideal-savebar");
+    if (!bar) return;
+    bar.hidden = n === 0;
+    bar.querySelector(".ideal-count").textContent = n === 1 ? "1 change" : n + " changes";
+    form.dataset.dirty = n ? "1" : "";
+  }
+  document.addEventListener("input", e => {
+    if (e.target.matches && e.target.matches(".ideal-input")) refresh(e.target.closest("form"));
+  });
+  document.addEventListener("click", e => {
+    const chip = e.target.closest && e.target.closest(".ideal-chip");
+    if (chip) {
+      const box = chip.closest("form").querySelector(".ideal-reason");
+      box.value = chip.dataset.reason; box.focus();
+    }
+    const undo = e.target.closest && e.target.closest(".ideal-undo");
+    if (undo) {
+      const form = undo.closest("form");
+      form.querySelectorAll(".ideal-input").forEach(i => (i.value = i.dataset.orig));
+      refresh(form);
+    }
+  });
+  document.addEventListener("wheel", e => {            // scrolling the page over a number box must not change it
+    if (document.activeElement && document.activeElement.matches(".ideal-input") && e.target === document.activeElement) {
+      document.activeElement.blur();
+    }
+  }, {passive: true});
+  document.addEventListener("htmx:beforeRequest", e => {
+    const form = e.target.closest && e.target.closest(".ideal-editor");
+    if (form) form.dataset.dirty = "";               // saving: don't ask about leaving
+  });
+  document.addEventListener("htmx:afterRequest", e => {
+    const form = e.target.closest && e.target.closest(".ideal-editor");
+    if (form && !e.detail.xhr.getResponseHeader("HX-Redirect")) refresh(form);   // not saved: still unsaved
+  });
+  window.addEventListener("beforeunload", e => {
+    if (document.querySelector(".ideal-editor[data-dirty='1']")) { e.preventDefault(); e.returnValue = ""; }
+  });
+})();

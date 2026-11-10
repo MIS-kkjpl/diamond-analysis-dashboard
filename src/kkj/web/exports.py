@@ -73,9 +73,9 @@ def buying(status: str = "both"):
                       FROM brain.brick_turn WHERE scope = 'Company' AND level = 'group'
                         AND as_of = (SELECT max(as_of) FROM brain.brick_turn)
                       ORDER BY abs(change_pcs * coalesce(avg_piece_value, 0)) DESC""")
-    return _xlsx({"Increase": read(q, k=["turn_increase"], s=s),
-                  "Reduce": read(q, k=["turn_reduce"], s=s),
-                  "Phase out": read(q, k=["turn_phase_out"], s=s),
+    return _xlsx({"Buy more": read(q, k=["turn_increase"], s=s),
+                  "Too much": read(q, k=["turn_reduce"], s=s),
+                  "Stop stocking": read(q, k=["turn_phase_out"], s=s),
                   "All brick groups": groups,
                   "Replenishment": read(q, k=["understock"], s=s),
                   "Suppliers": read(q, k=["supplier_slow", "supplier_fast"], s=s)}, "purchasing_list")

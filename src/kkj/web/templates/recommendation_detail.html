@@ -7,7 +7,7 @@
 {% endblock %}
 {% block content %}
 <div class="rec-detail">{% include "_card.html" %}</div>
-{% if adj %}{% include "_adjust_ideal.html" %}{% endif %}
+{% if ed %}{% include "_ideal_editor.html" %}{% endif %}
 {% if can(request, "manager") %}<div class="card mb-3" id="note">
   <div class="card-body py-2">
     <form class="d-flex flex-wrap gap-2 align-items-center" hx-post="/recommendations/{{ a.action_id }}/comment"
@@ -56,7 +56,7 @@
   {% endif %}
   <div class="col-lg-6">
     <div class="card h-100">
-      <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-dots me-2"></i>Supporting data</h3></div>
+      <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-dots me-2"></i>The numbers behind it</h3></div>
       <table class="table table-sm table-vcenter card-table">
         <tbody>
         {% for key, value in flatten(a.evidence) %}

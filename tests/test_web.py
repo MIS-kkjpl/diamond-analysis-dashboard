@@ -99,7 +99,7 @@ def test_response_needs_sign_in_then_records_and_is_undone():
                                   "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings",
                                   "/stock-turn", "/stock-turn?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
                                   "/stock-turn?group=Diamond+Jewellery&group=", "/stock-turn?view=brick&search=D+RING",
-                                  "/settings/ideal-stock", "/ideal-stock",
+                                  "/settings/ideal-stock", "/ideal-stock", "/help",
                                   "/ideal-stock?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
                                   "/ideal-stock?group=Diamond+Jewellery&group=", "/seasonality", "/seasonality?group=Gold", "/recommendations?sort=money", "/recommendations/feed?sort=newest&offset=25", "/lookup", "/lookup?q=D+RING", "/lookup?q=DRN21585", "/lookup?q=zzqqxx",
                                   "/lookup?q=Kothari", "/sales?salesperson=K0057&branch=&group=", "/settings/festivals",
@@ -301,33 +301,59 @@ def test_ideal_stock_values_and_fixed_ideals_save_validate_and_remove():
             c.execute(text("DELETE FROM config.ideal_stock_override WHERE updated_by = 'pytest' OR reason LIKE 'pytest%'"))
             c.execute(text("DELETE FROM config.change_log WHERE table_name IN ('stock_param', 'ideal_stock_override') "
                            "AND changed_by = 'pytest'"))
+        _reapply_fixes()
 
 
-def test_adjusting_an_ideal_from_the_group_page_and_a_recommendation():
+def _reapply_fixes():
+    """Put brain.ideal_stock back in line with config.ideal_stock_override after a test removed its fixes directly."""
+    from kkj import rules as rules_mod
+    from kkj.brain import fixes
+    with settings.etl_engine().begin() as c:
+        fixes.apply_now(c, rules_mod.load(c))
+
+
+def test_changing_ideals_in_place_saves_applies_and_resets():
     group = "18KT · D RING · 0.25–0.5ct"
     try:
         r = client.get("/ideal-stock/group", params={"g": group})
-        assert r.status_code == 200 and "Adjust the ideal" in r.text and "Has the forecast been right?" in r.text
-        assert "needs a reason" in client.post("/ideal-stock/adjust", data={"level": "group", "key": group, "branch": "*",
-                                                                           "pcs": "300", "reason": ""}).text
-        r = client.post("/ideal-stock/adjust", data={"level": "group", "key": group, "branch": "*", "pcs": "300",
-                                                     "reason": "pytest bridal"})
-        assert "ideal fixed at 300" in r.text and "comes back for review on" in r.text and "pytest bridal" in r.text
+        assert r.status_code == 200 and "Ideal stock at each branch" in r.text and "Suggested" in r.text
         with settings.app_engine().connect() as c:
-            row = c.execute(text("SELECT review_on, calc_at_fix FROM config.ideal_stock_override WHERE key = :k AND branch = '*'"),
-                            {"k": group}).one()
-            assert row.review_on is not None and row.calc_at_fix is not None
+            branch, calc = c.execute(text("""SELECT scope, calc_pcs FROM brain.ideal_stock WHERE brick_group = :g
+                AND scope <> 'Company' AND as_of = (SELECT max(as_of) FROM brain.ideal_stock) ORDER BY calc_pcs DESC LIMIT 1"""),
+                {"g": group}).one()
+        calc = int(calc)
+        form = {"level": "group", "key": [group], "branch": [branch], "orig": [str(calc)], "pcs": [str(calc + 7)],
+                "back": "/ideal-stock/group?g=x"}
+        assert "Add a short reason" in client.post("/ideal-stock/save", data={**form, "reason": ""}).text
+        assert "Nothing changed" in client.post("/ideal-stock/save", data={**form, "pcs": [str(calc)], "reason": "x"}).text
+        r = client.post("/ideal-stock/save", data={**form, "reason": "pytest bridal"})
+        assert r.headers["HX-Redirect"].startswith("/ideal-stock/group?") and "Saved+1+number" in r.headers["HX-Redirect"]
+        with settings.app_engine().connect() as c:
+            row = c.execute(text("SELECT review_on, calc_at_fix, pcs FROM config.ideal_stock_override WHERE key = :k AND branch = :b"),
+                            {"k": group, "b": branch}).one()
+            assert row.review_on is not None and row.calc_at_fix is not None and row.pcs == calc + 7
+            used = c.execute(text("""SELECT ideal_pcs, ideal_from FROM brain.ideal_stock WHERE brick_group = :g AND scope = :b
+                                     AND as_of = (SELECT max(as_of) FROM brain.ideal_stock)"""), {"g": group, "b": branch}).one()
+            assert used.ideal_pcs == calc + 7 and used.ideal_from == "override"        # applied straight away
             rec = c.execute(text("SELECT action_id FROM brain.action WHERE kind LIKE 'turn_%' AND status = 'open' LIMIT 1")).scalar()
+        page = client.get("/ideal-stock/group", params={"g": group}).text
+        assert "pytest bridal" in page and "use suggested" in page
+        assert "pytest bridal" in client.get("/ideal-stock").text                       # listed under Your numbers
         if rec:
-            assert "Adjust the ideal" in client.get(f"/recommendations/{rec}").text
-        assert "Removed" in client.post("/ideal-stock/adjust", data={"level": "group", "key": group, "branch": "*",
-                                                                     "delete": "1"}).text
-        assert anon.post("/ideal-stock/adjust", data={"level": "group", "key": group, "branch": "*", "pcs": "1",
-                                                      "reason": "x"}, follow_redirects=False).status_code in (303, 401, 403)
+            assert "Check the ideal at each branch" in client.get(f"/recommendations/{rec}").text
+        r = client.post("/ideal-stock/reset", data={"reset_level": "group", "reset_key": group, "reset_branch": branch,
+                                                    "back": "//evil.example"})
+        assert r.headers["HX-Redirect"].startswith("/ideal-stock?") and "back+to+the+suggested" in r.headers["HX-Redirect"]
+        with settings.app_engine().connect() as c:
+            assert c.execute(text("""SELECT ideal_pcs FROM brain.ideal_stock WHERE brick_group = :g AND scope = :b
+                                     AND as_of = (SELECT max(as_of) FROM brain.ideal_stock)"""), {"g": group, "b": branch}).scalar() == calc
+        assert anon.post("/ideal-stock/save", data={**form, "reason": "x"},
+                         follow_redirects=False).status_code in (303, 401, 403)
     finally:
         with settings.etl_engine().begin() as c:
             c.execute(text("DELETE FROM config.ideal_stock_override WHERE reason LIKE 'pytest%' OR updated_by = 'pytest'"))
             c.execute(text("DELETE FROM config.change_log WHERE table_name = 'ideal_stock_override' AND changed_by = 'pytest'"))
+        _reapply_fixes()
 
 
 def test_data_quality_shows_the_audit_and_its_workbook():

@@ -19,10 +19,10 @@ KINDS = {  # kind -> (label, Tabler icon, badge colour)
     "pause_buying": ("Purchasing", "ti-shopping-cart-off", "cyan"),
     "buy_band": ("Purchasing", "ti-shopping-cart", "cyan"),
     "discount": ("Discount control", "ti-discount", "pink"),
-    "turn_increase": ("Purchasing", "ti-trending-up", "green"),
-    "turn_reduce": ("Purchasing", "ti-trending-down", "orange"),
-    "turn_phase_out": ("Purchasing", "ti-trash", "red"),
-    "ideal_review": ("Ideal review", "ti-hand-stop", "yellow"),
+    "turn_increase": ("Buy more", "ti-trending-up", "green"),
+    "turn_reduce": ("Too much stock", "ti-trending-down", "orange"),
+    "turn_phase_out": ("Stop stocking", "ti-trash", "red"),
+    "ideal_review": ("Check your number", "ti-hand-stop", "yellow"),
     "festival": ("Festival", "ti-calendar-event", "yellow"),
     "broken_set": ("Broken set", "ti-puzzle", "orange"),
 }
@@ -173,17 +173,18 @@ def detail(request: Request, action_id: int):
         from kkj.ai import review
         ai_notes = review.notes_for(action_id)
     a = _prep(rows.iloc[0].to_dict())
-    adjust = {}                       # stock-level recommendations: adjust the ideal right here
+    ed = None                         # stock-level recommendations: the ideal at each branch, editable right here
     subject = read("SELECT subject FROM brain.action WHERE action_id = :a", a=action_id)["subject"].iloc[0] or {}
     subject = json.loads(subject) if isinstance(subject, str) else subject
     if a["kind"] in ("turn_increase", "turn_reduce", "turn_phase_out") and subject.get("group"):
-        from kkj.web.analytics import adjust_ctx
-        adjust = adjust_ctx("group", subject["group"])
+        from kkj.web.analytics import branch_editor
+        ed = branch_editor("group", subject["group"], title="Check the ideal at each branch")
     elif a["kind"] == "ideal_review" and subject.get("fix_key"):
-        from kkj.web.analytics import adjust_ctx
-        adjust = adjust_ctx(subject.get("fix_level", "group"), subject["fix_key"], branch=subject.get("fix_branch"))
+        from kkj.web.analytics import branch_editor
+        ed = branch_editor(subject.get("fix_level", "group"), subject["fix_key"],
+                           title="Keep, change or remove your number")
     return render(request, "recommendation_detail.html", "recommendations", a=a,
-                  history=history, follow=follow, follow_pieces=follow_pieces, ai_notes=ai_notes, **adjust)
+                  history=history, follow=follow, follow_pieces=follow_pieces, ai_notes=ai_notes, ed=ed)
 
 
 @router.post("/recommendations/{action_id}/{verb}", response_class=HTMLResponse)

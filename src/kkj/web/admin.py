@@ -158,6 +158,8 @@ async def save_override(request: Request):
         else:
             msg, error = fixes.save(conn, level, key, branch, form.get("pcs"), form.get("reason"), who(request),
                                     rules_mod.load(conn)["override_review_days"])
+        if not error:
+            fixes.apply_now(conn, rules_mod.load(conn))      # the pages show it straight away
     return templates.TemplateResponse(request, "_stock_params.html", _stock_ctx(error=error, saved=msg))
 
 
@@ -192,7 +194,7 @@ async def save_festival(request: Request):
             conn.execute(text("""INSERT INTO config.festival (name, day, note, updated_by) VALUES (:n, :d, :note, :by)
                                  ON CONFLICT (name, day) DO UPDATE SET note = EXCLUDED.note, updated_at = now(),
                                  updated_by = EXCLUDED.updated_by"""), {"n": name, "d": day, "note": note, "by": by})
-            msg, new = f"Saved {name} on {day:%d %b %Y}. Seasonality uses it from the next refresh.", str(day)
+            msg, new = f"Saved {name} on {day:%d %b %Y}. Seasons and festivals uses it from the next refresh.", str(day)
         conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value)
                              VALUES (:by, 'festival', :k, NULL, CAST(:new AS jsonb))"""),
                      {"by": by, "k": f"{name} {day}", "new": json.dumps(new)})
