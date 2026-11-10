@@ -1,4 +1,7 @@
 """Analytics pages: Inventory health, Sales, Insights, Stock turn. Filters are plain GET parameters (shareable links)."""
+from datetime import date
+from urllib.parse import quote
+
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Query, Request
@@ -13,7 +16,7 @@ from kkj.metrics import sets
 from kkj.metrics.summary import fy_start
 from kkj.viz import GROUP_ORDER, money
 from kkj.web import charts
-from kkj.web.common import cached, engine, read, render
+from kkj.web.common import cached, engine, read, render, templates, who
 
 router = APIRouter()
 
@@ -387,26 +390,109 @@ def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Que
     shown = shown.assign(order=shown["change_value"].abs().where(shown["status"] != "phase_out", shown["held_value"]))
     shown = shown.sort_values("order", ascending=False).head(300)
     shown = shown.assign(verdict=shown["status"].map(lambda x: IDEAL_STATUS.get(x, (x,))[0]),
-                         set_by=shown["ideal_from"].fillna("by branch"))
+                         set_by=shown["ideal_from"].fillna("by branch"),
+                         brick_group=[(g, f"/ideal-stock/group?g={quote(g)}") for g in shown["brick_group"]])
     table = charts.table(
         shown[["brick_group", "current_pcs", "ideal_pcs", "change_pcs", "change_value", "annual", "grade", "implied_turn",
                "set_by", "verdict"]],
-        {"current_pcs": "num", "ideal_pcs": "num", "change_pcs": "num", "change_value": "money", "annual": "dec",
-         "implied_turn": "dec"},
+        {"brick_group": "link", "current_pcs": "num", "ideal_pcs": "num", "change_pcs": "num", "change_value": "money",
+         "annual": "dec", "implied_turn": "dec"},
         {"brick_group": "brick group", "current_pcs": "now (units)", "ideal_pcs": "ideal (units)", "change_pcs": "change",
          "change_value": "change (₹)", "annual": "forecast, 12 months", "grade": "grade", "implied_turn": "turn at ideal",
          "set_by": "ideal set by", "verdict": "verdict"})
     chart = by.reindex(list(IDEAL_STATUS)).dropna(how="all").reset_index()
     chart["label"] = chart["status"].map(lambda x: IDEAL_STATUS[x][0])
     n_params = int(read("SELECT count(*) AS n FROM config.stock_param")["n"].iloc[0])
-    n_fixed = int(read("SELECT count(*) AS n FROM config.ideal_stock_override")["n"].iloc[0])
+    from kkj.brain import fixes
+    fixed = read("""SELECT level, key, branch, pcs, reason, updated_by, updated_at AT TIME ZONE 'Asia/Kolkata' AS updated_at,
+                           review_on, calc_at_fix FROM config.ideal_stock_override ORDER BY review_on NULLS LAST""")
+    n_fixed = len(fixed)
+    latest = read("""SELECT scope, brick_group, item_name, calc_pcs, ideal_pcs FROM brain.ideal_stock
+                     WHERE as_of = (SELECT max(as_of) FROM brain.ideal_stock) AND scope <> 'Company'""")
+    learn = fixes.suggestions(fixed, latest, rules["choice_months"])
+    fixed_rows = fixed.astype(object).where(fixed.notna(), None).to_dict("records")
     return render(request, "ideal_stock.html", "ideal_stock", empty=False, rules=rules, as_of=as_of, kpis=kpis,
                   scopes=scopes, groups=groups, statuses={k: v[0] for k, v in IDEAL_STATUS.items()},
                   f={"scope": scope, "group": group, "status": status, "search": search},
                   fig=charts.hbar(chart["label"], chart["held"] / 1e7, np.c_[chart["n"]], "<br>%{customdata[0]:,.0f} groups"),
                   t=table, n_shown=len(shown), n_total=len(t[t["status"].isin(status)] if status else t),
                   acc=acc_table, fine_err=fine_err, fine_avg=fine_avg, horizon=horizon, origins=origins,
-                  n_params=n_params, n_fixed=n_fixed)
+                  n_params=n_params, n_fixed=n_fixed, learn=learn, fixed=fixed_rows, today=date.today())
+
+
+def adjust_ctx(level, key, msg=None, error=None, branch=None):
+    """Context for _adjust_ideal.html: the calculated and current ideal at each branch for a brick group or product,
+    the fixes that touch it, and the branches to choose from."""
+    from kkj.brain import fixes
+    col = fixes.COLUMN.get(level, "brick_group")
+    rows = read(f"""SELECT scope, brick_group, item_name, current_pcs, annual, calc_pcs, ideal_pcs, ideal_from, override_reason
+                    FROM brain.ideal_stock WHERE as_of = (SELECT max(as_of) FROM brain.ideal_stock) AND scope <> 'Company'
+                    AND {col} = :k""", k=key)
+    by = rows.groupby("scope").agg(held=("current_pcs", "sum"), annual=("annual", "sum"), calc=("calc_pcs", "sum"),
+                                   ideal=("ideal_pcs", "sum")).reset_index()
+    by = by[(by["held"] > 0) | (by["ideal"] > 0) | (by["calc"] > 0)].sort_values("ideal", ascending=False)
+    items = rows["item_name"].dropna().unique().tolist()
+    fx = read("""SELECT level, key, branch, pcs, reason, updated_by, updated_at AT TIME ZONE 'Asia/Kolkata' AS updated_at,
+                        review_on, calc_at_fix FROM config.ideal_stock_override
+                 WHERE (level = :l AND key = :k) OR (level = 'product' AND key = ANY(:items))
+                 ORDER BY level, branch""", l=level, k=key, items=items)
+    branches = sorted(read("""SELECT DISTINCT scope FROM brain.ideal_stock WHERE scope <> 'Company'
+                              AND as_of = (SELECT max(as_of) FROM brain.ideal_stock)""")["scope"])
+    total = {"held": by["held"].sum(), "annual": by["annual"].sum(), "calc": by["calc"].sum(), "ideal": by["ideal"].sum()}
+    plain = lambda df: df.astype(object).where(df.notna(), None).to_dict("records")
+    return {"adj": {"level": level, "key": key, "label": fixes.FIX_LEVELS.get(level, level), "rows": plain(by),
+                    "total": total, "fixes": plain(fx), "branches": branches, "branch": branch or "*",
+                    "msg": msg, "error": error}}
+
+
+@router.post("/ideal-stock/adjust", response_class=HTMLResponse)
+async def adjust_ideal(request: Request):
+    """Fix (or un-fix) an ideal from the group page or a recommendation; answers with the refreshed form."""
+    from kkj.brain import fixes
+    from kkj import rules as rules_mod
+    form = await request.form()
+    level, key, branch = form.get("level", ""), (form.get("key") or "").strip(), (form.get("branch") or "*").strip()
+    with engine().begin() as conn:
+        if form.get("delete") == "1":
+            msg, error = fixes.remove(conn, level, key, branch, who(request)), None
+        else:
+            msg, error = fixes.save(conn, level, key, branch, form.get("pcs"), form.get("reason"), who(request),
+                                    rules_mod.load(conn)["override_review_days"])
+    return templates.TemplateResponse(request, "_adjust_ideal.html", adjust_ctx(level, key, msg, error, branch))
+
+
+@router.get("/ideal-stock/group", response_class=HTMLResponse)
+def ideal_group(request: Request, g: str = "", level: str = "group"):
+    """One brick group (or product): how its ideal is set at each branch, its forecast accuracy, and adjusting it."""
+    from kkj.brain import fixes
+    level = level if level in fixes.FIX_LEVELS else "group"
+    col = fixes.COLUMN[level]
+    rows = read(f"""SELECT * FROM brain.ideal_stock WHERE as_of = (SELECT max(as_of) FROM brain.ideal_stock)
+                    AND scope <> 'Company' AND {col} = :k""", k=g)
+    if rows.empty:
+        return render(request, "ideal_group.html", "ideal_stock", empty=True, g=g, level=level)
+    rows = rows[(rows["current_pcs"] > 0) | (rows["ideal_pcs"] > 0) | (rows["calc_pcs"].fillna(0) > 0)]
+    rows = rows.sort_values(["ideal_pcs", "current_pcs"], ascending=False)
+    table = charts.table(
+        rows[["scope", "brick_group", "current_pcs", "annual", "cover_demand", "for_demand", "for_choice", "display_min",
+              "calc_pcs", "ideal_pcs", "ideal_from", "status"]].assign(scope=rows["scope"].map(lambda x: str(x).split(" / ")[0])),
+        {"current_pcs": "num", "annual": "dec", "cover_demand": "dec", "for_demand": "num", "for_choice": "num",
+         "display_min": "num", "calc_pcs": "num", "ideal_pcs": "num"},
+        {"scope": "branch", "brick_group": "brick group", "current_pcs": "now", "annual": "forecast, 12 months",
+         "cover_demand": "forecast over cover", "for_demand": "for demand", "for_choice": "for choice",
+         "display_min": "display min", "calc_pcs": "calculated", "ideal_pcs": "ideal", "ideal_from": "set by",
+         "status": "verdict"})
+    first = rows.iloc[0]
+    acc = read("""SELECT level, key, wape, wape_last_year, wape_avg12, bias, better, actual FROM brain.forecast_accuracy
+                  WHERE as_of = (SELECT max(as_of) FROM brain.forecast_accuracy)
+                  AND ((level = 'product' AND key = :p) OR (level = 'item_group' AND key = :i))""",
+               p=first["item_name"], i=first["item_class_group"]).to_dict("records")
+    rules = _rules()
+    history = read("""SELECT changed_at AT TIME ZONE 'Asia/Kolkata' AS changed_at, changed_by, row_key, old_value, new_value, note
+                      FROM config.change_log WHERE table_name = 'ideal_stock_override' AND row_key LIKE :k
+                      ORDER BY change_id DESC LIMIT 30""", k=f"%: {g} @ %").to_dict("records")
+    return render(request, "ideal_group.html", "ideal_stock", empty=False, g=g, level=level, t=table, acc=acc,
+                  rules=rules, first=first.to_dict(), history=history, **adjust_ctx(level, g))
 
 
 # ── Stock turn (weighted, per brick) ──────────────────────────────────────────
@@ -452,18 +538,18 @@ def stock_turn(request: Request, view: str = "group", scope: str = "Company", gr
     shown = shown.sort_values("order", ascending=False).head(300)
     def turns(r):
         return " · ".join("–" if pd.isna(r[c]) else ("∞" if np.isinf(r[c]) else f"{r[c]:.2f}") for c in ("turn_3m", "turn_6m", "turn_12m"))
-    set_for = {"default": "default", "item_group": "item group", "product": "product", "group": "brick group", "brick": "brick"}
+    set_for = {"group": "its ideal stock", "default": "company at ideal"}
     shown = shown.assign(
         status_label=shown["status"].map(lambda s: bt.STATUS[s][0]),
         windows=shown.apply(turns, axis=1),
-        ideal=shown.apply(lambda r: f"{r['ideal_turn']:g}× ({set_for.get(r['ideal_source'], 'default')})", axis=1))
+        ideal=shown.apply(lambda r: f"{r['ideal_turn']:.2f}× ({set_for.get(r['ideal_source'], 'company at ideal')})", axis=1))
     table = charts.table(
         shown[["brick", "current_pcs", "ideal_pcs", "change_pcs", "change_value", "blended_turn", "ideal", "windows",
                "status_label"]],
         {"current_pcs": "num", "ideal_pcs": "num", "change_pcs": "num", "change_value": "money", "blended_turn": "dec"},
         {"brick": "brick group" if view == "group" else "brick", "current_pcs": "now (pcs)", "ideal_pcs": "ideal (pcs)",
          "change_pcs": "change (pcs)", "change_value": "change (₹)", "blended_turn": "turn (× a year)",
-         "ideal": "ideal turn", "windows": "turn 3 · 6 · 12 months", "status_label": "verdict"})
+         "ideal": "turn at ideal stock", "windows": "turn 3 · 6 · 12 months", "status_label": "verdict"})
     return render(request, "stock_turn.html", "stock_turn", empty=False, rules=rules, as_of=as_of, kpis=kpis,
                   scopes=scopes, groups=groups, statuses=bt.STATUS, f={"view": view, "scope": scope, "group": group, "status": status, "search": search},
                   fig=charts.hbar(chart["label"], chart["value"] / 1e7, np.c_[chart["bricks"], chart["pcs"]],
@@ -471,7 +557,7 @@ def stock_turn(request: Request, view: str = "group", scope: str = "Company", gr
                   t=table, n_shown=len(shown), n_total=len(t[t["status"].isin(status)] if status else t),
                   levels=" – ".join(bt.LEVEL_LABELS[lv] for lv in bt.LEVELS
                                     if lv in rules["turn_brick_levels" if view == "brick" else "turn_group_levels"]),
-                  n_ideals=int(read("SELECT count(*) AS n FROM config.ideal_turn")["n"].iloc[0]))
+)
 
 
 # ── Seasonality ───────────────────────────────────────────────────────────────

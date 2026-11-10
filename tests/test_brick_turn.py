@@ -6,7 +6,7 @@ import pytest
 from kkj import rules as R
 from kkj.metrics import brick_turn as bt
 
-RULES = {r.key: r.default for r in R.RULES}
+RULES = {**{r.key: r.default for r in R.RULES}, "target_turn": 1.0, "turn_band_pct": 10.0}   # turn mechanics with a fixed ideal
 AS_OF = pd.Timestamp("2026-11-04")
 DATES = [AS_OF - pd.Timedelta(days=14 * k) for k in range(26)]       # one snapshot a fortnight for a year
 

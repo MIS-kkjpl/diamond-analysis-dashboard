@@ -117,7 +117,7 @@ def test_settings_save_rule_and_row_then_revert():
         # a plain salesperson, and the whole row kept so every column is put back afterwards
         person = c.execute(text("SELECT * FROM config.salesperson WHERE kind = 'salesperson' "
                                 "ORDER BY sales_code LIMIT 1")).one()
-    targets = {"target_turn": "1.0", "overstock_days": "365", "understock_days": "60", "aged_days": "400",
+    targets = {"overstock_days": "365", "understock_days": "60", "aged_days": "400",
                "max_offer_discount_pct": "15", "markdown_age_steps": "365, 730", "markdown_pct_steps": "5, 10, 15"}
     try:
         refused = anon.post("/settings/rules/Targets", data=targets, follow_redirects=False)  # not signed in: refused
@@ -301,6 +301,33 @@ def test_ideal_stock_values_and_fixed_ideals_save_validate_and_remove():
             c.execute(text("DELETE FROM config.ideal_stock_override WHERE updated_by = 'pytest' OR reason LIKE 'pytest%'"))
             c.execute(text("DELETE FROM config.change_log WHERE table_name IN ('stock_param', 'ideal_stock_override') "
                            "AND changed_by = 'pytest'"))
+
+
+def test_adjusting_an_ideal_from_the_group_page_and_a_recommendation():
+    group = "18KT · D RING · 0.25–0.5ct"
+    try:
+        r = client.get("/ideal-stock/group", params={"g": group})
+        assert r.status_code == 200 and "Adjust the ideal" in r.text and "Has the forecast been right?" in r.text
+        assert "needs a reason" in client.post("/ideal-stock/adjust", data={"level": "group", "key": group, "branch": "*",
+                                                                           "pcs": "300", "reason": ""}).text
+        r = client.post("/ideal-stock/adjust", data={"level": "group", "key": group, "branch": "*", "pcs": "300",
+                                                     "reason": "pytest bridal"})
+        assert "ideal fixed at 300" in r.text and "comes back for review on" in r.text and "pytest bridal" in r.text
+        with settings.app_engine().connect() as c:
+            row = c.execute(text("SELECT review_on, calc_at_fix FROM config.ideal_stock_override WHERE key = :k AND branch = '*'"),
+                            {"k": group}).one()
+            assert row.review_on is not None and row.calc_at_fix is not None
+            rec = c.execute(text("SELECT action_id FROM brain.action WHERE kind LIKE 'turn_%' AND status = 'open' LIMIT 1")).scalar()
+        if rec:
+            assert "Adjust the ideal" in client.get(f"/recommendations/{rec}").text
+        assert "Removed" in client.post("/ideal-stock/adjust", data={"level": "group", "key": group, "branch": "*",
+                                                                     "delete": "1"}).text
+        assert anon.post("/ideal-stock/adjust", data={"level": "group", "key": group, "branch": "*", "pcs": "1",
+                                                      "reason": "x"}, follow_redirects=False).status_code in (303, 401, 403)
+    finally:
+        with settings.etl_engine().begin() as c:
+            c.execute(text("DELETE FROM config.ideal_stock_override WHERE reason LIKE 'pytest%' OR updated_by = 'pytest'"))
+            c.execute(text("DELETE FROM config.change_log WHERE table_name = 'ideal_stock_override' AND changed_by = 'pytest'"))
 
 
 def test_data_quality_shows_the_audit_and_its_workbook():

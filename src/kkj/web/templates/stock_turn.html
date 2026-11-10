@@ -37,8 +37,8 @@
 {{ ui.section("At a glance") }}
 <div class="row row-cards mb-2">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 <div class="small text-secondary mb-3">As of {{ as_of | date }} · {{ "brick group" if f.view == "group" else "brick" }} = {{ levels }} ·
-  compared with a reference turn of {{ rules.target_turn }}× a year (±{{ rules.turn_band_pct | num }}%) · analysis only:
-  Increase / Reduce recommendations follow the <a href="/ideal-stock">ideal stock</a></div>
+  each brick group compared with the turn its <a href="/ideal-stock">ideal stock</a> implies (±{{ rules.ideal_band_pct | num }}%):
+  turn is a result, not a target anyone sets</div>
 
 {{ ui.section("How it breaks down", "and how a verdict is reached") }}
 <div class="row row-cards mb-3">
@@ -54,10 +54,10 @@
         <li><b>Blend:</b> all three count → {{ rules.turn_w3_all | num }}/{{ rules.turn_w6_all | num }}/{{ rules.turn_w12_all | num }};
           6 and 12 only → {{ rules.turn_w6_of_6_12 | num }}/{{ (100 - rules.turn_w6_of_6_12) | num }};
           3 and 6 only (new) → {{ rules.turn_w3_of_3_6 | num }}/{{ (100 - rules.turn_w3_of_3_6) | num }}; 3 only → too new.</li>
-        <li>Compared with the <b>ideal turn</b>: inside the band → keep; below → reduce; above → increase.
-          Ideal stock = blended yearly sales ÷ ideal turn.</li>
+        <li>Compared with the <b>turn at its ideal stock</b> (the forecast year's sales ÷ the ideal; bricks take their group's):
+          inside the band → keep; below → turning slower than its ideal stock would; above → faster.</li>
         <li>Too little availability to judge and out of range → if the next lighter and heavier weight ranges are healthy,
-          <b>hold</b> for {{ rules.turn_hold_months }} months; otherwise phase out (or, if it sells whenever stocked, stock it properly).</li>
+          <b>hold</b> for 3 months; otherwise phase out (or, if it sells whenever stocked, stock it properly).</li>
       </ol>
       <div class="text-secondary">Turns are a year's sales rate from each window; the 3-month figure is seasonal (October is about twice a normal month).</div>
     </div></div>

@@ -2,7 +2,8 @@
 Roles: who may change what. Three, the usual minimum for an internal decision tool:
 
   admin    everything: accounts, settings and business rules, editing or removing business notes, AI usage
-  manager  acts on recommendations (approve, dismiss, snooze, complete, notes) and refreshes them; writes the
+  manager  acts on recommendations (approve, dismiss, snooze, complete, notes) and refreshes them; adjusts ideal
+           stock (fixes with a reason, reviewed later); writes the
            weekly brief and season notes, runs the AI second look; adds business notes
   viewer   sees every page and can use Ask Stockwise; changes nothing
 
@@ -29,6 +30,7 @@ RULES = [
     ("POST", r"^/recommendations/ai-review$", "manager"),
     ("POST", r"^/recommendations/\d+/[a-z]+$", "manager"),
     ("POST", r"^/refresh$", "manager"),
+    ("POST", r"^/ideal-stock/adjust$", "manager"),          # fixing an ideal by hand (kkj.brain.fixes)
     ("POST", r"^/brief$", "manager"),
     ("POST", r"^/seasonality/notes$", "manager"),
     ("POST", r"^/settings/notes$", "manager"),

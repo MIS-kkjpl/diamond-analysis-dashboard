@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ g }} · Ideal stock · Stockwise{% endblock %}
+{% block pretitle %}<a href="/ideal-stock"><i class="ti ti-arrow-left"></i> Ideal stock</a>{% endblock %}
+{% block page_title %}{{ g }}{% endblock %}
+{% block intro %}How the ideal is worked out at each branch, how well the forecast has done for this product, and adjusting it.{% endblock %}
+{% block content %}
+{% if empty %}
+<div class="empty"><p class="empty-title">Not in the latest ideal stock</p>
+  <p class="empty-subtitle text-secondary">{{ g }} has no stock and no forecast demand.</p></div>
+{% else %}
+{% include "_adjust_ideal.html" %}
+
+{{ ui.section("How the ideal is set", "the largest of demand, choice and the display minimum, unless fixed") }}
+<div class="small text-secondary mb-2">Demand cover: forecast over {{ first.cover_days | num }} days at grade {{ first.grade }}
+  ({{ first.service_pct | num }}% of the time; spread {{ "%.1f" | format(first.dispersion or 1) }}×). Choice: {{ first.choice_months | num }} months of
+  forecast demand. Display minimum: {{ rules.display_min_pcs }} where the branch sold in the last {{ rules.display_min_months }} months.
+  Implied turn at the ideal: {{ "%.2f" | format(first.implied_turn) if first.implied_turn is not none else "–" }}×.</div>
+<div class="mb-3">{{ ui.table_card("By branch", t, icon="ti-building-store") }}</div>
+
+{{ ui.section("Has the forecast been right?", "the accuracy test for its product and item group") }}
+<div class="row row-cards mb-3">
+  {% for a in acc %}
+  <div class="col-md-6"><div class="card"><div class="card-body small">
+    <div class="text-secondary">{{ "Product" if a.level == "product" else "Item group" }}</div>
+    <div class="h3 mb-1">{{ a.key }}</div>
+    {% if a.wape is none %}No sales during the test period.{% else %}
+    Forecast error <b>{{ "%.0f%%" | format(100 * a.wape) }}</b> against {{ "%.0f%%" | format(100 * a.wape_last_year) }} (same months last year)
+    and {{ "%.0f%%" | format(100 * a.wape_avg12) }} (12-month average); bias {{ "%+.0f%%" | format(100 * a.bias) }} over {{ a.actual | num }} pieces sold.
+    <span class="badge {{ 'bg-green-lt' if a.better else 'bg-secondary-lt' }}">{{ "better than both" if a.better else "not better than both" }}</span>{% endif %}
+  </div></div></div>
+  {% else %}<div class="col-12 text-secondary small">Not tested (too little history).</div>{% endfor %}
+</div>
+
+{% if history %}
+{{ ui.section("Adjustment history") }}
+<div class="card mb-3"><div class="list-group list-group-flush small">
+  {% for h in history %}<div class="list-group-item py-2">{{ h.changed_at | date("%d %b %Y %H:%M") }} · {{ h.changed_by }} ·
+    {{ h.row_key }}: {{ h.old_value if h.old_value is not none else "calculated" }} → {{ h.new_value if h.new_value is not none else "calculated" }}
+    {% if h.note %}· “{{ h.note }}”{% endif %}</div>{% endfor %}
+</div></div>
+{% endif %}
+{% endif %}
+{% endblock %}

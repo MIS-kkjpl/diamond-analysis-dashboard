@@ -67,47 +67,36 @@ RULES = [
          "pause-buying suggestions for them.", "list",
          choices=("Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND", "Broken Dia Jew",
                   "Customer Diamond")),
-    # ── weighted stock turn per brick (kkj.metrics.brick_turn) ──
-    Rule("target_turn", "Stock turn", "Reference stock turn", 1.0, "× a year",
-         "The turn the Stock turn page compares each brick with. Analysis only: Increase / Reduce recommendations "
-         "follow the ideal stock (Ideal stock section). The company turns about 0.5x today.", min=0.1, max=12),
-    Rule("turn_band_pct", "Stock turn", "Keep stock as it is when the turn is within", 10.0, "% of the ideal",
-         "Inside this band a brick is left alone; below it is a candidate to reduce, above it to increase.",
-         min=0, max=50),
-    Rule("turn_availability_pct", "Stock turn", "A window counts when the brick was in stock in at least", 60.0,
+    # ── weighted stock turn per brick (kkj.metrics.brick_turn): how turn is MEASURED; there is no turn target —
+    #    each group's ideal turn is the one its ideal stock implies ──
+    Rule("turn_availability_pct", "Turn measurement", "A window counts when the brick was in stock in at least", 60.0,
          "% of its fortnights", "Turn is only trusted over a window where the brick was actually available.",
          min=10, max=100),
-    Rule("turn_history_pct", "Stock turn", "A window needs stock data for at least", 60.0, "% of its fortnights",
+    Rule("turn_history_pct", "Turn measurement", "A window needs stock data for at least", 60.0, "% of its fortnights",
          "Fortnights without a usable stock snapshot (missing or set aside by the data checks) are not counted "
          "against a brick; below this share the window is not judged at all.", min=10, max=100),
-    Rule("turn_w3_all", "Stock turn", "All three windows qualify: weight of the last 3 months", 60.0, "%",
+    Rule("turn_w3_all", "Turn measurement", "All three windows qualify: weight of the last 3 months", 60.0, "%",
          "The three weights are scaled to add up to 100.", min=0, max=100),
-    Rule("turn_w6_all", "Stock turn", "All three windows qualify: weight of the last 6 months", 30.0, "%", "", min=0, max=100),
-    Rule("turn_w12_all", "Stock turn", "All three windows qualify: weight of the last 12 months", 10.0, "%", "", min=0, max=100),
-    Rule("turn_w6_of_6_12", "Stock turn", "Only 6 and 12 months qualify: weight of 6 months", 75.0, "%",
+    Rule("turn_w6_all", "Turn measurement", "All three windows qualify: weight of the last 6 months", 30.0, "%", "", min=0, max=100),
+    Rule("turn_w12_all", "Turn measurement", "All three windows qualify: weight of the last 12 months", 10.0, "%", "", min=0, max=100),
+    Rule("turn_w6_of_6_12", "Turn measurement", "Only 6 and 12 months qualify: weight of 6 months", 75.0, "%",
          "12 months gets the rest.", min=0, max=100),
-    Rule("turn_w3_of_3_6", "Stock turn", "Only 3 and 6 months qualify (new product): weight of 3 months", 75.0, "%",
+    Rule("turn_w3_of_3_6", "Turn measurement", "Only 3 and 6 months qualify (new product): weight of 3 months", 75.0, "%",
          "6 months gets the rest.", min=0, max=100),
-    Rule("turn_brick_levels", "Stock turn", "A brick is made of", ["purity", "item_name", "category", "sub_category",
+    Rule("turn_brick_levels", "Turn measurement", "A brick is made of", ["purity", "item_name", "category", "sub_category",
                                                                    "weight_band"], "",
          "Purity – Product (item) – Variety (category) – Type (sub-category) – Weight range.", "list",
          choices=("purity", "item_name", "category", "sub_category", "weight_band")),
-    Rule("turn_group_levels", "Stock turn", "A brick group (where recommendations are made) is made of",
+    Rule("turn_group_levels", "Turn measurement", "A brick group (where recommendations are made) is made of",
          ["purity", "item_name", "weight_band"], "",
          "Bricks are tracked individually; recommendations are made per group of bricks, from the group's pooled "
          "stock and sales, with its bricks listed as evidence.", "list",
          choices=("purity", "item_name", "category", "sub_category", "weight_band")),
-    Rule("turn_weight_basis", "Stock turn", "Weight range measured by", "diamond_ct", "",
+    Rule("turn_weight_basis", "Turn measurement", "Weight range measured by", "diamond_ct", "",
          "diamond_ct = total diamond weight (the usual measure for diamond jewellery); gross_wt = gross weight in "
          "grams (gold jewellery). Change the edges below with it.", "choice", choices=("diamond_ct", "gross_wt")),
-    Rule("turn_weight_edges", "Stock turn", "Weight range edges", [0.1, 0.25, 0.5, 1.0, 2.0, 5.0], "ct (or g)",
+    Rule("turn_weight_edges", "Turn measurement", "Weight range edges", [0.1, 0.25, 0.5, 1.0, 2.0, 5.0], "ct (or g)",
          "Boundaries between weight ranges, smallest first.", "list"),
-    Rule("turn_hold_months", "Stock turn", "Hold a thin brick with healthy neighbours for", 3, "months",
-         "A brick with too little availability to judge, whose neighbouring weight ranges turn at the ideal "
-         "rate, is kept this long before it is judged again.", "int", min=1, max=12),
-    Rule("turn_min_change_pcs", "Stock turn", "Smallest change worth recommending", 2, "pieces",
-         "Increase / reduce recommendations are raised only when the ideal stock differs by at least this.",
-         "int", min=1, max=50),
     # ── demand forecast (kkj.metrics.forecast) ──
     Rule("fc_exclude_orders", "Demand forecast", "Leave customer-order sales out of demand", True, "",
          "Sales of pieces booked against a customer order are custom work, not demand the stock on the counter has "
@@ -180,9 +169,15 @@ RULES = [
          "months of its forecast sales, whatever the replacement time. 12 = an implied turn of about 1x, 18 about "
          "0.67x (chosen Nov 2026: leaner without a shock). Set it per "
          "product or group under Settings → Ideal stock by group (e.g. longer for bridal sets).", min=0, max=60),
+    Rule("ideal_min_change_pcs", "Ideal stock", "Smallest change worth recommending", 2, "pieces",
+         "Increase / reduce recommendations are raised only when the ideal differs from what is held by at least this.",
+         "int", min=1, max=50),
+    Rule("override_review_days", "Ideal stock", "Review an adjusted ideal after", 90, "days",
+         "An ideal fixed by hand comes back as a recommendation after this long, with what sold since, to keep, change "
+         "or remove: so adjustments are checked against what actually happened.", "int", min=7, max=730),
     Rule("ideal_band_pct", "Ideal stock", "Leave stock as it is when within", 20.0, "% of the ideal",
          "Small differences are not worth acting on. A change also has to be at least the smallest change worth "
-         "recommending (Stock turn section).", min=0, max=100),
+         "recommending (above).", min=0, max=100),
     # ── seasonality (kkj.metrics.seasonality) ──
     Rule("turn_seasonal_adjust", "Seasonality", "Adjust stock turn for the season", True, "",
          "A 3-month window over Diwali holds far more than a quarter of the year's sales. When on, each window's "

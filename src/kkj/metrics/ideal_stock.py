@@ -160,6 +160,7 @@ def apply_overrides(rows, overrides):
     split over the matching (brick group, branch) rows in proportion to their calculated ideals. The more specific wins:
     product at all branches, then product at a branch, then brick group at all branches, then brick group at a branch."""
     rows["override_pcs"], rows["override_reason"] = np.nan, None
+    rows["calc_pcs"] = rows["ideal_pcs"].astype(float)            # what the system calculated, before any fix
     if overrides is None or not len(overrides):
         return
     col = {"product": "item_name", "group": "brick_group"}
@@ -178,10 +179,10 @@ def apply_overrides(rows, overrides):
 
 
 def status(current, ideal, rules):
-    """keep / increase / reduce / phase_out: outside the ideal ± ideal_band_pct AND at least turn_min_change_pcs."""
+    """keep / increase / reduce / phase_out: outside the ideal ± ideal_band_pct AND at least ideal_min_change_pcs."""
     current, ideal = np.asarray(current, dtype=float), np.asarray(ideal, dtype=float)
     band = rules["ideal_band_pct"] / 100
-    need = np.maximum(rules["turn_min_change_pcs"], band * ideal)
+    need = np.maximum(rules["ideal_min_change_pcs"], band * ideal)
     change = ideal - current
     return np.select([(ideal == 0) & (current > 0), change >= need, -change >= need],
                      ["phase_out", "increase", "reduce"], "keep")
@@ -192,7 +193,8 @@ def company(rows, rules):
     status; branch rows stay as the evidence."""
     agg = rows.groupby("brick_group").agg(
         item_class_group=("item_class_group", "first"), purity=("purity", "first"), item_name=("item_name", "first"),
-        current_pcs=("current_pcs", "sum"), ideal_pcs=("ideal_pcs", "sum"), annual=("annual", "sum"),
+        current_pcs=("current_pcs", "sum"), ideal_pcs=("ideal_pcs", "sum"), calc_pcs=("calc_pcs", "sum"),
+        annual=("annual", "sum"),
         cover_demand=("cover_demand", "sum"), grade=("grade", "first"), service_pct=("service_pct", "first"),
         cover_days=("cover_days", "max"), overrides=("override_pcs", lambda s: int(s.notna().sum())))
     agg["change_pcs"] = agg["ideal_pcs"] - agg["current_pcs"]

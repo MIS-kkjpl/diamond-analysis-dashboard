@@ -121,7 +121,6 @@ def stock_turn(search=None, verdict=None, branch=None, level="group"):
         if branch:
             scope = c.execute(text("SELECT DISTINCT scope FROM brain.brick_turn WHERE scope ILIKE :b LIMIT 1"),
                               {"b": f"%{branch}%"}).scalar()
-        default_ideal = rules_mod.load(c)["target_turn"]
         df = pd.read_sql(text("""SELECT brick, item_class_group, current_pcs, ideal_pcs, change_pcs, current_value,
                                         blended_turn, ideal_turn, ideal_source, status, sold_12m, as_of
                                  FROM brain.brick_turn WHERE as_of = (SELECT max(as_of) FROM brain.brick_turn)
@@ -130,8 +129,9 @@ def stock_turn(search=None, verdict=None, branch=None, level="group"):
     df = _filter(df, brick=search, status=verdict)
     df["size"] = df["change_pcs"].abs() * df["current_value"].div(df["current_pcs"].replace(0, np.nan)).fillna(0)
     df = df.sort_values("size", ascending=False).drop(columns="size")
-    return {"scope": scope or "Company", "level": level, "ideal_turn_default": default_ideal,
-            "explain": "turn = a year's sales / average stock held; verdict compares the blended turn with the ideal ±10%",
+    return {"scope": scope or "Company", "level": level,
+            "explain": "turn = a year's sales / average stock held; ideal_turn = the turn the group's ideal stock implies "
+                       "(no turn target is set by people); verdict compares the blended turn with it",
             **_table(df.drop(columns="as_of"))}
 
 
@@ -148,7 +148,7 @@ def recommendations(search=None, kind=None, status="open"):
         df = df[(df["title"].str.casefold().str.contains(s, regex=False)) | (df["summary"].fillna("").str.casefold().str.contains(s, regex=False))]
     df = _filter(df, kind=kind)
     return {"note": "kinds: transfer, understock (replenish), offer (markdown), liquidate (clearance), turn_increase/"
-                    "turn_reduce/turn_phase_out (purchasing), festival, broken_set, supplier_slow/fast, discount",
+                    "turn_reduce/turn_phase_out (purchasing, from ideal stock), ideal_review (a fixed ideal due for review), festival, broken_set, supplier_slow/fast, discount",
             **_table(df, n=25)}
 
 

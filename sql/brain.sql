@@ -163,6 +163,7 @@ GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA brain TO dashboard_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA brain TO dashboard_app;
 GRANT DELETE ON brain.brick_turn TO dashboard_app;      -- a refresh replaces that stock date's set
 GRANT DELETE ON brain.ideal_stock, brain.forecast_accuracy TO dashboard_app;
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS calc_pcs numeric;     -- the calculated ideal (before any fix)
 ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS choice_months numeric;
 ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS for_choice numeric;
 ALTER DEFAULT PRIVILEGES FOR ROLE erp_etl IN SCHEMA brain GRANT SELECT ON TABLES TO powerbi_reader, dashboard_app;

@@ -85,6 +85,7 @@ def _stock_ctx(error=None, saved=None, form=None):
         WITH latest AS (SELECT * FROM brain.ideal_stock WHERE as_of = (SELECT max(as_of) FROM brain.ideal_stock)
                         AND scope <> 'Company')
         SELECT o.level, o.key, o.branch, o.pcs, o.reason, o.updated_by, o.updated_at AT TIME ZONE 'Asia/Kolkata' AS updated_at,
+               o.review_on, o.calc_at_fix,
                (SELECT sum(l.ideal_pcs) FROM latest l
                 WHERE (CASE o.level WHEN 'group' THEN l.brick_group ELSE l.item_name END) = o.key
                   AND (o.branch = '*' OR l.scope = o.branch)) AS applied
@@ -148,45 +149,16 @@ async def save_stock_param(request: Request):
 
 @router.post("/ideal-stock/override", response_class=HTMLResponse)
 async def save_override(request: Request):
+    from kkj.brain import fixes
     form = await request.form()
-    level, key = form.get("level", ""), (form.get("key") or "").strip()
-    branch, reason = (form.get("branch") or "").strip(), (form.get("reason") or "").strip()
-    def again(error=None):
-        return templates.TemplateResponse(request, "_stock_params.html", _stock_ctx(error))
-    if level not in FIX_LEVELS or not key or not branch:
-        return again("Choose a brick group or product, and a branch (or all branches).")
-    where = "all branches" if branch == "*" else branch
-    by = who(request)
+    level, key, branch = form.get("level", ""), (form.get("key") or "").strip(), (form.get("branch") or "").strip()
     with engine().begin() as conn:
-        old = conn.execute(text("""SELECT pcs FROM config.ideal_stock_override
-                                   WHERE level = :l AND key = :k AND branch = :b"""),
-                           {"l": level, "k": key, "b": branch}).scalar()
         if form.get("delete") == "1":
-            conn.execute(text("DELETE FROM config.ideal_stock_override WHERE level = :l AND key = :k AND branch = :b"),
-                         {"l": level, "k": key, "b": branch})
-            new, msg = None, f"Removed the fixed ideal for {key} at {where}; it is calculated again from the next refresh."
+            msg, error = fixes.remove(conn, level, key, branch, who(request)), None
         else:
-            if not reason:
-                return again("A fixed ideal needs a reason, so the correction stays visible.")
-            try:
-                new = int(form.get("pcs", ""))
-                if not 0 <= new <= 100_000:
-                    raise ValueError
-            except ValueError:
-                return again("Pieces: a whole number from 0.")
-            conn.execute(text("""INSERT INTO config.ideal_stock_override (level, key, branch, pcs, reason, updated_by)
-                                 VALUES (:l, :k, :b, :p, :r, :by)
-                                 ON CONFLICT (level, key, branch) DO UPDATE SET pcs = EXCLUDED.pcs,
-                                 reason = EXCLUDED.reason, updated_at = now(), updated_by = EXCLUDED.updated_by"""),
-                         {"l": level, "k": key, "b": branch, "p": new, "r": reason, "by": by})
-            msg = (f"{FIX_LEVELS[level]} {key} at {where}: ideal fixed at {new}"
-                   + (", split by the calculated ideals" if level == "product" or branch == "*" else "")
-                   + ". Recommendations follow at the next refresh.")
-        conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value, note)
-                             VALUES (:by, 'ideal_stock_override', :k, CAST(:old AS jsonb), CAST(:new AS jsonb), :note)"""),
-                     {"by": by, "k": f"{level}: {key} @ {where}", "old": json.dumps(old), "new": json.dumps(new),
-                      "note": reason or None})
-    return templates.TemplateResponse(request, "_stock_params.html", _stock_ctx(saved=msg))
+            msg, error = fixes.save(conn, level, key, branch, form.get("pcs"), form.get("reason"), who(request),
+                                    rules_mod.load(conn)["override_review_days"])
+    return templates.TemplateResponse(request, "_stock_params.html", _stock_ctx(error=error, saved=msg))
 
 
 def _festivals_ctx(error=None, saved=None):

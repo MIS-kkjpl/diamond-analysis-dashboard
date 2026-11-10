@@ -1,7 +1,7 @@
 """
 Decision generators: current stock + recent sales + business rules -> candidate decisions.
-Purchasing is decided per brick group by stock_turn() (it replaced the earlier per-product "hold purchases"
-and price-band signals, which could contradict it).
+Purchasing is decided per brick group by ideal_stock() from the demand forecast (kkj.metrics.ideal_stock); ideals
+fixed by hand come back for review through ideal_reviews().
 
 Pure functions. Each returns a list of dicts ready for kkj.brain.store (action_key, kind,
 title, summary, branch, subject, impact_value, impact_label, confidence, evidence, pieces).
@@ -25,7 +25,7 @@ from kkj.metrics.sets import PLACE_SEP, unit_word
 
 KIND_WEIGHT = {"understock": 1.0, "transfer": 1.0, "discount": 0.9, "offer": 0.8, "liquidate": 0.7,
                "supplier_slow": 0.6, "pause_buying": 0.6, "supplier_fast": 0.5, "buy_band": 0.5,
-               "turn_increase": 0.9, "turn_reduce": 0.7, "turn_phase_out": 0.6, "festival": 0.95,
+               "turn_increase": 0.9, "turn_reduce": 0.7, "turn_phase_out": 0.6, "ideal_review": 0.85, "festival": 0.95,
                "broken_set": 0.8}
 
 
@@ -295,75 +295,6 @@ def _turn(x):
     return "–" if x is None or pd.isna(x) else "∞" if np.isinf(x) else f"{x:.2f}×"
 
 
-def stock_turn(turns, rules):
-    """Increase / reduce / phase out per brick GROUP (company level), from kkj.brain.run.brick_turns.
-
-    The group's own pooled turn decides; its bricks (with their own verdicts and ideals) and the split by
-    branch are the evidence.
-    """
-    min_change = rules["turn_min_change_pcs"]
-    groups = turns[(turns["level"] == "group") & (turns["scope"] == "Company")]
-    bricks = turns[(turns["level"] == "brick") & (turns["scope"] == "Company")]
-    by_branch = turns[(turns["level"] == "group") & (turns["scope"] != "Company")]
-    actions = []
-    for _, r in groups.iterrows():
-        status, change, ideal = r["status"], r["change_pcs"], r["ideal_turn"]
-        u = unit_word(r["item_name"])                     # counted in selling units: 'sets' or 'pieces'
-        buy = r["item_class_group"] not in rules["no_buy_groups"]
-        if status in ("increase", "stock_up") and change >= min_change and buy:
-            kind, title = "turn_increase", f"Increase {r['brick']} to {r['ideal_pcs']:.0f} {u}"
-            impact = change * (r["avg_piece_value"] or 0)
-            label = f"≈{money(impact)} more stock ({change:+.0f} {u})"
-        elif status == "reduce" and -change >= min_change:
-            kind, title = "turn_reduce", f"Reduce {r['brick']} to {r['ideal_pcs']:.0f} {u}"
-            impact = -change * (r["avg_piece_value"] or 0)
-            label = f"≈{money(impact)} more than its sales need ({change:+.0f} {u})"
-        elif status == "phase_out" and r["current_pcs"] > 0:
-            kind, title = "turn_phase_out", f"Phase out {r['brick']}"
-            impact, label = r["current_value"], f"{money(r['current_value'])} held ({r['current_pcs']:.0f} {u})"
-        else:
-            continue
-        set_at = {"default": "default", "item_group": "item group", "product": "product", "group": "this group"}
-        target = f"{ideal:g}× ({set_at.get(r['ideal_source'], r['ideal_source'])} ideal)"
-        if status in ("increase", "reduce"):
-            summary = (f"Turns {_turn(r['blended_turn'])} a year (blend {r['weights']} of 3/6/12 months) against "
-                       f"{target}. Holding {r['current_pcs']:.0f} {u}, selling about {r['annual_sales']:.0f} a year.")
-        elif status == "stock_up":
-            summary = (f"In stock in only {r['avail_12m']:.0f} of {r['data_12m']:.0f} fortnights, yet sold "
-                       f"{r['sold_12m']:.0f} {u} in 12 months, and its neighbouring weight ranges are out of range too: "
-                       f"stock it properly or accept the lost sales.")
-        else:
-            summary = (f"Turns {_turn(r['blended_turn'])} a year against {target} on thin data (in stock in "
-                       f"{r['avail_12m']:.0f} of {r['data_12m']:.0f} fortnights), and its neighbouring weight ranges "
-                       f"are out of range too.")
-        product = bricks[(bricks["item_name"] == r["item_name"]) & (bricks["purity"] == r["purity"])]
-        p_held, p_sold, p_avg = product["current_pcs"].sum(), product["sold_12m"].sum(), product["avg_pcs_12m"].sum()
-        inside = bricks[bricks["brick_group"] == r["brick"]].copy()
-        inside["size"] = inside["change_pcs"].abs()
-        branches = by_branch[by_branch["brick"] == r["brick"]]
-        evidence = {
-            "turn": {w: _turn(r[f"turn_{w}"]) for w in ("3m", "6m", "12m")},
-            "in stock (fortnights)": {w: f"{r[f'avail_{w}']:.0f} of {r[f'data_{w}']:.0f}" for w in ("3m", "6m", "12m")},
-            f"sold ({u})": {w: float(r[f"sold_{w}"]) for w in ("3m", "6m", "12m")},
-            "qualifying windows": r["pattern"], "weights 3/6/12": r["weights"] or "–",
-            "blended turn": _turn(r["blended_turn"]), "ideal turn": target,
-            f"now ({u})": float(r["current_pcs"]), f"ideal ({u})": float(r["ideal_pcs"]),
-            f"{r['purity']} {r['item_name']} overall (all weight ranges)".strip(): (
-                f"{p_held:.0f} {u} held ({money(product['current_value'].sum())}), {p_sold:.0f} sold in 12 months, "
-                f"turn {_turn(p_sold / p_avg if p_avg else float('nan'))}, "
-                + (f"{p_held / (p_sold / 12):.0f} months of stock" if p_sold > 0 else "no sales")),
-            "bricks in this group": {
-                b["brick"]: f"{b['current_pcs']:.0f} → {b['ideal_pcs']:.0f} {u}, turn {_turn(b['blended_turn'])} "
-                            f"vs {b['ideal_turn']:g}×, {b['status'].replace('_', ' ')}"
-                for _, b in inside.sort_values("size", ascending=False).head(15).iterrows()},
-            "by branch": {short(b["scope"]): f"{b['current_pcs']:.0f} {u} held, {b['sold_12m']:.0f} sold in 12 months, "
-                                             f"{b['status'].replace('_', ' ')}"
-                          for _, b in branches.sort_values("current_pcs", ascending=False).iterrows()}}
-        actions.append(_action(kind, r["brick"], title, summary, impact, label, confidence(r["sold_12m"]), evidence,
-                               subject={"group": r["brick"], "item": r["item_name"], "item_group": r["item_class_group"]}))
-    return actions
-
-
 def _pct(x):
     return "–" if x is None or pd.isna(x) else f"{100 * x:.0f}%"
 
@@ -372,7 +303,7 @@ def ideal_stock(ideal, turns, rules):
     """Increase / reduce / phase out per brick GROUP (company), from the ideal stock (kkj.brain.run.demand_and_ideal):
     company stock against the sum of its branches' ideals. The forecast, its tested accuracy, the service grade and
     each branch's ideal are the evidence; today's turn is shown as a check."""
-    min_change = rules["turn_min_change_pcs"]
+    min_change = rules["ideal_min_change_pcs"]
     comp, branch, acc = ideal["company"], ideal["branch"], ideal["accuracy"]
     groups = turns[(turns["level"] == "group") & (turns["scope"] == "Company")].set_index("brick")
     product_acc = acc[acc["level"] == "product"].set_index("key") if len(acc) else pd.DataFrame()
@@ -441,6 +372,65 @@ def ideal_stock(ideal, turns, rules):
         actions.append(_action(kind, r["brick_group"], title, summary, impact, label, conf, evidence,
                                subject={"group": r["brick_group"], "item": r["item_name"],
                                         "item_group": r["item_class_group"]}))
+    return actions
+
+
+def ideal_reviews(ideal, overrides, turns, rules):
+    """One recommendation per fixed ideal that is due for review (review_on reached): what was fixed and why, what
+    the system calculated then and now, and what sold since, to keep, change or remove (kkj.brain.fixes)."""
+    if overrides is None or not len(overrides):
+        return []
+    rows, demand, as_of = ideal["branch"], ideal.get("demand"), pd.Timestamp(ideal.get("as_of"))
+    value = turns[(turns["level"] == "group") & (turns["scope"] == "Company")].set_index("brick")["avg_piece_value"]
+    col = {"group": "brick_group", "product": "item_name"}
+    actions = []
+    for o in overrides.itertuples():
+        due = pd.Timestamp(o.review_on) if pd.notna(o.review_on) else pd.Timestamp(o.updated_at).tz_localize(None) \
+            + pd.Timedelta(days=rules["override_review_days"])
+        if due > as_of:
+            continue
+        hit = rows[(rows[col[o.level]] == o.key) & ((rows["branch"] == o.branch) if o.branch != "*" else True)]
+        where = "all branches" if o.branch == "*" else short(o.branch)
+        since = pd.Timestamp(o.updated_at).tz_localize(None).normalize()
+        days = max((as_of - since).days, 1)
+        sold = 0.0
+        if demand is not None and len(demand):
+            d = demand[(demand[col[o.level]] == o.key) & (demand["sale_date"] > since) & (demand["pcs"] > 0)]
+            if o.branch != "*":
+                d = d[d["branch"] == o.branch]
+            sold = float(d["pcs"].sum())
+        expected = float(o.annual_at_fix) * days / 365 if pd.notna(o.annual_at_fix) else None
+        calc_now = float(hit["calc_pcs"].sum()) if len(hit) else None
+        held = float(hit["current_pcs"].sum()) if len(hit) else 0.0
+        unit = float(value.reindex(hit["brick_group"].unique()).astype(float).mean()) if len(hit) else 0.0
+        unit = unit if np.isfinite(unit) else 0.0
+        gap = abs(o.pcs - (calc_now or 0))
+        verdict = ("sold about what the forecast expected" if expected is None or expected == 0 or 0.8 <= sold / expected <= 1.25
+                   else "sold MORE than the forecast expected" if sold > expected else "sold LESS than the forecast expected")
+        title = f"Review the fixed ideal: {o.key} at {where}"
+        summary = (f"Fixed at {o.pcs} on {since:%d %b %Y} by {o.updated_by or 'someone'}: \u201c{o.reason}\u201d. "
+                   + (f"The system calculated {float(o.calc_at_fix):.0f} then" if pd.notna(o.calc_at_fix) else "")
+                   + (f" and {calc_now:.0f} now. " if calc_now is not None else ". ")
+                   + f"In the {days} days since, it sold {sold:.0f}"
+                   + (f" against {expected:.1f} forecast ({verdict})" if expected is not None else "")
+                   + f"; holding {held:.0f}. Keep the fix (set it again), change it, or remove it to go back to the calculation.")
+        evidence = {
+            "fixed ideal": f"{o.pcs} ({where})", "reason": o.reason, "fixed by": f"{o.updated_by or ''}, {since:%d %b %Y}",
+            "calculated when fixed": f"{float(o.calc_at_fix):.0f}" if pd.notna(o.calc_at_fix) else "–",
+            "calculated now": f"{calc_now:.0f}" if calc_now is not None else "–",
+            "12-month forecast when fixed": f"{float(o.annual_at_fix):.1f}" if pd.notna(o.annual_at_fix) else "–",
+            "12-month forecast now": f"{float(hit['annual'].sum()):.1f}" if len(hit) else "–",
+            f"sold in the {days} days since": f"{sold:.0f}",
+            "forecast for those days (when fixed)": f"{expected:.1f}" if expected is not None else "–",
+            "held when fixed / now": f"{float(o.held_at_fix):.0f} / {held:.0f}" if pd.notna(o.held_at_fix) else f"– / {held:.0f}",
+        }
+        actions.append(_action("ideal_review", f"{o.level}|{o.key}|{o.branch}", title, summary, gap * unit,
+                               f"{o.pcs} fixed vs {calc_now:.0f} calculated" if calc_now is not None else f"{o.pcs} fixed",
+                               "medium", evidence,
+                               branch=None if o.branch == "*" else o.branch,
+                               subject={"group": o.key if o.level == "group" else None,
+                                        "item": o.key if o.level == "product" else (hit["item_name"].iloc[0] if len(hit) else None),
+                                        "fix_level": o.level, "fix_key": o.key, "fix_branch": o.branch}))
     return actions
 
 

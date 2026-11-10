@@ -50,7 +50,18 @@ def seasonal_shares(conn, rules, as_of):
             "group": sn.shares_for_windows(by_group, "item_class_group", as_of, windows)}
 
 
-def brick_turns(conn, rules, as_of, showrooms):
+def implied_turns(ideal):
+    """(ideals table, company default) for kkj.metrics.brick_turn: each brick group's turn at its ideal stock."""
+    comp = ideal["company"] if ideal is not None else pd.DataFrame()
+    if comp is None or comp.empty:
+        return None, None
+    ok = comp[(comp["ideal_pcs"] > 0) & comp["implied_turn"].notna() & np.isfinite(comp["implied_turn"].astype(float))]
+    table = pd.DataFrame({"level": "group", "key": ok["brick_group"], "ideal": ok["implied_turn"].astype(float)})
+    default = float(comp["annual"].sum() / comp["ideal_pcs"].sum()) if comp["ideal_pcs"].sum() > 0 else None
+    return table, default
+
+
+def brick_turns(conn, rules, as_of, showrooms, ideal=None):
     """Weighted stock turn per brick and per brick group, for the company and each showroom.
 
     Returns one DataFrame with scope ('Company' or a branch) and level ('brick' or 'group'); for groups
@@ -62,15 +73,15 @@ def brick_turns(conn, rules, as_of, showrooms):
     stock = bt.add_brick(sets.stock_units(q.brick_stock(conn, [s for _, s in grid if s is not None])), rules)
     sales = bt.add_brick(sets.sales_units(q.brick_sales(conn, (as_of - timedelta(days=bt.FORTNIGHT * bt.WINDOWS["12m"])).date())),
                          rules)
-    ideals = q.ideal_turns(conn)
+    ideals, default = implied_turns(ideal)                 # no turn target: the turn each ideal stock implies
     season = seasonal_shares(conn, rules, as_of) if rules["turn_seasonal_adjust"] else None
     shop_stock, shop_sales = stock[stock["branch"].isin(showrooms)], sales[sales["branch"].isin(showrooms)]
     parts = []
     for level, name in (("brick", "brick"), ("brick_group", "group")):
-        company = bt.compute(stock, sales, as_of, rules, level=level, ideals=ideals, season=season) \
-            .assign(scope="Company")
+        company = bt.compute(stock, sales, as_of, rules, level=level, ideals=ideals, season=season,
+                             default_ideal=default).assign(scope="Company")
         branch = bt.compute(shop_stock, shop_sales, as_of, rules, level=level, by=("branch",), ideals=ideals,
-                            season=season).rename(columns={"branch": "scope"})
+                            season=season, default_ideal=default).rename(columns={"branch": "scope"})
         for df in (company, branch):
             if level == "brick_group":
                 df = df.assign(brick=df["brick_group"])
@@ -143,7 +154,8 @@ def demand_and_ideal(conn, rules, as_of):
         if miss.any():
             look = pd.MultiIndex.from_frame(rows.loc[miss, ["brick_group", "branch"]])
             rows.loc[miss, c] = info[c].reindex(look).to_numpy()
-    return {"branch": rows, "company": ist.company(rows, rules), "accuracy": accuracy}
+    return {"branch": rows, "company": ist.company(rows, rules), "accuracy": accuracy, "demand": demand,
+            "as_of": as_of}
 
 
 def save_ideal_stock(conn, result, as_of, run_id):
@@ -256,12 +268,11 @@ def candidates(conn, rules):
     card = ins.supplier_scorecard(history, long_sales, h_start, h_end, bands, rules["min_supplier_pcs"])
     actions += gen.suppliers(card, stock)
 
-    turns = brick_turns(conn, rules, as_of, showrooms)
     ideal = demand_and_ideal(conn, rules, as_of)
-    if len(ideal["company"]):            # increase / reduce follow the ideal stock
+    turns = brick_turns(conn, rules, as_of, showrooms, ideal)
+    if len(ideal["company"]):            # increase / reduce follow the ideal stock; fixed ideals come back for review
         actions += gen.ideal_stock(ideal, turns, rules)
-    else:                                # no forecast possible (no history): the turn method as a fallback
-        actions += gen.stock_turn(turns, rules)
+        actions += gen.ideal_reviews(ideal, q.ideal_overrides(conn), turns, rules)
     actions += festival_candidates(conn, rules, as_of, stock)
     actions += gen.broken_sets(broken_sets(conn, stock), rules)
     return actions, as_of.date(), sales["sale_date"].max().date() if len(sales) else None, turns, ideal

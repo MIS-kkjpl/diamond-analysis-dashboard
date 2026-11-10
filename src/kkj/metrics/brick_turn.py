@@ -10,8 +10,9 @@ Two levels are computed. BRICKS (turn_brick_levels) are fine, for tracking. BRIC
 (turn_group_levels, default Purity – Product – Weight range) pool their bricks' stock and sales;
 recommendations are raised per group so the list stays workable, with the bricks as evidence.
 
-The ideal turn is set per brick, group, product or item group (config.ideal_turn, edited in
-Settings); the most specific one wins, else the default ideal (the target_turn rule).
+Nobody sets a turn target. Each brick group's ideal turn is the one its ideal stock implies (forecast year's
+sales ÷ ideal stock, kkj.metrics.ideal_stock), passed in as `ideals`; bricks take their group's, and anything
+without one the company's overall implied turn (`default_ideal`). Turn is a result to check, not a setting.
 
 For each brick or group, over three windows ending on the latest stock date:
 
@@ -27,12 +28,12 @@ Blend (weights are rules):  3+6+12 qualify -> 60/30/10;  6+12 -> 75/25;  3+6 (ne
 Only 3 months qualifies -> "too new". Anything else is not qualified: its 12-month turn is used
 with the exception check below.
 
-Status, with ideal = the ideal-turn rule and band = turn_band_pct:
+Status, with ideal = that implied turn and band = ideal_band_pct (the ideal stock's band):
   blended turn within ideal ± band          -> keep
   below                                     -> reduce   (more stock than its sales need)
   above                                     -> increase (sells faster than it is stocked)
   not qualified and out of range: if the neighbouring weight ranges of the same brick are both
-  within range -> hold (keep for turn_hold_months more); else phase out (below) or
+  within range -> hold (keep for HOLD_MONTHS more); else phase out (below) or
   stock up (above: sells whenever it is in stock).
   ideal stock (pcs) = blended annual sales / ideal turn.
 
@@ -45,6 +46,7 @@ import pandas as pd
 
 WINDOWS = {"3m": 6, "6m": 13, "12m": 26}            # fortnights per window
 FORTNIGHT = 14
+HOLD_MONTHS = 3                                       # a thin brick with healthy neighbours is held this long
 LEVELS = ("purity", "item_name", "category", "sub_category", "weight_band")
 LEVEL_LABELS = {"purity": "Purity", "item_name": "Product", "category": "Variety", "sub_category": "Type",
                 "weight_band": "Weight range"}
@@ -158,12 +160,13 @@ def _weights(pattern, rules):
     return w / w.sum() if w.sum() > 0 else None
 
 
-def compute(stock, sales, as_of, rules, level="brick", by=(), ideals=None, season=None):
+def compute(stock, sales, as_of, rules, level="brick", by=(), ideals=None, season=None, default_ideal=None):
     """One row per brick (level="brick") or brick group (level="brick_group"), per `by` (e.g. ("branch",)).
 
     stock: rows from add_brick for the grid's snapshot dates, with snapshot_date, pcs, value.
     sales: rows from add_brick of net sale lines (returns negative) over the last 12 months: sale_date, pcs.
-    ideals: config.ideal_turn rows (level, key, ideal), or None for the default ideal everywhere.
+    ideals: (level, key, ideal) rows: each group's implied turn at its ideal stock (or None).
+    default_ideal: for anything without one (the company's implied turn); else rules["target_turn"] if given, else 1.
     season: {"product": {item_name: {"3m": share, ...}}, "group": {item_class_group: {...}}} from
             kkj.metrics.seasonality: a window's sales are annualised by the share of a typical year it
             covers (its season) instead of by its length. None = by length.
@@ -217,9 +220,9 @@ def compute(stock, sales, as_of, rules, level="brick", by=(), ideals=None, seaso
                                        np.where(out[f"annual_{name}"] > 0, np.inf, np.nan))
         out[f"q_{name}"] = (len(cols) >= hist_need * n) & (out[f"avail_{name}"] >= avail_need * max(len(cols), 1))
 
-    band = rules["turn_band_pct"] / 100
-    out["ideal_turn"], out["ideal_source"] = resolve_ideal(out.reset_index().set_index(out.index), ideals,
-                                                           rules["target_turn"])
+    band = rules.get("turn_band_pct", rules.get("ideal_band_pct", 20.0)) / 100
+    default = default_ideal if default_ideal is not None else rules.get("target_turn", 1.0)
+    out["ideal_turn"], out["ideal_source"] = resolve_ideal(out.reset_index().set_index(out.index), ideals, default)
     rows = []
     for key, r in out.iterrows():
         ideal = r["ideal_turn"]

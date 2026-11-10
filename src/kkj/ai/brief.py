@@ -21,7 +21,7 @@ from kkj.metrics.summary import headline
 
 KIND_LABELS = {"transfer": "Transfer", "understock": "Replenish", "offer": "Markdown", "liquidate": "Clearance",
                "supplier_slow": "Supplier (slow)", "supplier_fast": "Supplier (fast)", "turn_increase": "Purchasing: increase",
-               "turn_reduce": "Purchasing: reduce", "turn_phase_out": "Purchasing: phase out", "festival": "Festival",
+               "turn_reduce": "Purchasing: reduce", "turn_phase_out": "Purchasing: phase out", "ideal_review": "Review a fixed ideal", "festival": "Festival",
                "broken_set": "Broken set", "discount": "Discount control", "pause_buying": "Pause buying", "buy_band": "Buy"}
 
 

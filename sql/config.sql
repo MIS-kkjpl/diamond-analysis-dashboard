@@ -168,3 +168,12 @@ ALTER TABLE config.stock_param DROP CONSTRAINT IF EXISTS stock_param_param_check
 ALTER TABLE config.stock_param ADD CONSTRAINT stock_param_param_check
     CHECK (param IN ('replacement_days', 'display_min', 'grade', 'choice_months'));
 RESET ROLE;
+
+-- The adjustment loop: each fixed ideal records what the system calculated when it was set, and comes back for
+-- review (a recommendation) on review_on with what sold since.
+SET ROLE erp_etl;
+ALTER TABLE config.ideal_stock_override ADD COLUMN IF NOT EXISTS review_on date;
+ALTER TABLE config.ideal_stock_override ADD COLUMN IF NOT EXISTS calc_at_fix numeric;     -- calculated ideal then
+ALTER TABLE config.ideal_stock_override ADD COLUMN IF NOT EXISTS annual_at_fix numeric;   -- 12-month forecast then
+ALTER TABLE config.ideal_stock_override ADD COLUMN IF NOT EXISTS held_at_fix numeric;     -- units held then
+RESET ROLE;

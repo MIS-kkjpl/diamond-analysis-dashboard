@@ -54,7 +54,7 @@
           sold in the last {{ rules.display_min_months }} months.</li>
         <li>The ideal is the largest of these, unless fixed by hand. The company ideal is the sum of its branches'; stock elsewhere
           (Head Office, wholesale) counts as held. Within ±{{ rules.ideal_band_pct | num }}% of the ideal (and at least
-          {{ rules.turn_min_change_pcs }} units) it is left as it is.</li>
+          {{ rules.ideal_min_change_pcs }} units) it is left as it is.</li>
       </ol>
     </div></div>
   </div>
@@ -68,7 +68,32 @@
   0, 1 or 2 pieces in two months, so much of that is chance, and the safety margin is sized from it.</div>
 <div class="mb-3">{{ ui.table_card("Forecast accuracy", acc, icon="ti-target-arrow") }}</div>
 
-{{ ui.section("Group by group", "biggest changes first; search, sort or download") }}
+{{ ui.section("Adjustments by management", "the people half of the loop") }}
+<div class="row row-cards mb-3">
+  <div class="col-lg-6"><div class="card h-100">
+    <div class="card-header"><h3 class="card-title"><i class="ti ti-bulb me-1"></i>What the adjustments say</h3></div>
+    <div class="card-body small">
+      {% for l in learn %}
+      <div class="mb-2"><b>{{ l.product }}</b>: {{ l.fixes }} fixes, typically {{ "%.0f%%" | format(100 * l.ratio) }} of the calculated
+        ideal ({{ l.reasons }}). Consider holding <b>{{ l.months }} months</b> for choice instead of {{ rules.choice_months | num }}
+        (<a href="/settings#tab-stock">Settings → Ideal stock by group</a>), so the calculation gets it right without fixes.</div>
+      {% else %}<div class="text-secondary">No pattern yet. When two or more fixes in a product point the same way, a rule change is
+        suggested here, so repeated corrections become part of the calculation.</div>{% endfor %}
+    </div></div></div>
+  <div class="col-lg-6"><div class="card h-100">
+    <div class="card-header"><h3 class="card-title"><i class="ti ti-hand-stop me-1"></i>Fixed ideals ({{ fixed | length }})</h3></div>
+    <div class="list-group list-group-flush small">
+      {% for f in fixed %}
+      <a class="list-group-item list-group-item-action py-2" href="/ideal-stock/group?g={{ f.key | urlencode }}&level={{ f.level }}">
+        <b>{{ f.key }}</b> @ {{ "all branches" if f.branch == "*" else f.branch | short }}: {{ f.pcs }}
+        {% if f.calc_at_fix is not none %}(calculated {{ f.calc_at_fix | num }}){% endif %} · “{{ f.reason }}” ·
+        {% if f.review_on and f.review_on <= today %}<span class="badge bg-yellow-lt">review due</span>{% elif f.review_on %}review {{ f.review_on | date("%d %b %Y") }}{% endif %}</a>
+      {% else %}<div class="list-group-item text-secondary">None. Open any group below to adjust its ideal; each fix comes back for
+        review after {{ rules.override_review_days }} days with what sold since.</div>{% endfor %}
+    </div></div></div>
+</div>
+
+{{ ui.section("Group by group", "biggest changes first; open a group to see the calculation or adjust it") }}
 <div class="mb-3">{{ ui.table_card("Brick groups: biggest changes first", t,
      sub=("Top " ~ n_shown ~ " of " ~ n_total ~ ". ") if n_total > n_shown else "", icon="ti-stack-2") }}</div>
 {% endif %}

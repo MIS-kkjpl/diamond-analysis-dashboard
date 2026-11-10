@@ -22,13 +22,14 @@ KINDS = {  # kind -> (label, Tabler icon, badge colour)
     "turn_increase": ("Purchasing", "ti-trending-up", "green"),
     "turn_reduce": ("Purchasing", "ti-trending-down", "orange"),
     "turn_phase_out": ("Purchasing", "ti-trash", "red"),
+    "ideal_review": ("Ideal review", "ti-hand-stop", "yellow"),
     "festival": ("Festival", "ti-calendar-event", "yellow"),
     "broken_set": ("Broken set", "ti-puzzle", "orange"),
 }
 GROUPS = {"all": ("All", None), "transfer": ("Transfers", ["transfer"]), "replenish": ("Replenishment", ["understock"]),
           "markdown": ("Markdowns", ["offer"]), "clearance": ("Clearance", ["liquidate"]),
           "supplier": ("Suppliers", ["supplier_slow", "supplier_fast"]),
-          "purchasing": ("Purchasing", ["turn_increase", "turn_reduce", "turn_phase_out"]),
+          "purchasing": ("Purchasing", ["turn_increase", "turn_reduce", "turn_phase_out", "ideal_review"]),
           "festival": ("Festivals", ["festival"]),
           "sets": ("Broken sets", ["broken_set"]),
           "discount": ("Discounts", ["discount"])}
@@ -171,8 +172,18 @@ def detail(request: Request, action_id: int):
     if features.on("ai_review"):
         from kkj.ai import review
         ai_notes = review.notes_for(action_id)
-    return render(request, "recommendation_detail.html", "recommendations", a=_prep(rows.iloc[0].to_dict()),
-                  history=history, follow=follow, follow_pieces=follow_pieces, ai_notes=ai_notes)
+    a = _prep(rows.iloc[0].to_dict())
+    adjust = {}                       # stock-level recommendations: adjust the ideal right here
+    subject = read("SELECT subject FROM brain.action WHERE action_id = :a", a=action_id)["subject"].iloc[0] or {}
+    subject = json.loads(subject) if isinstance(subject, str) else subject
+    if a["kind"] in ("turn_increase", "turn_reduce", "turn_phase_out") and subject.get("group"):
+        from kkj.web.analytics import adjust_ctx
+        adjust = adjust_ctx("group", subject["group"])
+    elif a["kind"] == "ideal_review" and subject.get("fix_key"):
+        from kkj.web.analytics import adjust_ctx
+        adjust = adjust_ctx(subject.get("fix_level", "group"), subject["fix_key"], branch=subject.get("fix_branch"))
+    return render(request, "recommendation_detail.html", "recommendations", a=a,
+                  history=history, follow=follow, follow_pieces=follow_pieces, ai_notes=ai_notes, **adjust)
 
 
 @router.post("/recommendations/{action_id}/{verb}", response_class=HTMLResponse)

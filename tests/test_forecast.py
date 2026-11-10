@@ -93,7 +93,7 @@ def test_a_product_override_at_all_branches_is_split_and_a_group_override_wins()
 
 
 def test_status_needs_both_the_band_and_the_smallest_change():
-    rules = {**RULES, "ideal_band_pct": 20.0, "turn_min_change_pcs": 2}
+    rules = {**RULES, "ideal_band_pct": 20.0, "ideal_min_change_pcs": 2}
     s = ist.status([10, 10, 10, 13, 3], [10, 13, 7, 10, 0], rules)
     assert list(s) == ["keep", "increase", "reduce", "reduce", "phase_out"]
 
@@ -113,3 +113,40 @@ def test_ideal_is_the_largest_of_demand_choice_and_display_minimum():
     r2 = ist.compute(f, current, pd.Series({"18KT · D RING · 0.25–0.5ct": 1e6}), set(), rules, params, pd.DataFrame(),
                      ({}, 1.0)).iloc[0]
     assert r2["for_choice"] == 6 and r2["ideal_pcs"] == max(6, r2["for_demand"])            # product override applies
+
+
+def test_a_fixed_ideal_due_for_review_comes_back_with_what_sold_since():
+    from kkj.brain import generators as gen
+    as_of = pd.Timestamp("2026-11-09")
+    branch = pd.DataFrame({"brick_group": ["G1", "G1"], "item_name": ["D NOSE PIN"] * 2, "branch": ["KJ2", "KJ3"],
+                           "calc_pcs": [30.0, 10.0], "ideal_pcs": [12.0, 4.0], "current_pcs": [20.0, 6.0],
+                           "annual": [24.0, 8.0]})
+    demand = pd.DataFrame({"brick_group": ["G1"] * 5, "item_name": ["D NOSE PIN"] * 5, "branch": ["KJ2"] * 5,
+                           "sale_date": pd.to_datetime(["2026-08-20", "2026-09-10", "2026-10-01", "2026-10-15", "2026-07-01"]),
+                           "pcs": [1.0] * 5})
+    turns = pd.DataFrame({"level": ["group"], "scope": ["Company"], "brick": ["G1"], "avg_piece_value": [20_000.0]})
+    o = pd.DataFrame([{"level": "product", "key": "D NOSE PIN", "branch": "*", "pcs": 16, "reason": "simple design",
+                       "updated_by": "Director", "updated_at": pd.Timestamp("2026-08-11", tz="Asia/Kolkata"),
+                       "review_on": pd.Timestamp("2026-11-09").date(), "calc_at_fix": 40, "annual_at_fix": 32,
+                       "held_at_fix": 30},
+                      {"level": "group", "key": "G1", "branch": "KJ3", "pcs": 4, "reason": "not due yet",
+                       "updated_by": "x", "updated_at": pd.Timestamp("2026-11-01", tz="Asia/Kolkata"),
+                       "review_on": pd.Timestamp("2027-01-30").date(), "calc_at_fix": 10, "annual_at_fix": 8,
+                       "held_at_fix": 6}])
+    acts = gen.ideal_reviews({"branch": branch, "demand": demand, "as_of": as_of}, o, turns, RULES)
+    assert len(acts) == 1                                   # only the one whose review date has come
+    a = acts[0]
+    assert a["kind"] == "ideal_review" and "D NOSE PIN" in a["title"] and "all branches" in a["title"]
+    assert "sold 4" in a["summary"] and "simple design" in a["summary"]       # 4 sales after the fix date
+    assert a["evidence"]["calculated now"] == "40" and a["subject"]["fix_branch"] == "*"
+
+
+def test_fixes_pointing_the_same_way_suggest_a_rule_change():
+    from kkj.brain import fixes
+    latest = pd.DataFrame({"scope": ["KJ2", "KJ3", "KJ7"], "brick_group": ["G1", "G2", "G3"],
+                           "item_name": ["D NOSE PIN"] * 3, "calc_pcs": [30.0, 20.0, 10.0], "ideal_pcs": [9.0, 6.0, 10.0]})
+    o = pd.DataFrame([{"level": "group", "key": "G1", "branch": "KJ2", "pcs": 9, "reason": "simple design"},
+                      {"level": "group", "key": "G2", "branch": "KJ3", "pcs": 6, "reason": "simple design"}])
+    s = fixes.suggestions(o, latest, 18)
+    assert len(s) == 1 and s[0]["product"] == "D NOSE PIN" and s[0]["months"] == pytest.approx(5.4)
+    assert fixes.suggestions(o.iloc[:1], latest, 18) == []          # one fix is not a pattern
