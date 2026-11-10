@@ -122,6 +122,16 @@ def login(session, settings):
     except (ErpError, ValueError) as e:
         log.warning(f"  Warning: setRoleCode failed ({type(e).__name__}); continuing.")
 
+    # A program holding several financial years: choose the year, as the ERP screen does (user/setFY)
+    if settings.get("fin_year"):
+        fy = post(session, "acme-document-web/user/setFY", "setFY", timeout=LOGIN_TIMEOUT,
+                  data=str(settings["fin_year"]), headers=JSON_HEADERS)
+        if not fy.ok or not isinstance((fy.json() or {}).get("data"), dict):
+            raise ErpError(f"Could not select financial year {settings['fin_year']}: HTTP {fy.status_code}.")
+        if fy.headers.get("authorization"):          # the token carries the chosen year: use the new one
+            session.headers["authorization"] = fy.headers["authorization"]
+        log.info(f"  Financial year {settings['fin_year']} selected.")
+
     log.info("  Logged in." + ("" if log_code else " (no logCode returned)"))
     return log_code
 

@@ -46,6 +46,9 @@ def optional(name, default):
 # ── ERP login ────────────────────────────────────────────────────────────────
 # Earlier financial years are separate ERP programs with their own login (set with scripts/set_erp_year.py)
 ERP_YEARS = {"2025-26": "54", "2024-25": "32", "2023-24": "22", "2022-23": "12", "2021-22": "12"}   # 2021-22 and 2022-23 share one program
+# A program can hold more than one financial year; after login the ERP screen picks one with user/setFY.
+# Program 12: id 9 = 2021-22 (what a login lands on), id 1 = 2022-23 (getFinYrFirmList).
+ERP_FIN_YEARS = {"2022-23": "1", "2021-22": "9"}
 
 
 def erp_login_settings(year=None):
@@ -68,6 +71,7 @@ def erp_login_settings(year=None):
         "role_code": optional(f"{tag}_ROLE_CODE", optional("ERP_ROLE_CODE", "2665")),
         "program_key": optional(f"{tag}_PROGRAM_KEY", ERP_YEARS.get(year, "")),
         "token": optional(f"{tag}_TOKEN", ""),      # a browser session token, used instead of logging in
+        "fin_year": optional(f"{tag}_FIN_YEAR", ERP_FIN_YEARS.get(year, "")),   # see ERP_FIN_YEARS
     }
 
 

@@ -227,9 +227,19 @@ def run_step_b(session, cfg, filters, report_id, raw_path):
 
 
 # Columns an export may lack because that year's ERP program has a different saved report layout
-# (2025-26 has no Branch / Taxableamount / Othercharges); filled from the JSON details of the same report
+# (2025-26 has no Branch / Taxableamount / Othercharges; 2021-22..2023-24 also lack BranchInDate /
+# DaysFromBranchIn); filled from the JSON details of the same report. Detail keys are matched ignoring case.
 DETAILS_ENDPOINT = "acme-inventory-web/inv/getCriteriaStkRptDetails"
-FILL_FROM_DETAILS = {"Branch": "branch", "Taxableamount": "taxableamount", "Othercharges": "othercharges"}
+FILL_FROM_DETAILS = {"Branch": "branch", "Taxableamount": "taxableamount", "Othercharges": "othercharges",
+                     "BranchInDate": "branchindate", "DaysFromBranchIn": "daysfrombranchin", "Scmitem": "scmitem"}
+NO_TOTAL = {"Branch", "BranchInDate", "DaysFromBranchIn", "Scmitem"}    # text / date / per-label: no sum on the Total row
+
+
+def _as_date_text(v):
+    """A details date as the export writes it (dd/MM/yyyy); epoch milliseconds are converted."""
+    if isinstance(v, (int, float)) and not pd.isna(v) and v > 1e11:
+        return pd.Timestamp(v, unit="ms", tz="UTC").tz_convert("Asia/Kolkata").strftime("%d/%m/%Y")
+    return v
 
 
 def fill_from_details(session, filters, report_id, raw_path):
@@ -255,19 +265,25 @@ def fill_from_details(session, filters, report_id, raw_path):
         raise Unauthorized(f"Details: HTTP {r.status_code}")
     rows = ((r.json() or {}).get("data") or {}).get("data") or []
     details = pd.DataFrame(rows).drop_duplicates("barcode").set_index("barcode")
+    keys = {str(c).lower(): c for c in details.columns}
+    absent = [h for h in missing if FILL_FROM_DETAILS[h] not in keys]
+    if absent:
+        raise ErpError(f"Could not fill {absent}: not in the details (it has {sorted(keys)[:60]}).")
     barcodes = x.loc[hdr + 1: total_idx - 1, header.index("BarCode/BatchDesc")].map(
         lambda v: v.strip() if isinstance(v, str) else v)
     unmatched = (~barcodes.isin(details.index)).sum()
-    if unmatched or len(details) != len(barcodes):
+    if unmatched or len(details) != barcodes.nunique():      # a label can appear twice in older years' exports
         raise ErpError(f"Could not fill {missing}: {unmatched} export rows not in the details "
                        f"({len(details)} details rows, {len(barcodes)} export rows).")
     for h in missing:
         pos = x.shape[1]
         x[pos] = None
         x.loc[hdr, pos] = h
-        values = barcodes.map(details[FILL_FROM_DETAILS[h]])
+        values = barcodes.map(details[keys[FILL_FROM_DETAILS[h]]])
+        if h == "BranchInDate":
+            values = values.map(_as_date_text)
         x.loc[barcodes.index, pos] = values
-        if h != "Branch":
+        if h not in NO_TOTAL:
             x.loc[total_idx, pos] = pd.to_numeric(values, errors="coerce").sum()
     x.to_excel(raw_path, header=False, index=False)
     log.info(f"  Filled {missing} for {len(barcodes)} rows from the details.")
@@ -419,6 +435,22 @@ def clean_export(raw_xlsx_path, stepA_json_path):
         checks.append(check(f"Sum {col} == totals row", ok, f"{ours:,.3f} vs {theirs:,.3f}"))
     nulls = int(df["barcode"].isna().sum())
     checks.append(check("No null barcode", nulls == 0, f"{nulls} null"))
+    # Older years' exports give each piece of a set the set's code (121-A4212 on its pendant, tops and chain):
+    # those pieces get set code + "/" + label no, so every row has its own barcode.
+    shared = df["barcode"].notna() & df.duplicated("barcode", keep=False)
+    if shared.any():
+        df.loc[shared, "barcode"] = df.loc[shared, "barcode"] + "/" + df.loc[shared, "label_no"].astype(str)
+        log.info(f"  {int(shared.sum())} set pieces shared their set's code; gave each code/label no.")
+    dups = int(df["barcode"].dropna().duplicated().sum())
+    checks.append(check("One row per barcode", dups == 0, f"{dups} duplicated"))
+    # Older years hold typing errors such as a wastage of 400,991 %: blanked (the app does not use it) rather
+    # than rejecting the date; numeric(8,3) cannot store them anyway.
+    if "wastage_per" in df:
+        wild = df["wastage_per"].abs() >= 1000
+        if wild.any():
+            log.info(f"  {int(wild.sum())} labels with an impossible wastage % "
+                     f"({', '.join(f'{v:,.0f}' for v in df.loc[wild, 'wastage_per'].head(3))}) left blank.")
+            df.loc[wild, "wastage_per"] = None
     bad = {c: n for c, n in lost.items() if n}
     checks.append(check("No unparseable numbers/dates", not bad, str(bad) if bad else "0 lost"))
     return df, checks, {"count": total_n, **totals}
