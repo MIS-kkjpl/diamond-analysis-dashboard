@@ -114,7 +114,7 @@ def save_many(conn, level, changes, reason, by, rules):
     if level not in FIX_LEVELS:
         return None, "Unknown level."
     if not changes:
-        return None, "Nothing changed: type a new number in the Your ideal column first."
+        return None, "No changes to save."
     parsed = []
     for key, branch, pcs in changes:
         try:
@@ -122,7 +122,7 @@ def save_many(conn, level, changes, reason, by, rules):
             if not 0 <= n <= 100_000:
                 raise ValueError
         except (TypeError, ValueError):
-            return None, f"{key}: the ideal must be a whole number from 0."
+            return None, f"{key}: enter a whole number."
         parsed.append((key, branch or "*", n))
     saved, back = 0, 0
     for key, branch, n in parsed:
@@ -136,7 +136,7 @@ def save_many(conn, level, changes, reason, by, rules):
                 back += 1
             continue
         if not reason:
-            return None, "Add a short reason (why your number differs), so it can be checked later."
+            return None, "Enter a reason."
         msg, err = save(conn, level, key, branch, n, reason, by, rules["override_review_days"])
         if err:
             return None, f"{key}: {err}"
@@ -145,12 +145,10 @@ def save_many(conn, level, changes, reason, by, rules):
     parts = []
     if saved:
         review = date.today() + timedelta(days=int(rules["override_review_days"]))
-        parts.append(f"Saved {saved} number{'s' if saved != 1 else ''}. "
-                     f"{'It is' if saved == 1 else 'They are'} used from now on and will come back to you "
-                     f"for a check on {review:%d %b %Y}")
+        parts.append(f"Saved {saved} change{'s' if saved != 1 else ''}, review on {review:%d %b %Y}")
     if back:
-        parts.append(f"{back} set back to the suggested number{'s' if back != 1 else ''}")
-    return ". ".join(parts) + ". Recommendations catch up at the next refresh.", None
+        parts.append(f"{back} reset to suggested")
+    return "; ".join(parts) + ".", None
 
 
 def reset(conn, level, key, branch, by, rules):
@@ -158,7 +156,7 @@ def reset(conn, level, key, branch, by, rules):
     remove(conn, level, key, branch, by)
     apply_now(conn, rules)
     place = "all branches" if branch == "*" else branch.split(" / ")[0]
-    return f"{key} at {place}: back to the suggested number."
+    return f"Reset {key} at {place}."
 
 
 def apply_now(conn, rules):

@@ -2,7 +2,7 @@
      hx-get="/recommendations/summary" hx-trigger="every 60s" hx-swap="outerHTML">
   {% macro stat(colour, value, label, sub) -%}
   <div class="col-6 col-lg-3">
-    <div class="card sw-kpi" style="--sw-accent: var(--tblr-{{ colour }})">
+    <div class="card sw-kpi">
       <div class="sw-kpi-label">{{ label }}</div>
       <div class="sw-kpi-value">{{ value }}</div>
       {% if sub %}<div class="sw-kpi-sub">{{ sub }}</div>{% endif %}

@@ -9,8 +9,8 @@
     <summary class="card-header sw-brief-summary">
       <div class="flex-grow-1 min-w-0">
         <div class="d-flex flex-wrap align-items-center gap-2">
-          <h3 class="card-title mb-0"><i class="ti ti-news me-2"></i>Weekly brief</h3>
-          <span class="badge bg-purple-lt">{{ b.period }}</span>
+          <h3 class="card-title mb-0">Weekly brief</h3>
+          <span class="small text-secondary">{{ b.period }}</span>
         </div>
         <div class="sw-brief-line">{{ b.body_md | brief_line }}</div>
       </div>
@@ -38,8 +38,7 @@
   <div class="card-body d-flex flex-wrap align-items-center gap-3">
     <i class="ti ti-news fs-2 text-secondary"></i>
     <div class="flex-grow-1 min-w-0" style="flex-basis: 20rem"><b>Weekly brief</b>
-      <div class="small text-secondary">One page for you: what moved, the decisions that matter this week, what to watch.
-        Written every Monday by the morning refresh, or now.</div></div>
+      <div class="small text-secondary">Not written yet this week.</div></div>
     {% if can(request, "manager") %}<form method="post" action="/brief" onsubmit="const x = this.querySelector('button'); x.disabled = true; x.innerHTML = '<span class=&quot;spinner-border spinner-border-sm me-2&quot;></span>Writing… up to a minute'">
       <button class="btn btn-outline-secondary"><i class="ti ti-sparkles"></i> Write this week's brief</button></form>{% endif %}
   </div>

@@ -5,7 +5,6 @@
 {% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
 {% block pretitle %}Sales{% endblock %}
 {% block page_title %}Sales{% endblock %}
-{% block intro %}What sold, where, by whom and how long it took. Pick dates, branches, item groups or a salesperson above.{% endblock %}
 {% block content %}
 <div id="page">
 {% call flt.form("/sales") %}
@@ -25,24 +24,22 @@
 {% if empty %}
 <div class="empty"><p class="empty-title">No sales for these filters</p></div>
 {% else %}
-{{ ui.section("At a glance") }}
 <div class="row row-cards mb-3">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 <div class="small text-secondary mb-3">Value = taxable amount (before GST); a return is valued at the sale it reverses and
   counted in the month it came back.{% if legacy %} Part of this period comes from the legacy file (label value, no returns).{% endif %}</div>
 
 {{ ui.section("Month by month") }}
 <div class="mb-3">{{ ui.chart("c-monthly", fig_monthly, "Net sales by month and item group", t=t_monthly) }}</div>
-{{ ui.section("Where and what", "branches and items") }}
+{{ ui.section("Where and what") }}
 <div class="row row-cards mb-3">
   <div class="col-lg-6">{{ ui.chart("c-branch", fig_branch, "By branch", t=t_branch) }}</div>
   <div class="col-lg-6">{{ ui.chart("c-items", fig_items, "Top 10 items", t=t_items) }}</div>
 </div>
-{% if t_sets.rows %}{{ ui.section("Sets", "pieces labelled separately but sold together") }}
-<div class="mb-3">{{ ui.table_card("Sold whole or split", t_sets, icon="ti-stack-2",
-    sub="Sets labelled as separate pieces (a pendant and its tops share a set number). Split = its pieces were sold on different days.") }}</div>{% endif %}
-{{ ui.section("Speed and people", "how long pieces took to sell, salespeople, returns") }}
+{% if t_sets.rows %}{{ ui.section("Sets") }}
+<div class="mb-3">{{ ui.table_card("Sold whole or split", t_sets, icon="ti-stack-2") }}</div>{% endif %}
+{{ ui.section("Speed and people") }}
 <div class="mb-3">{{ ui.chart("c-age", fig_age, "How long items took to sell", "Pieces sold, by days from label date to sale") }}</div>
-<div class="mb-3">{{ ui.table_card("Salespeople", t_team, sub="Owners and generic accounts left out (Settings → Salespeople); discount given = 1 − billed ÷ label value. The Salespeople page compares each person with colleagues.", icon="ti-users") }}</div>
+<div class="mb-3">{{ ui.table_card("Salespeople", t_team, icon="ti-users") }}</div>
 {% if t_returns.rows %}
 <div class="mb-3">{{ ui.table_card("Returns", t_returns, icon="ti-arrow-back-up") }}</div>
 {% endif %}

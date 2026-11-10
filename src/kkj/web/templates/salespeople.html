@@ -4,8 +4,6 @@
 {% block title %}Salespeople · Stockwise{% endblock %}
 {% block pretitle %}Sales{% endblock %}
 {% block page_title %}Salespeople{% endblock %}
-{% block intro %}How each salesperson sells, compared with colleagues at the same branch selling pieces at the same prices.
-  Open a name for their own page.{% endblock %}
 {% block content %}
 <div id="page">
 {% call flt.form("/salespeople") %}
@@ -25,21 +23,15 @@
 <div class="empty"><p class="empty-title">No sales by salespeople in these dates</p>
   <p class="empty-subtitle text-secondary">Sales loaded from the old files carry no salesperson; pick dates after the ERP load began.</p></div>
 {% else %}
-{{ ui.section("At a glance") }}
 <div class="row row-cards mb-3">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 <div class="small text-secondary mb-3">
   ERP sales only{% if legacy %} (the older sales in these dates came from files without a salesperson){% endif %}. Owners and shared
   accounts are left out (Settings → Salespeople). A return counts against whoever made the original sale. Value = taxable amount before GST.
 </div>
 
-{{ ui.section("Scorecard", "grouped by the branch where each person sells most") }}
+{{ ui.section("Scorecard") }}
 <div class="card mb-3">
-  <div class="card-header"><div><h3 class="card-title"><i class="ti ti-users me-2"></i>Everyone, branch by branch</h3>
-    <div class="card-subtitle small text-secondary">
-      Units per bill and the code are on each person's page. <b>vs colleagues</b> = discount given minus what colleagues at the branch gave on pieces in the same price band (points).
-      <b>vs branch</b> = sales per active month ÷ the branch's typical regular seller.
-      <b>Old stock</b> = share of sales value in pieces over {{ aged_days }} days old.
-      {% if hidden %}{{ hidden }} people with fewer than {{ min_lines }} lines are hidden: choose "Everyone" to see them.{% endif %}</div></div></div>
+  <div class="card-header"><div><h3 class="card-title">Everyone, branch by branch</h3></div></div>
   <div class="table-responsive">
     <table class="table table-sm table-vcenter card-table table-striped js-table">
       <thead><tr>

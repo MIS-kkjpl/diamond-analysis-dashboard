@@ -178,11 +178,11 @@ def detail(request: Request, action_id: int):
     subject = json.loads(subject) if isinstance(subject, str) else subject
     if a["kind"] in ("turn_increase", "turn_reduce", "turn_phase_out") and subject.get("group"):
         from kkj.web.analytics import branch_editor
-        ed = branch_editor("group", subject["group"], title="Check the ideal at each branch")
+        ed = branch_editor("group", subject["group"], title="Ideal by branch")
     elif a["kind"] == "ideal_review" and subject.get("fix_key"):
         from kkj.web.analytics import branch_editor
         ed = branch_editor(subject.get("fix_level", "group"), subject["fix_key"],
-                           title="Keep, change or remove your number")
+                           title="Ideal by branch")
     return render(request, "recommendation_detail.html", "recommendations", a=a,
                   history=history, follow=follow, follow_pieces=follow_pieces, ai_notes=ai_notes, ed=ed)
 

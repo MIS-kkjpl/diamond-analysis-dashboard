@@ -1,6 +1,5 @@
 {% if offset == 0 %}
-<div class="small text-secondary mb-2">{{ total }} recommendation{{ '' if total == 1 else 's' }} · ranked by money involved,
-  confidence and urgency (impacts of different types overlap, so they aren't added up)</div>
+<div class="small text-secondary mb-2">{{ total | num }} recommendation{{ '' if total == 1 else 's' }}</div>
 {% if total == 0 %}
 <div class="empty"><div class="empty-icon"><i class="ti ti-mood-check"></i></div>
   <p class="empty-title">Nothing here</p><p class="empty-subtitle text-secondary">No recommendations match these filters.</p></div>

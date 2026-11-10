@@ -19,24 +19,23 @@
 <div class="empty"><p class="empty-title">No ERP sales by {{ p.name or p.code }} in these dates</p>
   <p class="empty-subtitle text-secondary">Try a wider date range.</p></div>
 {% else %}
-{{ ui.section("At a glance") }}
 <div class="row row-cards mb-3">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 {% if p.notes %}<div class="mb-3">{% for text, colour in p.notes %}<span class="badge bg-{{ colour }}-lt me-1">{{ text }}</span>{% endfor %}</div>{% endif %}
 
 {{ ui.section("Over time") }}
 <div class="mb-3">{{ ui.chart("c-month", fig_month, "Net sales by month", "₹ lakh; returns are taken off the month they came back", t=t_month) }}</div>
 
-{{ ui.section("What they sell", "compared with the whole branch") }}
+{{ ui.section("What they sell") }}
 <div class="row row-cards mb-3">
   <div class="col-lg-6">{{ ui.table_card("By item group", t_mix, icon="ti-layout-grid") }}</div>
   <div class="col-lg-6">{{ ui.table_card("Top products", t_items, icon="ti-diamond") }}</div>
 </div>
 
-{{ ui.section("Colleagues", "regular sellers at " ~ short(p.branch)) }}
+{{ ui.section("Colleagues") }}
 <div class="mb-3">{{ ui.table_card("At the same branch", t_peers, icon="ti-users",
     sub="Regular sellers with " ~ min_lines ~ "+ lines in these dates") }}</div>
 
 {{ ui.section("Recent sales") }}
-<div class="mb-3">{{ ui.table_card("Last 40 lines", t_recent, icon="ti-receipt", sub="Open a barcode to see the piece's history") }}</div>
+<div class="mb-3">{{ ui.table_card("Last 40 lines", t_recent, icon="ti-receipt") }}</div>
 {% endif %}
 {% endblock %}

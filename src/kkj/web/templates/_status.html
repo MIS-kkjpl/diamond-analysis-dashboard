@@ -1,9 +1,7 @@
 {% if status %}
-<span class="badge bg-green-lt"><span class="status-dot status-dot-animated status-green me-1"></span>Live</span>
-<span class="badge bg-blue-lt">Stock {{ status.stock_as_of | date("%d %b") }}</span>
-<span class="badge bg-blue-lt">Sales to {{ status.sales_to | date("%d %b") }}</span>
-<span class="badge bg-secondary-lt" title="Recommendations last refreshed {{ status.finished | date('%d %b %Y %H:%M') }}">
-  Refreshed {{ status.finished | ago }}</span>
+<span class="sw-status" title="Recommendations last refreshed {{ status.finished | date('%d %b %Y %H:%M') }}">
+  Stock {{ status.stock_as_of | date("%d %b") }} <span class="sep">·</span> Sales to {{ status.sales_to | date("%d %b") }}
+  <span class="sep">·</span> Refreshed {{ status.finished | ago }}</span>
 {% else %}
-<span class="badge bg-yellow-lt">Recommendations not refreshed yet</span>
+<span class="sw-status">Not refreshed yet</span>
 {% endif %}

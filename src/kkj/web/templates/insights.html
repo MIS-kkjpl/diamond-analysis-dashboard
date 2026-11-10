@@ -5,48 +5,43 @@
 {% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
 {% block pretitle %}Sales{% endblock %}
 {% block page_title %}Insights{% endblock %}
-{% block intro %}Patterns behind the recommendations: how age slows selling, which suppliers' pieces sell, and whether we hold what customers buy.{% endblock %}
 {% block content %}
 <div id="page">
 {% call flt.form("/insights") %}
   {{ flt.toggles("group", groups, f.group, placeholder="All item groups") }}
 {% endcall %}
-{{ ui.section("At a glance") }}
 <div class="row row-cards mb-2">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
 <div class="small text-secondary mb-3">{{ period }} · change the period in Settings → Insights</div>
 
-{{ ui.section("What the data shows", "each with a recommended action") }}
+{{ ui.section("What the data shows") }}
 <div class="card mb-3"><div class="card-body">
-  <h3 class="card-title">1 · Selling speed falls the longer a piece sits</h3>
+  <h3 class="card-title">Selling speed falls the longer a piece sits</h3>
   {{ ui.chart("c-age", fig_age, "Share of pieces sold each month, by age", t=t_age) }}
   {{ ui.action(act1) }}
 </div></div>
 
 <div class="card mb-3"><div class="card-body">
-  <h3 class="card-title">2 · Supplier performance at the same price points</h3>
-  <div class="small text-secondary mb-2">1.0× = the supplier's pieces sell as fast as the company's pieces in the same price bands, so a
-    supplier of expensive pieces is not marked slow for being expensive.</div>
+  <h3 class="card-title">Supplier performance at the same price points</h3>
   {% if fig_sup %}{{ ui.chart("c-sup", fig_sup, "Performance vs the company rate", t=t_sup) }}{% endif %}
   {{ ui.action(act2) }}
 </div></div>
 
 <div class="card mb-3"><div class="card-body">
-  <h3 class="card-title">3 · Are we holding what customers buy?</h3>
+  <h3 class="card-title">Are we holding what customers buy?</h3>
   {{ ui.chart("c-band", fig_band, "Share of stock vs share of sales, by price band") }}
   <div class="mt-3">{{ ui.table_card("By item: months of stock at the current selling rate", t_items, icon="ti-list") }}</div>
   {{ ui.action(act3) }}
 </div></div>
 
 <div class="card mb-3"><div class="card-body">
-  <h3 class="card-title">4 · Exhibitions vs showrooms</h3>
+  <h3 class="card-title">Exhibitions vs showrooms</h3>
   {{ ui.data_table(t_channel) }}
   {{ ui.action("If exhibitions sell older pieces at a higher discount, send aged pieces there deliberately and judge each exhibition on the aged stock it cleared, not only on its sales.") }}
 </div></div>
 
 <div class="card mb-3"><div class="card-body">
-  <h3 class="card-title">5 · Clearance candidates: over {{ liq_days }} days old</h3>
-  <div class="small text-secondary mb-2">Recovery value = metal (net weight × the piece's own per-gram rate) + {{ recovery_pct }}% of its
-    diamond value: a floor for choosing between breaking up, returning to the supplier, an exhibition or a final markdown.</div>
+  <h3 class="card-title">Clearance candidates: over {{ liq_days }} days old</h3>
+  <div class="small text-secondary mb-2">Recovery = metal + {{ recovery_pct }}% of diamond value.</div>
   {{ ui.data_table(t_liq) }}
 </div></div>
 </div>

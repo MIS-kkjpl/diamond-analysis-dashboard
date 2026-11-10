@@ -2,38 +2,32 @@
 {% block title %}Settings · Stockwise{% endblock %}
 {% block pretitle %}Admin{% endblock %}
 {% block page_title %}Settings{% endblock %}
-{% block intro %}The business rules every recommendation uses, plus salespeople, branches, ideal stock by group, festivals and users. Changes are recorded in Change history.{% endblock %}
 {% block content %}
 
 <ul class="nav nav-tabs mb-3" data-bs-toggle="tabs">
-  <li class="nav-item"><a href="#tab-rules" class="nav-link active" data-bs-toggle="tab"><i class="ti ti-adjustments me-1"></i>Business rules</a></li>
-  <li class="nav-item"><a href="#tab-people" class="nav-link" data-bs-toggle="tab"><i class="ti ti-users me-1"></i>Salespeople
+  <li class="nav-item"><a href="#tab-rules" class="nav-link active" data-bs-toggle="tab">Business rules</a></li>
+  <li class="nav-item"><a href="#tab-people" class="nav-link" data-bs-toggle="tab">Salespeople
     {% if to_review %}<span class="badge bg-orange-lt ms-1">{{ to_review }} to review</span>{% endif %}</a></li>
-  <li class="nav-item"><a href="#tab-branches" class="nav-link" data-bs-toggle="tab"><i class="ti ti-building-store me-1"></i>Branches</a></li>
-  <li class="nav-item"><a href="#tab-stock" class="nav-link" data-bs-toggle="tab"><i class="ti ti-packages me-1"></i>Ideal stock by group</a></li>
-  <li class="nav-item"><a href="#tab-festivals" class="nav-link" data-bs-toggle="tab"><i class="ti ti-calendar-event me-1"></i>Festivals</a></li>
+  <li class="nav-item"><a href="#tab-branches" class="nav-link" data-bs-toggle="tab">Branches</a></li>
+  <li class="nav-item"><a href="#tab-stock" class="nav-link" data-bs-toggle="tab">Ideal stock by group</a></li>
+  <li class="nav-item"><a href="#tab-festivals" class="nav-link" data-bs-toggle="tab">Festivals</a></li>
   {% if feature("ai_ask") or feature("ai_brief") or feature("ai_review") or feature("ai_season") %}
-  <li class="nav-item"><a href="#tab-notes" class="nav-link" data-bs-toggle="tab"><i class="ti ti-sparkles me-1"></i>AI</a></li>{% endif %}
-  <li class="nav-item"><a href="#tab-users" class="nav-link" data-bs-toggle="tab"><i class="ti ti-lock me-1"></i>Users</a></li>
-  <li class="nav-item"><a href="#tab-history" class="nav-link" data-bs-toggle="tab"><i class="ti ti-history me-1"></i>Change history</a></li>
+  <li class="nav-item"><a href="#tab-notes" class="nav-link" data-bs-toggle="tab">AI</a></li>{% endif %}
+  <li class="nav-item"><a href="#tab-users" class="nav-link" data-bs-toggle="tab">Users</a></li>
+  <li class="nav-item"><a href="#tab-history" class="nav-link" data-bs-toggle="tab">Change history</a></li>
 </ul>
 
 <div class="tab-content">
   <div class="tab-pane active show" id="tab-rules">
-    <div class="small text-secondary mb-3">The rules every recommendation is calculated from. Defaults are starting points:
-      tune them to how the business wants to run.</div>
     <div class="d-flex flex-wrap gap-1 mb-3 small">
-      <span class="text-secondary me-1">Jump to:</span>
-      {% for s in sections %}<a class="badge bg-blue-lt text-decoration-none" href="#rules-{{ s.section | lower | replace(' ', '-') }}">{{ s.section }}</a>{% endfor %}
+      {% for s in sections %}<a class="me-2" href="#rules-{{ s.section | lower | replace(' ', '-') }}">{{ s.section }}</a>{% endfor %}
     </div>
     {% for s in sections %}{% include "_rule_section.html" %}{% endfor %}
   </div>
 
   <div class="tab-pane" id="tab-people">
     <div class="card">
-      <div class="card-header"><div><h3 class="card-title">Salespeople</h3>
-        <div class="card-subtitle small text-secondary">Everyone who appears on a sales line. Changes save as you make them.
-          Owners and generic accounts (e.g. exhibition sales) are left out of salesperson comparisons.</div></div></div>
+      <div class="card-header"><div><h3 class="card-title">Salespeople</h3></div></div>
       <div class="table-responsive">
         <table class="table table-sm table-vcenter card-table">
           <thead><tr><th>Code in sales</th><th>Name</th><th>HR code</th><th>Main branch</th><th>Type</th><th>Active</th>
@@ -46,9 +40,7 @@
 
   <div class="tab-pane" id="tab-branches">
     <div class="card">
-      <div class="card-header"><div><h3 class="card-title">Branches</h3>
-        <div class="card-subtitle small text-secondary">Showrooms are compared with each other and exchange stock; head office,
-          wholesale and exhibitions are shown but kept out of showroom comparisons.</div></div></div>
+      <div class="card-header"><div><h3 class="card-title">Branches</h3></div></div>
       <div class="table-responsive">
         <table class="table table-sm table-vcenter card-table">
           <thead><tr><th>Branch in the ERP</th><th>Short name</th><th>HR code</th><th>Place</th><th>Type</th><th>Active</th></tr></thead>

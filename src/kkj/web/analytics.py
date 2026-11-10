@@ -17,7 +17,7 @@ from kkj.metrics import sets
 from kkj.metrics.summary import fy_start
 from kkj.viz import GROUP_ORDER, money
 from kkj.web import charts
-from kkj.web.common import cached, engine, read, render, templates, who
+from kkj.web.common import cached, engine, read, render, who
 
 router = APIRouter()
 
@@ -392,7 +392,7 @@ def branch_editor(level, key, title=None):
             continue
         out.append(_editor_row(key, r.scope, _short(r.scope), r.held, r.calc, r.ideal,
                                ideal_status(r.held, r.ideal, rules), by_branch.get(r.scope),
-                               sub=f"sells about {r.annual:.1f} a year" if r.annual and r.annual >= 0.05 else "no sales expected"))
+                               sub=f"{r.annual:.1f} / yr forecast" if r.annual and r.annual >= 0.05 else "no forecast sales"))
     others = [_fix_info(f) for f in mine.to_dict("records") if f["branch"] == "*"]
     if level == "group" and len(rows):
         items = set(read(f"SELECT DISTINCT item_name FROM brain.ideal_stock WHERE {LATEST_IDEAL} AND brick_group = :k",
@@ -400,7 +400,7 @@ def branch_editor(level, key, title=None):
         others += [_fix_info(f) for f in fx.to_dict("records") if f["level"] == "product" and f["key"] in items]
     total = {"held": sum(r["held"] for r in out), "calc": sum(r["calc"] for r in out), "ideal": sum(r["ideal"] for r in out)}
     return {"id": "ed-branches", "level": level, "mode": "branches", "rows": out, "total": total, "others": others,
-            "title": title or "Ideal stock at each branch", "what": "Branch", "reasons": REASONS,
+            "title": title or "By branch", "what": "Branch", "reasons": REASONS,
             "review_days": rules["override_review_days"]}
 
 
@@ -435,11 +435,11 @@ def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Que
     for key, (word, colour) in IDEAL_STATUS.items():
         n = int(by.loc[key, "n"]) if key in by.index else 0
         if key == "increase":
-            sub = f"{money(by.loc[key, 'change'])} more stock needed" if n else "nothing to add"
+            sub = f"{money(by.loc[key, 'change'])} to add" if n else ""
         elif key == "reduce":
-            sub = f"{money(-by.loc[key, 'change'])} more than needed" if n else "nothing extra"
+            sub = f"{money(-by.loc[key, 'change'])} over" if n else ""
         elif key == "phase_out":
-            sub = f"{money(by.loc[key, 'held'])} held, no sales expected" if n else "none"
+            sub = f"{money(by.loc[key, 'held'])} held" if n else ""
         else:
             sub = f"{money(by.loc[key, 'held'])} held" if n else ""
         tiles.append({"key": key, "word": word, "colour": colour, "n": n, "sub": sub, "on": key in status})
@@ -455,15 +455,15 @@ def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Que
     rows = []
     for r in shown.itertuples():
         fix = exact.get(r.brick_group)
-        note = "changed at a branch" if not fix and r.brick_group in touched and r.ideal_pcs != r.calc_pcs else None
-        sells = f"sells about {r.annual:.1f} a year" if r.annual and r.annual >= 0.05 else "no sales expected"
+        note = "set by hand at a branch" if not fix and r.brick_group in touched and r.ideal_pcs != r.calc_pcs else None
+        sells = f"{r.annual:.1f} / yr" if r.annual and r.annual >= 0.05 else "no forecast sales"
         rows.append(_editor_row(r.brick_group, level_branch, r.brick_group, r.current_pcs, r.calc_pcs, r.ideal_pcs,
                                 r.status, fix, sub=f"{r.item_class_group or ''} · {sells}",
                                 link=f"/ideal-stock/group?g={quote(r.brick_group)}", note=note))
     n_total = len(t[t["status"].isin(status)] if status else t)
     editor = {"id": "ed-groups", "level": "group", "mode": "groups", "rows": rows, "reasons": REASONS,
               "what": "Group", "review_days": rules["override_review_days"], "n_total": n_total,
-              "title": ("Whole company" if scope == "Company" else _short(scope)) + ": biggest differences first"}
+              "title": "All branches" if scope == "Company" else _short(scope)}
 
     # forecast accuracy (for the How it works section)
     acc = read("""SELECT level, key, horizon_months, origins, actual, wape, wape_last_year, wape_avg12, bias, better
@@ -471,12 +471,10 @@ def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Que
     top = pd.concat([acc[acc["level"] == "company"].assign(key="Whole company"),
                      acc[acc["level"] == "item_group"].sort_values("actual", ascending=False),
                      acc[acc["level"] == "product"].sort_values("actual", ascending=False).head(15)])
-    top = top.assign(verdict=np.where(top["better"], "better", "not better"))
-    acc_table = charts.table(top[["key", "actual", "wape", "wape_avg12", "wape_last_year", "verdict"]],
-                             {"actual": "num", "wape": "pct", "wape_last_year": "pct", "wape_avg12": "pct"},
-                             {"key": "what", "actual": "pieces sold in the test", "wape": "our forecast was off by",
-                              "wape_avg12": "a 12-month average was off by",
-                              "wape_last_year": "last year's sales were off by", "verdict": "ours is"})
+    acc_table = charts.table(top[["key", "actual", "wape", "wape_avg12", "wape_last_year", "bias"]],
+                             {"actual": "num", "wape": "pct", "wape_last_year": "pct", "wape_avg12": "pct", "bias": "pct"},
+                             {"key": "", "actual": "pieces sold", "wape": "error", "wape_avg12": "12-month avg error",
+                              "wape_last_year": "last-year error", "bias": "bias"})
     fine = acc[acc["level"] == "group_branch"]
     fine_err = ((fine["wape"] * fine["actual"]).sum() / fine["actual"].sum()) if len(fine) and fine["actual"].sum() else None
     horizon = int(acc["horizon_months"].iloc[0]) if len(acc) else None
@@ -549,16 +547,16 @@ def ideal_group(request: Request, g: str = "", level: str = "group"):
         return render(request, "ideal_group.html", "ideal_stock", empty=True, g=g, level=level)
     rows = rows[(rows["current_pcs"] > 0) | (rows["ideal_pcs"] > 0) | (rows["calc_pcs"].fillna(0) > 0)]
     rows = rows.sort_values(["ideal_pcs", "current_pcs"], ascending=False)
-    reason = {"demand": "A", "choice": "B", "display minimum": "C", "override": "your number", "no demand": "no sales expected"}
+    reason = {"demand": "cover", "choice": "choice", "display minimum": "display", "override": "set by hand", "no demand": "–"}
     table = charts.table(
         rows[["scope", "brick_group", "current_pcs", "annual", "for_demand", "for_choice", "display_min", "calc_pcs",
               "ideal_from"]].assign(scope=rows["scope"].map(_short),
                                     ideal_from=rows["ideal_from"].map(lambda x: reason.get(x, x))),
         {"current_pcs": "num", "annual": "dec", "for_demand": "num", "for_choice": "num", "display_min": "num",
          "calc_pcs": "num"},
-        {"scope": "branch", "brick_group": "group", "current_pcs": "have now", "annual": "expected sales, 12 months",
-         "for_demand": "A: enough until new stock arrives", "for_choice": "B: choice on the counter",
-         "display_min": "C: display minimum", "calc_pcs": "suggested", "ideal_from": "largest"})
+        {"scope": "branch", "brick_group": "group", "current_pcs": "held", "annual": "forecast 12m",
+         "for_demand": "cover", "for_choice": "choice", "display_min": "display", "calc_pcs": "suggested",
+         "ideal_from": "driven by"})
     first = rows.iloc[0]
     acc = read("""SELECT level, key, wape, wape_last_year, wape_avg12, bias, better, actual FROM brain.forecast_accuracy
                   WHERE as_of = (SELECT max(as_of) FROM brain.forecast_accuracy)
@@ -602,11 +600,11 @@ def stock_turn(request: Request, view: str = "group", scope: str = "Company", gr
         r = by_status.loc[s] if s in by_status.index else None
         return (bt.STATUS[s][0], f"{int(r['bricks']) if r is not None else 0:,} bricks", sub(r) if r is not None else "",
                 icon, colour)
-    kpis = [k("increase", "ti-trending-up", "green", lambda r: f"{money(r['change'])} more stock needed"),
-            k("reduce", "ti-trending-down", "orange", lambda r: f"{money(-r['change'])} more than sales need"),
+    kpis = [k("increase", "ti-trending-up", "green", lambda r: f"{money(r['change'])} to add"),
+            k("reduce", "ti-trending-down", "orange", lambda r: f"{money(-r['change'])} over"),
             k("keep", "ti-check", "blue", lambda r: f"{money(r['value'])} held"),
             k("phase_out", "ti-trash", "red", lambda r: f"{money(r['value'])} held"),
-            ("Too new / hold / thin", f"{int(by_status.reindex(['new', 'hold', 'stock_up', 'no_history'])['bricks'].sum()):,} bricks",
+            ("Too new to judge", f"{int(by_status.reindex(['new', 'hold', 'stock_up', 'no_history'])['bricks'].sum()):,} bricks",
              f"{money(by_status.reindex(['new', 'hold', 'stock_up', 'no_history'])['value'].sum())} held", "ti-eye", "secondary")]
 
     chart = by_status.reset_index()
@@ -616,11 +614,10 @@ def stock_turn(request: Request, view: str = "group", scope: str = "Company", gr
     shown = shown.sort_values("order", ascending=False).head(300)
     def turns(r):
         return " · ".join("–" if pd.isna(r[c]) else ("∞" if np.isinf(r[c]) else f"{r[c]:.2f}") for c in ("turn_3m", "turn_6m", "turn_12m"))
-    set_for = {"group": "its ideal stock", "default": "company at ideal"}
     shown = shown.assign(
         status_label=shown["status"].map(lambda s: bt.STATUS[s][0]),
         windows=shown.apply(turns, axis=1),
-        ideal=shown.apply(lambda r: f"{r['ideal_turn']:.2f}× ({set_for.get(r['ideal_source'], 'company at ideal')})", axis=1))
+        ideal=shown.apply(lambda r: f"{r['ideal_turn']:.2f}×", axis=1))
     table = charts.table(
         shown[["brick", "current_pcs", "ideal_pcs", "change_pcs", "change_value", "blended_turn", "ideal", "windows",
                "status_label"]],

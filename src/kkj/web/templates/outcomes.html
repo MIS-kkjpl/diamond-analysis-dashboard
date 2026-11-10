@@ -3,8 +3,6 @@
 {% block title %}Outcomes · Stockwise{% endblock %}
 {% block pretitle %}<a href="/recommendations">Recommendations</a>{% endblock %}
 {% block page_title %}Outcomes{% endblock %}
-{% block intro %}What happened after each recommendation was approved or dismissed: did its pieces sell or move, did the
-  brick group's stock and turn change. Dismissed ones are followed too, for comparison.{% endblock %}
 {% block content %}
 {% if empty %}
 <div class="empty">
@@ -15,10 +13,9 @@
   <div class="empty-action"><a href="/recommendations" class="btn btn-primary">Go to recommendations</a></div>
 </div>
 {% else %}
-{{ ui.section("Approved vs dismissed", "by kind") }}
-<div class="mb-3">{{ ui.table_card("How each kind turned out", t_kinds, icon="ti-scale",
-    sub="Share sold = pieces sold since the decision ÷ pieces in those recommendations. Approved should beat dismissed if the recommendations are good.") }}</div>
+{{ ui.section("Approved vs dismissed") }}
+<div class="mb-3">{{ ui.table_card("How each kind turned out", t_kinds, icon="ti-scale") }}</div>
 {{ ui.section("Every decision") }}
-<div class="mb-3">{{ ui.table_card("Decided recommendations", t_rows, icon="ti-list-check", sub="Newest decision first") }}</div>
+<div class="mb-3">{{ ui.table_card("Decided recommendations", t_rows, icon="ti-list-check") }}</div>
 {% endif %}
 {% endblock %}

@@ -6,17 +6,18 @@
     <div class="card-header"><h3 class="card-title">{{ s.section }}</h3>
       <div class="card-actions">
         <button class="btn btn-primary btn-sm" {% if not who %}disabled title="Sign in first"{% endif %}>
-          <i class="ti ti-device-floppy"></i> Save {{ s.section | lower }}</button>
+          Save</button>
       </div>
     </div>
     <div class="card-body">
-      {% if s.saved %}<div class="alert alert-success py-2"><i class="ti ti-check"></i> {{ s.saved }}
+      {% if s.saved %}<div class="alert alert-success py-2">{{ s.saved }}
         <span class="small">· recommendations use the new rules from the next refresh</span></div>{% endif %}
-      {% if s.error %}<div class="alert alert-danger py-2"><i class="ti ti-alert-circle"></i> {{ s.error }}</div>{% endif %}
+      {% if s.error %}<div class="alert alert-danger py-2">{{ s.error }}</div>{% endif %}
       <div class="row g-3">
       {% for r in s.rules %}{% set v = s.current[r.key] %}
         <div class="col-md-6">
-          <label class="form-label mb-1" for="rule-{{ r.key }}">{{ r.label }}{% if r.unit %} <span class="text-secondary">({{ r.unit }})</span>{% endif %}</label>
+          <label class="form-label mb-1" for="rule-{{ r.key }}" title="{{ r.help }}">{{ r.label }}{% if r.unit %} <span class="text-secondary">({{ r.unit }})</span>{% endif %}
+            <i class="ti ti-info-circle text-secondary rule-help" aria-hidden="true"></i></label>
           {% if r.kind == "bool" %}
             <label class="form-check form-switch"><input id="rule-{{ r.key }}" class="form-check-input" type="checkbox" name="{{ r.key }}" {% if v %}checked{% endif %}>
               <span class="form-check-label">{{ "On" if v else "Off" }}</span></label>
@@ -46,7 +47,6 @@
           {% else %}
             <input id="rule-{{ r.key }}" class="form-control form-control-sm" name="{{ r.key }}" value="{{ v | join(', ') }}">
           {% endif %}
-          <div class="form-hint small">{{ r.help }}</div>
         </div>
       {% endfor %}
       </div>

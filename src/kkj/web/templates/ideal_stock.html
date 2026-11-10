@@ -4,115 +4,80 @@
 {% block title %}Ideal stock · Stockwise{% endblock %}
 {% block pretitle %}Stock{% endblock %}
 {% block page_title %}Ideal stock{% endblock %}
-{% block actions %}<a href="#how" class="btn btn-outline-secondary"><i class="ti ti-help-circle"></i> How is it worked out?</a>{% endblock %}
-{% block intro %}How many pieces of each group we should hold, worked out from what sells. The suggested number is filled in for
-you: change any you disagree with and press Save.{% endblock %}
+{% block actions %}{% if not empty %}<span class="text-secondary small align-self-center">As of {{ as_of | date }}</span>{% endif %}{% endblock %}
 {% block content %}
 <div id="page">
 {% if empty %}
-<div class="empty"><p class="empty-title">Not worked out yet</p>
-  <p class="empty-subtitle text-secondary">Ideal stock is worked out with each recommendation refresh.</p></div>
+<div class="empty"><p class="empty-title">Not calculated yet</p></div>
 {% else %}
-<div class="row row-cards mb-2">
+<div class="row row-cards mb-3">
+  <div class="col-12 col-lg-3">
+    <div class="sw-tile sw-tile-plain">
+      <div class="t-word">Held / ideal</div>
+      <div class="t-n">{{ held | money }} <span class="t-of">/ {{ ideal | money }}</span></div>
+      <div class="t-sub">{{ "%+.0f%%" | format(100 * (ideal / held - 1)) if held else "" }} to ideal</div>
+    </div>
+  </div>
   {% for x in tiles %}
-  <div class="col-6 col-lg-3">
-    <a class="sw-tile {% if x.on %}on{% endif %}" style="--sw-accent: var(--tblr-{{ x.colour if x.colour != 'secondary' else 'blue' }})"
-       href="/ideal-stock?{{ base_q }}{% if not x.on %}&status={{ x.key }}{% endif %}" title="{{ 'Show all again' if x.on else 'Show only these' }}">
-      <div class="t-word">{{ x.word }}</div>
-      <div class="t-n">{{ x.n | num }} <span class="fs-5 fw-normal text-secondary">group{{ "" if x.n == 1 else "s" }}</span></div>
+  <div class="col-6 col-lg">
+    <a class="sw-tile {% if x.on %}on{% endif %}" href="/ideal-stock?{{ base_q }}{% if not x.on %}&status={{ x.key }}{% endif %}">
+      <div class="t-word"><span class="dot dot-{{ x.key }}"></span>{{ x.word }}</div>
+      <div class="t-n">{{ x.n | num }}</div>
       <div class="t-sub">{{ x.sub }}</div>
     </a>
   </div>
   {% endfor %}
 </div>
-<div class="small text-secondary mb-3">We hold <b>{{ held | money }}</b> of this stock; the ideal is <b>{{ ideal | money }}</b>.
-  Worked out on {{ as_of | date }} · click a box to see only those groups.</div>
 
 {% if due %}
-<div class="alert alert-warning d-flex gap-2 align-items-start">
-  <i class="ti ti-bell fs-2"></i>
-  <div><b>{{ due | length }} of your numbers {{ "is" if due | length == 1 else "are" }} due for a check.</b> See what actually sold and keep
-    or change them: {% for d in due[:6] %}<a href="/ideal-stock/group?g={{ d.key | urlencode }}&level={{ d.level }}">{{ d.key }}</a>{{ ", " if not loop.last }}{% endfor %}{% if due | length > 6 %} and {{ due | length - 6 }} more{% endif %}.</div>
-</div>{% endif %}
+<div class="alert alert-warning py-2">{{ due | length }} hand-set number{{ "" if due | length == 1 else "s" }} due for review:
+  {% for d in due[:6] %}<a href="/ideal-stock/group?g={{ d.key | urlencode }}&level={{ d.level }}">{{ d.key }}</a>{{ ", " if not loop.last }}{% endfor %}{% if due | length > 6 %} +{{ due | length - 6 }}{% endif %}</div>
+{% endif %}
+{% for l in learn %}
+<div class="alert alert-info py-2">{{ l.product }}: set by hand {{ l.fixes }} times at about {{ "%.0f%%" | format(100 * l.ratio) }} of the suggestion.
+  Consider {{ l.months }} months of choice instead of {{ rules.choice_months | num }}{% if can(request, "admin") %} (<a href="/settings#tab-stock">settings</a>){% endif %}.</div>
+{% endfor %}
 
 {% call flt.form("/ideal-stock") %}
-  <select name="scope" aria-label="Whole company or one branch" class="form-select form-select-sm" style="width: auto">
-    {% for s in scopes %}<option value="{{ s }}" {% if s == f.scope %}selected{% endif %}>{{ s | short if s != "Company" else "Whole company" }}</option>{% endfor %}
+  <select name="scope" aria-label="Branch" class="form-select form-select-sm" style="width: auto">
+    {% for s in scopes %}<option value="{{ s }}" {% if s == f.scope %}selected{% endif %}>{{ s | short if s != "Company" else "All branches" }}</option>{% endfor %}
   </select>
   {{ flt.toggles("group", groups, f.group, placeholder="All item groups") }}
   <input type="hidden" name="status" value="">
   <div class="filter-pick">
-    <select name="status" multiple aria-label="What to do" class="form-select form-select-sm js-multi" data-placeholder="Anything to do">
+    <select name="status" multiple aria-label="Status" class="form-select form-select-sm js-multi" data-placeholder="Any status">
       {% for key, label in statuses.items() %}<option value="{{ key }}" {% if key in f.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select>
   </div>
-  <input type="search" name="search" aria-label="Find a group" value="{{ f.search }}" placeholder="Find, e.g. D RING or NOSE PIN" class="form-control form-control-sm"
-         style="width: 14rem">
+  <input type="search" name="search" aria-label="Search" value="{{ f.search }}" placeholder="Search" class="form-control form-control-sm"
+         style="width: 12rem">
 {% endcall %}
 
-{% if f.scope == "Company" %}<div class="small text-secondary mb-2"><i class="ti ti-info-circle"></i> A number for the whole company is
-  shared out across branches in line with the suggestion. To set a branch's own number, pick the branch above or open the group.</div>{% endif %}
 {% include "_ideal_editor.html" %}
 
-{% if mine or learn %}
-{{ ui.section("Your numbers", "every number set by hand, with its reason") }}
-<div class="row row-cards mb-3">
-  {% if learn %}
-  <div class="col-12"><div class="card sw-ai"><div class="card-body small">
-    <div class="fw-bold mb-1"><i class="ti ti-bulb me-1"></i>What your changes suggest</div>
-    {% for l in learn %}
-    <div class="mb-1">You set <b>{{ l.product }}</b> {{ l.fixes }} times, usually to about {{ "%.0f%%" | format(100 * l.ratio) }} of the suggestion
-      ({{ l.reasons }}). To make the suggestion match without setting each one, hold <b>{{ l.months }} months</b> of sales for choice
-      instead of {{ rules.choice_months | num }}{% if can(request, "admin") %} (<a href="/settings#tab-stock">change it in Settings</a>){% endif %}.</div>
-    {% endfor %}
-  </div></div></div>{% endif %}
-  {% if mine %}
-  <div class="col-12"><div class="card">
-    <div class="list-group list-group-flush small">
+{% if mine %}
+<div class="card mb-3">
+  <div class="card-header"><h3 class="card-title">Set by hand</h3></div>
+  <div class="table-responsive">
+    <table class="table table-sm table-vcenter card-table">
+      <thead><tr><th>Group</th><th>Branch</th><th class="text-end">Ideal</th><th class="text-end">Suggested then</th><th>Reason</th><th>By</th><th>Review</th></tr></thead>
+      <tbody>
       {% for m in mine %}
-      <a class="list-group-item list-group-item-action py-2 d-flex flex-wrap gap-2 align-items-center"
-         href="/ideal-stock/group?g={{ m.key | urlencode }}&level={{ m.level }}">
-        <span class="fw-semibold">{{ ("All of " ~ m.key) if m.level == "product" else m.key }}</span>
-        <span class="text-secondary">{{ "all branches" if m.branch == "*" else m.branch | short }}</span>
-        <span>set to <b>{{ m.pcs }}</b>{% if m.calc_at_fix is not none %} (suggested then {{ m.calc_at_fix | num }}){% endif %}</span>
-        <span class="text-secondary">“{{ m.reason }}”, {{ "you" if m.by == who else (m.by or "") }}</span>
-        <span class="ms-auto">{% if m.due %}<span class="badge bg-yellow-lt">check due</span>{% elif m.review_on %}<span class="text-secondary">check on {{ m.review_on | date("%d %b %Y") }}</span>{% endif %}</span>
-      </a>{% endfor %}
-    </div>
-  </div></div>{% endif %}
+        <tr><td><a href="/ideal-stock/group?g={{ m.key | urlencode }}&level={{ m.level }}">{{ ("All " ~ m.key) if m.level == "product" else m.key }}</a></td>
+          <td>{{ "All" if m.branch == "*" else m.branch | short }}</td><td class="text-end">{{ m.pcs }}</td>
+          <td class="text-end text-secondary">{{ m.calc_at_fix | num if m.calc_at_fix is not none else "–" }}</td>
+          <td>{{ m.reason }}</td><td class="text-secondary">{{ m.by or "" }}</td>
+          <td>{% if m.due %}<span class="st st-reduce">due</span>{% elif m.review_on %}{{ m.review_on | date("%d %b %Y") }}{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
 
-<div id="how" class="mt-4">{{ ui.section("How the suggestion is worked out") }}</div>
-<details class="sw-fold" open>
-  <summary><i class="ti ti-calculator"></i> The suggested number, in plain words</summary>
-  <div class="sw-fold-body small">
-    <p class="mb-2">For every group of similar pieces (same purity, item and weight range) at every branch, the system first estimates
-      <b>how many will sell</b> over the next months, mostly from the branch's own recent sales, with more weight on recent months.
-      Where a group sells rarely, it leans on how the whole item sells.</p>
-    <p class="mb-1">The suggestion is then the <b>largest</b> of three numbers:</p>
-    <ol class="mb-2 ps-3">
-      <li><b>Enough until new stock arrives:</b> new stock takes about {{ rules.replacement_days }} days, so hold enough to keep selling
-        until then, with a safety margin (bigger for the best sellers).</li>
-      <li><b>Choice on the counter:</b> customers like to choose, and branches that show more of a group sell more of it, so hold
-        {{ rules.choice_months | num }} months of expected sales.</li>
-      <li><b>At least one on display:</b> {{ rules.display_min_pcs }} piece{{ "" if rules.display_min_pcs == 1 else "s" }} of anything the branch sold in
-        the last {{ rules.display_min_months }} months.</li>
-    </ol>
-    <p class="mb-0 text-secondary">Small differences (within {{ rules.ideal_band_pct | num }}%, or under {{ rules.ideal_min_change_pcs }} pieces) count as about right.
-      The whole-company number is the branches added up; stock at head office counts as held. Your own number always wins over the suggestion.
-      {% if can(request, "admin") %}These settings can be changed in <a href="/settings#rules-ideal-stock">Settings</a>.{% endif %}</p>
-  </div>
-</details>
 <details class="sw-fold">
-  <summary><i class="ti ti-target-arrow"></i> How accurate is the sales estimate? <span class="text-secondary small">tested on the past</span></summary>
-  <div class="sw-fold-body">
-    <div class="small text-secondary mb-2">We went back to each of the last {{ origins }} month-ends, estimated the next {{ horizon }} months using only
-      what was known then, and compared with what really sold. Lower is better. For a single group at a single branch the miss is
-      larger ({{ "%.0f%%" | format(100 * fine_err) if fine_err is not none else "–" }}), because such a group sells only 0, 1 or 2 pieces in two
-      months; the safety margin allows for that.</div>
-    {{ ui.data_table(acc) }}
-  </div>
+  <summary>Forecast accuracy <span class="text-secondary">last {{ origins }} month-ends, {{ horizon }}-month horizon</span></summary>
+  {{ ui.data_table(acc) }}
 </details>
 {% endif %}
 </div>

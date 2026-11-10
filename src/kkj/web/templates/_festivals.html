@@ -1,11 +1,9 @@
 {# Settings -> Festivals. Every form posts back and this whole card is swapped. #}
 <div id="festivals">
-  {% if error %}<div class="alert alert-danger"><i class="ti ti-alert-circle"></i> {{ error }}</div>{% endif %}
-  {% if saved %}<div class="alert alert-success"><i class="ti ti-check"></i> {{ saved }}</div>{% endif %}
+  {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+  {% if saved %}<div class="alert alert-success">{{ saved }}</div>{% endif %}
   <form class="card mb-3" hx-post="/settings/festivals" hx-target="#festivals" hx-swap="outerHTML">
-    <div class="card-header"><div><h3 class="card-title"><i class="ti ti-calendar-event me-1"></i>Add or correct a festival date</h3>
-      <div class="card-subtitle small text-secondary">Festivals move between months, so each year's date is needed: seasonality and the
-        festival stock recommendations line sales up on these dates. Add next year's dates once the calendar is out.</div></div></div>
+    <div class="card-header"><div><h3 class="card-title">Add or correct a festival date</h3></div></div>
     <div class="card-body">
       <div class="row g-2 align-items-end">
         <div class="col-sm-4"><label class="form-label">Festival</label>
@@ -13,7 +11,7 @@
           <datalist id="festival-names">{% for n in names %}<option value="{{ n }}">{% endfor %}</datalist></div>
         <div class="col-sm-3"><label class="form-label">Date</label><input name="day" type="date" class="form-control" required></div>
         <div class="col-sm-3"><label class="form-label">Note</label><input name="note" class="form-control" placeholder="optional"></div>
-        <div class="col-sm-2"><button class="btn btn-primary w-100"><i class="ti ti-device-floppy"></i> Save</button></div>
+        <div class="col-sm-2"><button class="btn btn-primary w-100">Save</button></div>
       </div>
     </div>
   </form>

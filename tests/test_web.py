@@ -99,7 +99,7 @@ def test_response_needs_sign_in_then_records_and_is_undone():
                                   "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings",
                                   "/stock-turn", "/stock-turn?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
                                   "/stock-turn?group=Diamond+Jewellery&group=", "/stock-turn?view=brick&search=D+RING",
-                                  "/settings/ideal-stock", "/ideal-stock", "/help",
+                                  "/settings/ideal-stock", "/ideal-stock",
                                   "/ideal-stock?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",
                                   "/ideal-stock?group=Diamond+Jewellery&group=", "/seasonality", "/seasonality?group=Gold", "/recommendations?sort=money", "/recommendations/feed?sort=newest&offset=25", "/lookup", "/lookup?q=D+RING", "/lookup?q=DRN21585", "/lookup?q=zzqqxx",
                                   "/lookup?q=Kothari", "/sales?salesperson=K0057&branch=&group=", "/settings/festivals",
@@ -316,7 +316,7 @@ def test_changing_ideals_in_place_saves_applies_and_resets():
     group = "18KT · D RING · 0.25–0.5ct"
     try:
         r = client.get("/ideal-stock/group", params={"g": group})
-        assert r.status_code == 200 and "Ideal stock at each branch" in r.text and "Suggested" in r.text
+        assert r.status_code == 200 and "By branch" in r.text and "Suggested" in r.text
         with settings.app_engine().connect() as c:
             branch, calc = c.execute(text("""SELECT scope, calc_pcs FROM brain.ideal_stock WHERE brick_group = :g
                 AND scope <> 'Company' AND as_of = (SELECT max(as_of) FROM brain.ideal_stock) ORDER BY calc_pcs DESC LIMIT 1"""),
@@ -324,10 +324,10 @@ def test_changing_ideals_in_place_saves_applies_and_resets():
         calc = int(calc)
         form = {"level": "group", "key": [group], "branch": [branch], "orig": [str(calc)], "pcs": [str(calc + 7)],
                 "back": "/ideal-stock/group?g=x"}
-        assert "Add a short reason" in client.post("/ideal-stock/save", data={**form, "reason": ""}).text
-        assert "Nothing changed" in client.post("/ideal-stock/save", data={**form, "pcs": [str(calc)], "reason": "x"}).text
+        assert "Enter a reason" in client.post("/ideal-stock/save", data={**form, "reason": ""}).text
+        assert "No changes to save" in client.post("/ideal-stock/save", data={**form, "pcs": [str(calc)], "reason": "x"}).text
         r = client.post("/ideal-stock/save", data={**form, "reason": "pytest bridal"})
-        assert r.headers["HX-Redirect"].startswith("/ideal-stock/group?") and "Saved+1+number" in r.headers["HX-Redirect"]
+        assert r.headers["HX-Redirect"].startswith("/ideal-stock/group?") and "Saved+1+change" in r.headers["HX-Redirect"]
         with settings.app_engine().connect() as c:
             row = c.execute(text("SELECT review_on, calc_at_fix, pcs FROM config.ideal_stock_override WHERE key = :k AND branch = :b"),
                             {"k": group, "b": branch}).one()
@@ -337,13 +337,13 @@ def test_changing_ideals_in_place_saves_applies_and_resets():
             assert used.ideal_pcs == calc + 7 and used.ideal_from == "override"        # applied straight away
             rec = c.execute(text("SELECT action_id FROM brain.action WHERE kind LIKE 'turn_%' AND status = 'open' LIMIT 1")).scalar()
         page = client.get("/ideal-stock/group", params={"g": group}).text
-        assert "pytest bridal" in page and "use suggested" in page
+        assert "pytest bridal" in page and "reset" in page
         assert "pytest bridal" in client.get("/ideal-stock").text                       # listed under Your numbers
         if rec:
-            assert "Check the ideal at each branch" in client.get(f"/recommendations/{rec}").text
+            assert "Ideal by branch" in client.get(f"/recommendations/{rec}").text
         r = client.post("/ideal-stock/reset", data={"reset_level": "group", "reset_key": group, "reset_branch": branch,
                                                     "back": "//evil.example"})
-        assert r.headers["HX-Redirect"].startswith("/ideal-stock?") and "back+to+the+suggested" in r.headers["HX-Redirect"]
+        assert r.headers["HX-Redirect"].startswith("/ideal-stock?") and "Reset+" in r.headers["HX-Redirect"]
         with settings.app_engine().connect() as c:
             assert c.execute(text("""SELECT ideal_pcs FROM brain.ideal_stock WHERE brick_group = :g AND scope = :b
                                      AND as_of = (SELECT max(as_of) FROM brain.ideal_stock)"""), {"g": group, "b": branch}).scalar() == calc
@@ -411,7 +411,7 @@ def test_stock_turn_shows_its_table_when_calculated():
         calculated = c.execute(text("SELECT count(*) FROM brain.brick_turn")).scalar() > 0
     r = client.get("/stock-turn")
     if calculated:
-        assert "Not calculated yet" not in r.text and "biggest changes first" in r.text
+        assert "Not calculated yet" not in r.text and "Brick groups" in r.text
 
 
 @pytest.mark.parametrize("path", ["/recommendations", "/overview", "/inventory", "/sales", "/stock-turn", "/seasonality",

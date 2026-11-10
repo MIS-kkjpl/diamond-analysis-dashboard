@@ -29,7 +29,7 @@
 
 {% macro kpi(label, value, sub="", icon="ti-chart-bar", colour="blue") -%}
 <div class="col-6 col-lg">
-  <div class="card sw-kpi" style="--sw-accent: var(--tblr-{{ colour }})">
+  <div class="card sw-kpi">
     <div class="sw-kpi-label">{{ label }}</div>
     <div class="sw-kpi-value">{{ value }}</div>
     {% if sub %}<div class="sw-kpi-sub">{{ sub }}</div>{% endif %}
@@ -42,14 +42,12 @@
 {%- endmacro %}
 
 {% macro action(text) -%}
-<div class="alert alert-info d-flex align-items-start gap-2 mb-0 mt-3">
-  <i class="ti ti-bulb fs-2"></i><div><b>Recommended action:</b> {{ text }}</div>
-</div>
+<p class="sw-action mt-3 mb-0"><b>Action:</b> {{ text }}</p>
 {%- endmacro %}
 
 {% macro table_card(title, t, sub="", limit=None, icon="ti-table") -%}
 <div class="card h-100">
-  <div class="card-header"><div><h3 class="card-title"><i class="ti {{ icon }} me-2"></i>{{ title }}</h3>
+  <div class="card-header"><div><h3 class="card-title">{{ title }}</h3>
     {% if sub %}<div class="card-subtitle small text-secondary">{{ sub }}</div>{% endif %}</div></div>
   {{ data_table(t, limit) }}
 </div>

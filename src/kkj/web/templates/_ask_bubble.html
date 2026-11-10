@@ -21,7 +21,7 @@
     <div class="sw-note-offer">
       <div class="small"><i class="ti ti-notebook me-1"></i><b>Remember this?</b> {{ p.note }}</div>
       {% if p.setting_hint %}<div class="small text-secondary mt-1">To change the recommendations too: {{ p.setting_hint }}</div>{% endif %}
-      <div class="mt-2">{% if p.saved %}<span class="badge bg-green-lt"><i class="ti ti-check"></i> Saved as a business note</span>
+      <div class="mt-2">{% if p.saved %}<span class="badge bg-green-lt">Saved as a business note</span>
         {% elif not can(request, "manager") %}<span class="small text-secondary">A manager or admin can save this as a business note.</span>
         {% else %}<button type="button" class="btn btn-sm btn-outline-primary" hx-post="/ask/q/{{ r.question_id }}/note/{{ loop.index0 }}"
                 hx-target="#qa-{{ r.question_id }}" hx-swap="outerHTML">Save as a business note</button>

@@ -307,7 +307,6 @@ def ideal_stock(ideal, turns, rules):
     comp, branch, acc = ideal["company"], ideal["branch"], ideal["accuracy"]
     groups = turns[(turns["level"] == "group") & (turns["scope"] == "Company")].set_index("brick")
     product_acc = acc[acc["level"] == "product"].set_index("key") if len(acc) else pd.DataFrame()
-    item_acc = acc[acc["level"] == "item_group"].set_index("key") if len(acc) else pd.DataFrame()
     actions = []
     for _, r in comp.iterrows():
         status, change = r["status"], r["change_pcs"]
@@ -336,37 +335,14 @@ def ideal_stock(ideal, turns, rules):
         reasons = {"choice": "choice on the counter", "demand": "enough until new stock arrives",
                    "display minimum": "one on display", "override": "a number set by hand"}
         set_by = "; ".join(f"{reasons.get(k, k)} at {n} branch{'es' if n > 1 else ''}" for k, n in why.items())
-        summary = (f"Expected to sell about {r['annual']:.1f} {u} in the next 12 months. We have {r['current_pcs']:.0f}; "
-                   f"the ideal is {ideal_pcs:.0f}" + (f" ({set_by})." if set_by else ".")
-                   + " Check or change each branch's number on the Details page.")
+        summary = (f"Forecast {r['annual']:.1f} {u} over 12 months. Held {r['current_pcs']:.0f}, ideal {ideal_pcs:.0f}"
+                   + (f" ({set_by})." if set_by else "."))
         pa = product_acc.loc[r["item_name"]] if r["item_name"] in product_acc.index else None
-        ia = item_acc.loc[r["item_class_group"]] if r["item_class_group"] in item_acc.index else None
-        def tested(a):
-            if a is None:
-                return "not tested (too little history)"
-            if pd.isna(a["wape"]):
-                return "no sales during the test period, so no error to measure"
-            verdict = "better than" if a["better"] else "not better than"
-            return (f"error {_pct(a['wape'])} vs {_pct(a['wape_last_year'])} (same months last year) and "
-                    f"{_pct(a['wape_avg12'])} (12-month average): {verdict} both; bias {a['bias']:+.0%}")
         evidence = {
-            f"now ({u})": float(r["current_pcs"]), f"ideal ({u})": float(ideal_pcs),
+            f"held ({u})": float(r["current_pcs"]), f"ideal ({u})": float(ideal_pcs),
             f"forecast, next 12 months ({u})": round(float(r["annual"]), 1),
-            f"forecast over {r['cover_days']:.0f} days ({u})": round(float(r["cover_demand"]), 2),
-            "grade": f"{r['grade']}: have enough {r['service_pct']:.0f}% of the time",
-            "ideal is the largest of": (f"demand over {r['cover_days']:.0f} days at that service level; "
-                                        f"{rows['choice_months'].max():g} months of forecast demand for choice; "
-                                        f"the display minimum where the branch sold in the last year"),
-            "implied turn at the ideal": _turn(r["implied_turn"]),
-            "turn today (check)": _turn(g["blended_turn"]) if g is not None else "–",
-            f"accuracy test, {r['item_name']}": tested(pa),
-            f"accuracy test, {r['item_class_group']}": tested(ia),
-            "by branch": {
-                short(b["branch"]): (f"{b['current_pcs']:.0f} → {b['ideal_pcs']:.0f} {u} "
-                                     f"(forecast {b['annual']:.1f} a year; ideal from {b['ideal_from']}"
-                                     + (f": {b['override_reason']}" if b["ideal_from"] == "override" else "") + ")")
-                for _, b in rows.sort_values(["ideal_pcs", "current_pcs"], ascending=False).iterrows()
-                if b["current_pcs"] > 0 or b["ideal_pcs"] > 0},
+            "turn today": _turn(g["blended_turn"]) if g is not None else "–",
+            f"forecast error, {r['item_name']}": _pct(pa["wape"]) if pa is not None and pd.notna(pa["wape"]) else "–",
         }
         conf = confidence(float(rows["n_window"].fillna(0).sum()))
         actions.append(_action(kind, r["brick_group"], title, summary, impact, label, conf, evidence,

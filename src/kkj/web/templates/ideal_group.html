@@ -1,51 +1,34 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
 {% block title %}{{ g }} · Ideal stock · Stockwise{% endblock %}
-{% block pretitle %}<a href="/ideal-stock"><i class="ti ti-arrow-left"></i> Ideal stock</a>{% endblock %}
-{% block page_title %}{{ ("All of " ~ g) if level == "product" else g }}{% endblock %}
-{% block intro %}{% if not empty %}Expected to sell about <b>{{ "%.0f" | format(annual) if annual >= 1 else "%.1f" | format(annual) }}</b>
-a year across all branches. We have <b>{{ ed.total.held | num }}</b>; the ideal is <b>{{ ed.total.ideal | num }}</b>.
-Change any branch's number below and press Save.{% endif %}{% endblock %}
+{% block pretitle %}<a href="/ideal-stock">Ideal stock</a>{% endblock %}
+{% block page_title %}{{ ("All " ~ g) if level == "product" else g }}{% endblock %}
 {% block content %}
 {% if empty %}
-<div class="empty"><p class="empty-title">Nothing to show</p>
-  <p class="empty-subtitle text-secondary">{{ g }} has no stock and no expected sales.</p></div>
+<div class="empty"><p class="empty-title">No stock and no expected sales</p></div>
 {% else %}
+<div class="stat-line mb-3">
+  <span><b>{{ "%.0f" | format(annual) if annual >= 1 else "%.1f" | format(annual) }}</b> forecast, 12 months</span>
+  <span><b>{{ ed.total.held | num }}</b> held</span>
+  <span><b>{{ ed.total.ideal | num }}</b> ideal</span>
+  {% for a in acc if a.wape is not none and a.level == "product" %}<span><b>{{ "%.0f%%" | format(100 * a.wape) }}</b> forecast error</span>{% endfor %}
+</div>
+
 {% include "_ideal_editor.html" %}
 
-{{ ui.section("Behind the suggestion") }}
 <details class="sw-fold">
-  <summary><i class="ti ti-calculator"></i> How each branch's suggestion is worked out</summary>
-  <div class="sw-fold-body">
-    <div class="small text-secondary mb-2">The suggestion is the largest of A, B and C.
-      <b>A</b>: enough to keep selling until new stock arrives ({{ first.cover_days | num }} days), with a safety margin.
-      <b>B</b>: {{ first.choice_months | num }} months of expected sales, for choice on the counter.
-      <b>C</b>: {{ rules.display_min_pcs }} on display where the branch sold one in the last {{ rules.display_min_months }} months.</div>
-    {{ ui.data_table(t) }}
-  </div>
-</details>
-<details class="sw-fold">
-  <summary><i class="ti ti-target-arrow"></i> Has the sales estimate been right for this kind of piece?</summary>
-  <div class="sw-fold-body small">
-    {% for a in acc %}
-    <div class="mb-2"><b>{{ a.key }}</b> ({{ "item" if a.level == "product" else "item group" }}):
-      {% if a.wape is none %}no sales during the test, so nothing to measure.{% else %}
-      our estimate was off by <b>{{ "%.0f%%" | format(100 * a.wape) }}</b>, against {{ "%.0f%%" | format(100 * a.wape_avg12) }} for a plain
-      12-month average and {{ "%.0f%%" | format(100 * a.wape_last_year) }} for last year's sales.
-      {% if a.bias > 0.1 %}It tended to guess too high.{% elif a.bias < -0.1 %}It tended to guess too low.{% endif %}
-      <span class="badge {{ 'bg-green-lt' if a.better else 'bg-secondary-lt' }}">{{ "better than both" if a.better else "not better than both" }}</span>{% endif %}
-    </div>
-    {% else %}<div class="text-secondary">Not tested: too little history.</div>{% endfor %}
-  </div>
+  <summary>Calculation by branch</summary>
+  {{ ui.data_table(t) }}
 </details>
 {% if history %}
 <details class="sw-fold">
-  <summary><i class="ti ti-history"></i> Changes made by hand <span class="text-secondary small">{{ history | length }}</span></summary>
-  <div class="list-group list-group-flush small">
-    {% for h in history %}<div class="list-group-item py-2">{{ h.changed_at | date("%d %b %Y %H:%M") }} · {{ h.changed_by }} ·
-      {{ h.row_key.split(": ", 1)[-1] }}: {{ h.old_value if h.old_value is not none else "suggested" }} → {{ h.new_value if h.new_value is not none else "suggested" }}
-      {% if h.note %}· “{{ h.note }}”{% endif %}</div>{% endfor %}
-  </div>
+  <summary>Change log <span class="text-secondary">{{ history | length }}</span></summary>
+  <table class="table table-sm card-table mb-0">
+    <tbody>{% for h in history %}<tr><td class="text-nowrap text-secondary">{{ h.changed_at | date("%d %b %Y %H:%M") }}</td><td>{{ h.changed_by }}</td>
+      <td>{{ h.row_key.split(" @ ")[-1] | short }}</td>
+      <td>{{ h.old_value if h.old_value is not none else "suggested" }} → {{ h.new_value if h.new_value is not none else "suggested" }}</td>
+      <td class="text-secondary">{{ h.note or "" }}</td></tr>{% endfor %}</tbody>
+  </table>
 </details>
 {% endif %}
 {% endif %}

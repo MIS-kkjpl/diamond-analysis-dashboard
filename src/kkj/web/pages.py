@@ -16,12 +16,6 @@ from kkj.web.common import engine, read, render
 router = APIRouter()
 
 
-@router.get("/help", response_class=HTMLResponse)
-def help_page(request: Request):
-    """How to use Stockwise: a weekly routine, what each page answers, and the words used."""
-    return render(request, "help.html", "help")
-
-
 @router.get("/overview", response_class=HTMLResponse)
 def overview(request: Request):
     with engine().connect() as conn:

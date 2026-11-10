@@ -208,8 +208,8 @@ document.body && document.body.addEventListener("sw-refused", e => {
   setTimeout(() => box.remove(), 5000);
 });
 
-/* Ideal stock tables (templates/_ideal_editor.html): the suggested numbers are filled in; changing one highlights it
-   and shows the save bar (count, one reason, quick reasons, Undo). Leaving with unsaved numbers asks first. */
+/* Ideal stock editor (templates/_ideal_editor.html): changed inputs are highlighted and the save bar appears;
+   leaving the page with unsaved changes asks first. */
 (function () {
   function refresh(form) {
     let n = 0;
@@ -228,11 +228,6 @@ document.body && document.body.addEventListener("sw-refused", e => {
     if (e.target.matches && e.target.matches(".ideal-input")) refresh(e.target.closest("form"));
   });
   document.addEventListener("click", e => {
-    const chip = e.target.closest && e.target.closest(".ideal-chip");
-    if (chip) {
-      const box = chip.closest("form").querySelector(".ideal-reason");
-      box.value = chip.dataset.reason; box.focus();
-    }
     const undo = e.target.closest && e.target.closest(".ideal-undo");
     if (undo) {
       const form = undo.closest("form");

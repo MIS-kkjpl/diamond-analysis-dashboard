@@ -37,7 +37,7 @@
       {% if not act %}
       {% elif a.status in ("open", "snoozed") %}
         <button class="btn btn-sm btn-success" {% if not who %}disabled{% endif %}
-                hx-post="/recommendations/{{ a.action_id }}/approve" {{ post | safe }}><i class="ti ti-check"></i> Approve</button>
+                hx-post="/recommendations/{{ a.action_id }}/approve" {{ post | safe }}>Approve</button>
         <button class="btn btn-sm btn-outline-secondary" {% if not who %}disabled{% endif %}
                 hx-post="/recommendations/{{ a.action_id }}/dismiss" {{ post | safe }}><i class="ti ti-x"></i> Dismiss</button>
       {% elif a.status == "approved" %}
@@ -64,6 +64,6 @@
       <a class="btn btn-sm btn-ghost-primary ms-auto" href="/recommendations/{{ a.action_id }}">Details <i class="ti ti-arrow-right"></i></a>
       {% if not who %}<span class="small text-secondary">Sign in to respond</span>{% endif %}
     </div>
-    {% if just_acted %}<div class="small text-green mt-2"><i class="ti ti-check"></i> Recorded</div>{% endif %}
+    {% if just_acted %}<div class="small text-green mt-2">Recorded</div>{% endif %}
   </div>
 </div>

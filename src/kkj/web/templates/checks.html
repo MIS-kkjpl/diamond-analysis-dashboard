@@ -3,12 +3,11 @@
 {% block title %}Data quality · Stockwise{% endblock %}
 {% block pretitle %}Admin{% endblock %}
 {% block page_title %}Data quality{% endblock %}
-{% block intro %}Can the numbers be trusted? Every load is checked against the ERP, and the accuracy audit follows every piece from one stock snapshot to the next.{% endblock %}
 {% block content %}
 {% macro table(title, icon, rows, note="") -%}
 <div class="col-12">
   <div class="card">
-    <div class="card-header"><h3 class="card-title"><i class="ti {{ icon }} me-2"></i>{{ title }}</h3></div>
+    <div class="card-header"><h3 class="card-title">{{ title }}</h3></div>
     <div class="table-responsive">
       <table class="table table-sm table-vcenter card-table js-table">
         {% if rows %}
@@ -29,12 +28,10 @@
   </div>
 </div>
 {%- endmacro %}
-{{ ui.section("Accuracy", "is what we hold the same as the ERP?") }}
+{{ ui.section("Accuracy") }}
 <div class="card mb-3">
   <div class="card-header">
-    <div><h3 class="card-title"><i class="ti ti-shield-check me-2"></i>Accuracy audit</h3>
-      <div class="card-subtitle small text-secondary">Every stock and sales load re-checked against the ERP's own totals (exact), the
-        sources compared on the same dates, and every label followed from one stock snapshot to the next. Runs after every refresh.</div></div>
+    <div><h3 class="card-title">Accuracy audit</h3></div>
     {% if audit %}<div class="card-actions"><a href="/checks/audit.xlsx" class="btn btn-sm btn-outline-secondary">
       <i class="ti ti-download"></i> Exceptions (Excel)</a></div>{% endif %}
   </div>
@@ -70,12 +67,12 @@
   {% endif %}
 </div>
 
-{{ ui.section("Bills to check", "this financial year") }}
+{{ ui.section("Bills to check") }}
 <div class="mb-3">{% if t_bills %}{{ ui.table_card("Unusual sale lines", t_bills, icon="ti-receipt-2",
     sub="Billed above the label value, more than " ~ (big_discount * 100) | round | int ~ "% off, or at zero. Often a correct exception (scheme, exchange, staff sale); worth confirming with the branch.") }}
   {% else %}<div class="card"><div class="card-body text-secondary">No unusual bills this financial year.</div></div>{% endif %}</div>
 
-{{ ui.section("Run history", "every load and refresh") }}
+{{ ui.section("Run history") }}
 <div class="row row-cards">
   {{ table("Recommendation refreshes", "ti-refresh", brain_runs, "Each refresh re-runs every rule on the latest stock and sales and updates the recommendations.") }}
   {{ table("Stock pipeline runs", "ti-packages", stock_runs) }}

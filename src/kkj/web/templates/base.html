@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Stockwise{% endblock %}</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%232a78d6%27/%3E%3Cpath d=%27M16 7l9 5-9 5-9-5z%27 fill=%27white%27/%3E%3Cpath d=%27M7 16l9 5 9-5M7 20l9 5 9-5%27 stroke=%27white%27 stroke-width=%272%27 fill=%27none%27/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%23161b24%27/%3E%3Crect x=%2710%27 y=%2710%27 width=%2712%27 height=%2712%27 rx=%272%27 fill=%27%235fb3a6%27 transform=%27rotate(45 16 16)%27/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">
@@ -47,11 +47,8 @@
       </button>
       <h1 class="navbar-brand navbar-brand-autodark brand">
         <a href="/recommendations" class="brand-link">
-          <i class="ti ti-stack-2 brand-icon"></i>
-          <span class="brand-text">
-            <span class="brand-name">Stockwise</span>
-            <span class="brand-tag">Inventory &amp; sales intelligence</span>
-          </span>
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">Stockwise</span>
         </a>
       </h1>
       <div class="sw-user-mobile d-lg-none">{{ user_menu("mobile") }}</div>
@@ -60,15 +57,12 @@
           {% macro item(key, href, icon, label) -%}
           <li class="nav-item {% if active == key %}active{% endif %}">
             <a class="nav-link" href="{{ href }}">
-              <span class="nav-link-icon"><i class="ti {{ icon }}"></i></span>
               <span class="nav-link-title">{{ label }}</span>
             </a>
           </li>
           {%- endmacro %}
-          <li class="nav-section">Start here</li>
           {{ item("recommendations", "/recommendations", "ti-checklist", "Recommendations") }}
           {% if feature("stock_turn") %}{{ item("ideal_stock", "/ideal-stock", "ti-scale", "Ideal stock") }}{% endif %}
-          {{ item("help", "/help", "ti-help-circle", "How to use Stockwise") }}
           <li class="nav-section">Stock</li>
           {% if feature("inventory") %}{{ item("inventory", "/inventory", "ti-packages", "Stock on hand") }}{% endif %}
           {% if feature("stock_turn") %}{{ item("stock_turn", "/stock-turn", "ti-refresh", "Stock turn") }}{% endif %}
@@ -106,7 +100,7 @@
     {% if notice %}
     <div class="container-xl mt-3">
       <div class="sw-notice" role="status">
-        <i class="ti ti-info-circle"></i><div><b>Data notice:</b> {{ notice }}{% if feature("checks") %} <a href="/checks" class="ms-1">Details</a>{% endif %}</div>
+        <div>{{ notice }}{% if feature("checks") %} <a href="/checks" class="ms-1">Details</a>{% endif %}</div>
       </div>
     </div>
     {% endif %}

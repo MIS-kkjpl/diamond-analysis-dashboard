@@ -1,27 +1,26 @@
-{# Ideal stock you can change in place. The suggested number is filled in; type over any you disagree with, give one
-   reason, save. Used on Ideal stock (one row per group), a group's page and stock recommendations (one row per
-   branch). ed: see kkj.web.analytics.branch_editor / ideal_stock. #}
+{# Ideal stock, editable in place: the suggestion is prefilled; changed rows are saved together with one reason.
+   Used on Ideal stock (a row per group), the group page and stock recommendations (a row per branch).
+   ed: kkj.web.analytics.branch_editor / ideal_stock. #}
 {% set edit = can(request, "manager") and who %}
 {% set saved = request.query_params.get("saved") %}
 <form class="card mb-3 ideal-editor" id="{{ ed.id }}" hx-post="/ideal-stock/save" hx-target="#{{ ed.id }}-msg"
       hx-swap="innerHTML" hx-disabled-elt="find .ideal-save">
   <input type="hidden" name="level" value="{{ ed.level }}">
   <input type="hidden" name="back" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
-  <div class="card-header"><div>
-    <h3 class="card-title"><i class="ti ti-pencil me-1"></i>{{ ed.title }}</h3>
-    <div class="card-subtitle small text-secondary">
-      {% if edit %}The suggested number is already filled in. Disagree? Type your own number and press Save. You can set it back
-      to the suggestion at any time.{% else %}The suggested number, or the number someone has set.{% endif %}</div></div></div>
-  {% if saved %}<div class="card-body pb-0"><div class="alert alert-success mb-0"><i class="ti ti-check"></i> {{ saved }}</div></div>{% endif %}
+  <div class="card-header">
+    <h3 class="card-title">{{ ed.title }}</h3>
+    {% if ed.mode == "groups" and ed.n_total > ed.rows | length %}<div class="card-actions small text-secondary">Top {{ ed.rows | length }} of {{ ed.n_total }}</div>{% endif %}
+  </div>
+  {% if saved %}<div class="card-body py-2"><div class="alert alert-success mb-0">{{ saved }}</div></div>{% endif %}
 
   <div class="table-responsive">
     <table class="table table-vcenter card-table ideal-table {% if ed.mode == 'groups' %}js-table{% endif %}">
       <thead><tr>
         <th>{{ ed.what }}</th>
-        <th class="text-end" title="Pieces held today (a set counts once)">Have now</th>
-        <th class="text-end col-calc" title="Worked out from expected sales">Suggested</th>
-        <th class="text-end" style="width: 8.5rem">Your ideal</th>
-        <th>What to do</th>
+        <th class="text-end">Held</th>
+        <th class="text-end col-calc">Suggested</th>
+        <th class="text-end" style="width: 8rem">Ideal</th>
+        <th></th>
       </tr></thead>
       <tbody>
       {% for r in ed.rows %}
@@ -29,74 +28,59 @@
           <td>
             <input type="hidden" name="key" value="{{ r.key }}"><input type="hidden" name="branch" value="{{ r.branch }}">
             <input type="hidden" name="orig" value="{{ r.ideal }}">
-            {% if r.link %}<a href="{{ r.link }}" class="fw-semibold">{{ r.label }}</a>{% else %}<span class="fw-semibold">{{ r.label }}</span>{% endif %}
-            <div class="small text-secondary">{{ r.sub }}</div>
+            {% if r.link %}<a href="{{ r.link }}" class="row-name">{{ r.label }}</a>{% else %}<span class="row-name">{{ r.label }}</span>{% endif %}
+            <div class="row-sub">{{ r.sub }}</div>
           </td>
           <td class="text-end">{{ r.held | num }}</td>
           <td class="text-end text-secondary col-calc">{{ r.calc | num }}</td>
           <td class="text-end">
-            <input name="pcs" type="number" min="0" step="1" value="{{ r.ideal }}" data-orig="{{ r.ideal }}" data-calc="{{ r.calc }}"
-                   class="form-control form-control-sm text-end ideal-input" aria-label="Your ideal for {{ r.label }}"
+            <input name="pcs" type="number" min="0" step="1" value="{{ r.ideal }}" data-orig="{{ r.ideal }}"
+                   class="form-control form-control-sm text-end ideal-input" aria-label="Ideal for {{ r.label }}"
                    {% if not edit %}readonly tabindex="-1"{% endif %}>
-            <div class="small text-secondary calc-under">suggested {{ r.calc | num }}</div>
+            <div class="row-sub calc-under">suggested {{ r.calc | num }}</div>
           </td>
           <td>
-            <span class="badge bg-{{ r.colour }}-lt">{{ r.word }}</span>
-            {% if r.detail %}<span class="small text-secondary ms-1">{{ r.detail }}</span>{% endif %}
+            <span class="st st-{{ r.status }}">{{ r.word }}</span>{% if r.detail %}<span class="row-sub ms-2">{{ r.detail }}</span>{% endif %}
             {% if r.fix %}
-            <div class="small mt-1 ideal-fix">
-              <span class="text-orange" title="{{ r.fix.by or '' }}, {{ r.fix.at | date('%d %b %Y') }}"><i class="ti ti-user-edit"></i>
-                Set by {{ "you" if r.fix.by == who else (r.fix.by or "someone") }}: “{{ r.fix.reason }}”</span>
-              {% if r.fix.due %}<span class="badge bg-yellow-lt ms-1">check due</span>{% endif %}
-              {% if edit %}<button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" hx-post="/ideal-stock/reset"
+            <div class="row-sub mt-1" title="{{ r.fix.by or '' }}, {{ r.fix.at | date('%d %b %Y') }}{% if r.fix.review_on %}; review {{ r.fix.review_on | date('%d %b %Y') }}{% endif %}">
+              {{ "You" if r.fix.by == who else (r.fix.by or "Set by hand") }}: {{ r.fix.reason }}{% if r.fix.due %} · <b>review due</b>{% endif %}
+              {% if edit %} · <a href="#" role="button" hx-post="/ideal-stock/reset"
                 hx-vals='{"reset_level": {{ r.fix.level | tojson }}, "reset_key": {{ r.fix.key | tojson }}, "reset_branch": {{ r.fix.branch | tojson }}}'
-                hx-target="#{{ ed.id }}-msg" hx-confirm="Go back to the suggested number ({{ r.calc }}) for {{ r.label }}?">
-                <i class="ti ti-arrow-back-up"></i> use suggested</button>{% endif %}
+                hx-target="#{{ ed.id }}-msg" hx-confirm="Reset {{ r.label }} to the suggested {{ r.calc }}?">reset</a>{% endif %}
             </div>
-            {% elif r.note %}<div class="small text-secondary mt-1"><i class="ti ti-user-edit"></i> {{ r.note }}</div>{% endif %}
+            {% elif r.note %}<div class="row-sub mt-1">{{ r.note }}</div>{% endif %}
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="5" class="text-secondary">Nothing to show for these filters.</td></tr>
+        <tr><td colspan="5" class="text-secondary">No groups match.</td></tr>
       {% endfor %}
       </tbody>
       {% if ed.mode == "branches" and ed.rows | length > 1 %}
-      <tfoot><tr class="fw-bold"><td>All branches</td><td class="text-end">{{ ed.total.held | num }}</td>
+      <tfoot><tr class="fw-semibold"><td>Total</td><td class="text-end">{{ ed.total.held | num }}</td>
         <td class="text-end text-secondary col-calc">{{ ed.total.calc | num }}</td><td class="text-end pe-3">{{ ed.total.ideal | num }}</td><td></td></tr></tfoot>
       {% endif %}
     </table>
   </div>
-  {% if ed.mode == "groups" and ed.n_total > ed.rows | length %}
-  <div class="card-body py-2 small text-secondary border-top">Showing the {{ ed.rows | length }} biggest differences of {{ ed.n_total }}.
-    Use the filters above to find others.</div>{% endif %}
 
   {% if ed.others %}
-  <div class="card-body py-2 border-top small">
+  <div class="card-body py-2 border-top row-sub">
     {% for f in ed.others %}
-    <div class="mb-1"><i class="ti ti-user-edit text-orange"></i>
-      {{ "All of " ~ f.key if f.level == "product" else f.key }} at {{ "all branches" if f.branch == "*" else f.branch | short }} set to
-      <b>{{ f.pcs }}</b> by {{ "you" if f.by == who else (f.by or "someone") }}: “{{ f.reason }}” (shared out across branches in line with the suggestion)
-      {% if edit %}<button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" hx-post="/ideal-stock/reset"
+    <div>{{ "All " ~ f.key if f.level == "product" else f.key }}, {{ "all branches" if f.branch == "*" else f.branch | short }}: <b>{{ f.pcs }}</b>
+      ({{ "you" if f.by == who else (f.by or "set by hand") }}: {{ f.reason }})
+      {% if edit %} · <a href="#" role="button" hx-post="/ideal-stock/reset"
         hx-vals='{"reset_level": {{ f.level | tojson }}, "reset_key": {{ f.key | tojson }}, "reset_branch": {{ f.branch | tojson }}}'
-        hx-target="#{{ ed.id }}-msg" hx-confirm="Remove this number and go back to the suggestion?"><i class="ti ti-arrow-back-up"></i> use suggested</button>{% endif %}
+        hx-target="#{{ ed.id }}-msg" hx-confirm="Reset to the suggestion?">reset</a>{% endif %}
     </div>{% endfor %}
   </div>{% endif %}
 
   {% if edit %}
   <div class="ideal-savebar border-top" hidden>
-    <div class="d-flex flex-wrap align-items-center gap-2">
-      <span class="fw-semibold ideal-count">1 change</span>
-      <input name="reason" class="form-control form-control-sm ideal-reason" style="flex: 1 1 18rem; max-width: 30rem"
-             placeholder="Why? e.g. wedding season, new counter" aria-label="Why you changed it" autocomplete="off">
-      <button class="btn btn-primary ideal-save"><i class="ti ti-device-floppy"></i> Save</button>
-      <button type="button" class="btn btn-ghost-secondary ideal-undo">Undo</button>
-    </div>
-    <div class="d-flex flex-wrap gap-1 mt-2 small align-items-center">
-      <span class="text-secondary me-1">Quick reasons:</span>
-      {% for x in ed.reasons %}<button type="button" class="btn btn-sm btn-outline-secondary py-0 ideal-chip" data-reason="{{ x }}">{{ x }}</button>{% endfor %}
-    </div>
-    <div class="small text-secondary mt-2">Your number is used straight away, and comes back to you after {{ ed.review_days }} days with
-      what actually sold, so you can keep it or let the suggestion take over again.</div>
+    <span class="ideal-count">1 change</span>
+    <input name="reason" class="form-control form-control-sm ideal-reason" list="{{ ed.id }}-reasons"
+           placeholder="Reason" aria-label="Reason" autocomplete="off">
+    <datalist id="{{ ed.id }}-reasons">{% for x in ed.reasons %}<option value="{{ x }}">{% endfor %}</datalist>
+    <button class="btn btn-sm btn-primary ideal-save">Save</button>
+    <button type="button" class="btn btn-sm btn-link text-secondary ideal-undo">Discard</button>
   </div>{% endif %}
   <div id="{{ ed.id }}-msg" class="px-3 pb-3 empty-hide"></div>
 </form>

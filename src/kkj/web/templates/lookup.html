@@ -4,7 +4,6 @@
 {% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
 {% block pretitle %}Look up{% endblock %}
 {% block page_title %}{{ query or "Find anything" }}{% endblock %}
-{% block intro %}Find a piece, a product, a salesperson or a recommendation.{% endblock %}
 {% block content %}
 <form action="/lookup" method="get" class="card card-body py-2 mb-3">
   <div class="input-icon">
@@ -24,7 +23,7 @@
 
 {% if piece %}{% set p = piece %}
 <div class="card mb-3">
-  <div class="card-header"><h3 class="card-title"><i class="ti ti-tag me-2"></i>Piece {{ p.barcode }}</h3>
+  <div class="card-header"><h3 class="card-title">Piece {{ p.barcode }}</h3>
     {% if p.now %}<span class="badge bg-green-lt ms-2">In stock</span>{% elif p.sold %}<span class="badge bg-blue-lt ms-2">Sold</span>
     {% else %}<span class="badge bg-secondary-lt ms-2">Not in stock now</span>{% endif %}</div>
   <div class="card-body">
@@ -67,7 +66,7 @@
 
 {% if product %}{% set pr = product %}
 <div class="card mb-3">
-  <div class="card-header"><div><h3 class="card-title"><i class="ti ti-diamond me-2"></i>{{ pr.item }}</h3>
+  <div class="card-header"><div><h3 class="card-title">{{ pr.item }}</h3>
     <div class="card-subtitle small text-secondary">{{ pr.group }} · {{ pr.pieces | num }} pieces in stock, {{ pr.value | money }} ·
       {{ pr.sold_12m | num }} sold in the last 12 months</div></div></div>
   <div class="card-body">
@@ -75,10 +74,9 @@
       <div class="col-lg-6">{{ ui.table_card("Stock by branch", pr.t_branch, icon="ti-building-store") }}</div>
       {% if pr.fig_season %}<div class="col-lg-6">{{ ui.chart("c-season", pr.fig_season, "When it sells", "1.0× = an average month, from five years of sales") }}</div>{% endif %}
       {% if pr.t_month %}<div class="col-lg-6">{{ ui.table_card("Net sales by month (last 12 months)", pr.t_month, icon="ti-receipt") }}</div>{% endif %}
-      {% if pr.t_groups %}<div class="col-lg-6">{{ ui.table_card("Brick groups (stock turn)", pr.t_groups, limit=13, icon="ti-refresh",
-          sub="Largest 13 · all of them on Stock turn") }}</div>{% endif %}
+      {% if pr.t_groups %}<div class="col-lg-6">{{ ui.table_card("Brick groups (stock turn)", pr.t_groups, limit=13, icon="ti-refresh") }}</div>{% endif %}
       {% if pr.recs %}
-      <div class="col-12"><div class="card"><div class="card-header"><h3 class="card-title"><i class="ti ti-checklist me-2"></i>Open recommendations ({{ pr.recs | length }})</h3></div>
+      <div class="col-12"><div class="card"><div class="card-header"><h3 class="card-title">Open recommendations ({{ pr.recs | length }})</h3></div>
         <div class="list-group list-group-flush">{% for r in pr.recs %}
           <a class="list-group-item list-group-item-action py-2" href="/recommendations/{{ r.action_id }}">{{ r.title }}</a>{% endfor %}</div></div></div>
       {% endif %}

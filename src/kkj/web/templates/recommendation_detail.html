@@ -14,7 +14,7 @@
           hx-target="#card-{{ a.action_id }}" hx-swap="outerHTML" hx-on::after-request="this.reset()">
       <i class="ti ti-message text-secondary"></i>
       <input name="note" aria-label="Note" class="form-control form-control-sm flex-grow-1" style="max-width: 36rem"
-             placeholder="Add a note: why, or what was done (recorded with your name)" required>
+             placeholder="Add a note" required>
       <button class="btn btn-sm btn-primary" {% if not who %}disabled{% endif %}>Save note</button>
     </form>
   </div>
@@ -23,7 +23,7 @@
   {% if ai_notes %}
   <div class="col-12">
     <div class="card sw-ai">
-      <div class="card-header"><h3 class="card-title"><i class="ti ti-sparkles me-2"></i>AI second look</h3></div>
+      <div class="card-header"><h3 class="card-title">AI second look</h3></div>
       <div class="list-group list-group-flush">
         {% for n in ai_notes %}<div class="list-group-item py-2"><span class="badge bg-secondary-lt text-capitalize me-2">{{ n.note_type }}</span>{{ n.note }}
           {% set others = n.action_ids | reject("equalto", a.action_id) | list %}
@@ -35,7 +35,7 @@
   {% if follow and feature("outcomes") %}
   <div class="col-12">
     <div class="card">
-      <div class="card-header"><div><h3 class="card-title"><i class="ti ti-target-arrow me-2"></i>What happened since</h3>
+      <div class="card-header"><div><h3 class="card-title">What happened since</h3>
         <div class="card-subtitle small text-secondary">{{ follow.days }} days since it was {{ "dismissed" if a.status == "rejected" else "approved" }}
           · <a href="/recommendations/outcomes">all outcomes</a></div></div></div>
       <div class="card-body">
@@ -56,7 +56,7 @@
   {% endif %}
   <div class="col-lg-6">
     <div class="card h-100">
-      <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-dots me-2"></i>The numbers behind it</h3></div>
+      <div class="card-header"><h3 class="card-title">The numbers behind it</h3></div>
       <table class="table table-sm table-vcenter card-table">
         <tbody>
         {% for key, value in flatten(a.evidence) %}
@@ -68,7 +68,7 @@
   </div>
   <div class="col-lg-6">
     <div class="card h-100">
-      <div class="card-header"><h3 class="card-title"><i class="ti ti-history me-2"></i>History</h3></div>
+      <div class="card-header"><h3 class="card-title">History</h3></div>
       <div class="list-group list-group-flush">
         {% for e in history %}
         <div class="list-group-item py-2">
@@ -85,7 +85,7 @@
   {% if a.pieces %}
   <div class="col-12">
     <div class="card">
-      <div class="card-header"><h3 class="card-title"><i class="ti ti-diamond me-2"></i>Pieces ({{ a.pieces | length }})</h3></div>
+      <div class="card-header"><h3 class="card-title">Pieces ({{ a.pieces | length }})</h3></div>
       <div class="table-responsive">
         <table class="table table-sm table-vcenter card-table table-striped">
           {% set first = ["barcode", "item_name", "location", "age_days", "dia_wt", "value", "recovery"] %}

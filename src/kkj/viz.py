@@ -6,12 +6,12 @@ import math
 
 import pandas as pd
 
-# Reference palette (validated categorical order; see the dataviz skill's palette.md)
-SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
-# Ordinal blue ramp for ordered classes (age bands, price bands): steps 250..650
-ORDINAL = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"]
-MUTED_SERIES = "#c3c2b7"                       # de-emphasised series (e.g. legacy-basis bars)
-INK, INK_2, MUTED, GRID, AXIS, SURFACE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7", "#ffffff"
+# Categorical order, checked for lightness, chroma and colour-blind separation of neighbours
+SERIES = ["#008c7a", "#d27a12", "#4a6fc4", "#c0473b", "#8452b8", "#5f9a1c"]
+# Ordinal teal ramp for ordered classes (age bands, price bands), light to dark
+ORDINAL = ["#9fd3c9", "#5fb3a6", "#2a8f80", "#1d5c55", "#103a35"]
+MUTED_SERIES = "#c5cad1"                       # de-emphasised series (e.g. legacy-basis bars)
+INK, INK_2, MUTED, GRID, AXIS, SURFACE = "#161b24", "#3a4250", "#6b7380", "#e6e8ec", "#c9cdd4", "#ffffff"
 
 # Item groups keep the same colour on every chart (colour follows the entity)
 GROUP_ORDER = ["Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND", "Broken Dia Jew"]
@@ -53,7 +53,7 @@ def style(fig, height=300, legend=True):
     fig.update_layout(
         height=height, margin=dict(l=8, r=8, t=30 if legend else 10, b=8),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family='Inter, system-ui, -apple-system, "Segoe UI", sans-serif', size=12, color=INK),
+        font=dict(family='"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif', size=12, color=INK),
         hoverlabel=dict(bgcolor="white", bordercolor=GRID, font=dict(color=INK)),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, title_text="",
                     font=dict(color=INK_2)),

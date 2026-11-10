@@ -1,12 +1,10 @@
 {# Settings -> Users. Every form posts back and this whole card is swapped. #}
 <div id="users">
-  {% if error %}<div class="alert alert-danger"><i class="ti ti-alert-circle"></i> {{ error }}</div>{% endif %}
-  {% if saved %}<div class="alert alert-success"><i class="ti ti-check"></i> {{ saved }}</div>{% endif %}
+  {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+  {% if saved %}<div class="alert alert-success">{{ saved }}</div>{% endif %}
 
   <div class="card mb-3">
-    <div class="card-header"><div><h3 class="card-title">Users</h3>
-      <div class="card-subtitle small text-secondary">{% for r in roles %}<b>{{ role_labels[r] }}</b>: {{ role_help[r] }}.
-        {% endfor %}A password you set for someone is temporary: they choose their own when they next sign in.</div></div></div>
+    <div class="card-header"><div><h3 class="card-title">Users</h3></div></div>
     <div class="table-responsive">
       <table class="table table-sm table-vcenter card-table">
         <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last sign-in</th><th>Signed in on</th><th></th></tr></thead>
@@ -75,7 +73,7 @@
   </div>
 
   <form class="card mb-3" hx-post="/settings/users" hx-target="#users" hx-swap="outerHTML">
-    <div class="card-header"><h3 class="card-title"><i class="ti ti-user-plus me-1"></i>Add a user</h3></div>
+    <div class="card-header"><h3 class="card-title">Add a user</h3></div>
     <div class="card-body">
       {# fields align at the top (the password hint hangs below its box); the button gets an empty label so it
          lines up with the boxes, not with the hint #}
@@ -99,8 +97,7 @@
   </form>
 
   <div class="card">
-    <div class="card-header"><div><h3 class="card-title">Recent sign-in attempts</h3>
-      <div class="card-subtitle small text-secondary">Last 25. Several failures for one username can mean someone is guessing.</div></div></div>
+    <div class="card-header"><div><h3 class="card-title">Recent sign-in attempts</h3></div></div>
     <div class="table-responsive">
       <table class="table table-sm table-vcenter card-table">
         <thead><tr><th>When</th><th>Username typed</th><th>Result</th><th>From</th></tr></thead>
@@ -109,7 +106,7 @@
                       "inactive": "account disabled", "password_changed": "password changed"} %}
         {% for a in attempts %}
           <tr><td class="text-nowrap">{{ a.at | date("%d %b %Y %H:%M") }}</td><td>{{ a.username }}</td>
-            <td>{% if a.success %}<span class="text-green"><i class="ti ti-check"></i> {{ why.get(a.reason, "signed in") }}</span>
+            <td>{% if a.success %}<span class="text-green">{{ why.get(a.reason, "signed in") }}</span>
                 {% else %}<span class="text-red"><i class="ti ti-x"></i> {{ why.get(a.reason, a.reason) }}</span>{% endif %}</td>
             <td class="text-secondary">{{ a.ip or "" }}</td></tr>
         {% else %}<tr><td colspan="4" class="text-secondary">None yet.</td></tr>{% endfor %}

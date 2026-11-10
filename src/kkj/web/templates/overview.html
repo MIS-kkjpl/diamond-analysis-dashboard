@@ -4,13 +4,11 @@
 {% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
 {% block pretitle %}Sales{% endblock %}
 {% block page_title %}Overview{% endblock %}
-{% block intro %}The headline numbers: how much stock we hold, what we've sold this financial year, and how fast stock turns into sales.{% endblock %}
 {% block content %}
 {% if not h %}
 <div class="empty"><p class="empty-title">No stock snapshot yet</p></div>
 {% else %}
 {% macro kpi(label, value, sub, icon, colour) -%}{{ ui.kpi(label, value, sub, icon, colour) }}{%- endmacro %}
-{{ ui.section("Headline numbers") }}
 <div class="row row-cards mb-3">
   {{ kpi("Stock value", h.stock_value | money,
          (("▲ " if h.change_7d > 0 else "▼ ") ~ ((h.change_7d if h.change_7d > 0 else -h.change_7d) | money) ~ " vs " ~ (h.change_vs | date("%d %b"))) if h.change_7d is not none else "",
@@ -21,11 +19,8 @@
          (h.days_of_stock | num) ~ " days of stock", "ti-refresh", "purple") }}
   {{ kpi("Value aged over " ~ h.aged_days ~ " d", h.aged_share | pct, h.aged_value | money, "ti-hourglass", "orange") }}
 </div>
-<div class="small text-secondary mb-3">Stock as of {{ h.as_of | date }} · sales {{ h.fy_start | date }} to {{ h.sales_to | date }} ·
-  value = taxable amount before GST; returns valued at the sale they reverse; turn = net sales ÷ time-weighted
-  average stock over {{ h.fy_days }} days ({{ h.snapshots_in_fy }} snapshots); retail value on both sides (no cost data).</div>
+<div class="small text-secondary mb-3">Stock as of {{ h.as_of | date }} · sales {{ h.fy_start | date }} to {{ h.sales_to | date }} · values before GST</div>
 
-{{ ui.section("Trends", "sales by month and stock over time") }}
 <div class="row row-cards">
   <div class="col-lg-7">
     <div class="card h-100">

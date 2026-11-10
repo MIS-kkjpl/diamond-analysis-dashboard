@@ -5,7 +5,6 @@
 {% block head %}<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>{% endblock %}
 {% block pretitle %}Stock{% endblock %}
 {% block page_title %}Stock on hand{% endblock %}
-{% block intro %}What we hold, where, and for how long. Use it to spot old stock and pieces sitting away from a counter.{% endblock %}
 {% block content %}
 <div id="page">
 {% call flt.form("/inventory") %}
@@ -26,36 +25,33 @@
 {% if empty %}
 <div class="empty"><p class="empty-title">No stock for these filters</p></div>
 {% else %}
-{{ ui.section("At a glance") }}
 <div class="row row-cards mb-3">{% for k in kpis %}{{ ui.kpi(*k) }}{% endfor %}</div>
-<div class="small text-secondary mb-3">As of {{ as_of | date }} · value = taxable amount before GST · customers' own items left out · age = days since the label date</div>
+<div class="small text-secondary mb-3">As of {{ as_of | date }} · values before GST</div>
 
-{{ ui.section("Where the stock is", "by branch and by age") }}
+{{ ui.section("Where the stock is") }}
 <div class="row row-cards mb-3">
   <div class="col-lg-6">{{ ui.chart("c-branch", fig_branch, "Value by branch", t=t_branch) }}</div>
   <div class="col-lg-6">{{ ui.chart("c-age", fig_age, "Value by age since labelling", t=t_age) }}</div>
 </div>
 {{ ui.section("What it is and how old") }}
 <div class="mb-3">{{ ui.table_card("Value by item group and age", t_pivot, icon="ti-layout-grid") }}</div>
-{{ ui.section("Sets", "pieces labelled separately but sold together") }}
+{{ ui.section("Sets") }}
 <div class="row row-cards mb-3">
-  <div class="col-12">{{ ui.table_card("Sets in stock", t_sets, icon="ti-stack-2",
-      sub="Each set counted once; carats include the solitaire stone. Stock turn and purchasing count sets the same way.") }}</div>
-  <div class="col-12">{% if t_broken %}{{ ui.table_card("Broken sets", t_broken, icon="ti-puzzle",
-      sub="A piece has left stock without the rest, or the pieces are in different places") }}{% else %}
-    <div class="card"><div class="card-header"><h3 class="card-title"><i class="ti ti-puzzle me-2"></i>Broken sets</h3></div>
+  <div class="col-12">{{ ui.table_card("Sets in stock", t_sets, icon="ti-stack-2") }}</div>
+  <div class="col-12">{% if t_broken %}{{ ui.table_card("Broken sets", t_broken, icon="ti-puzzle") }}{% else %}
+    <div class="card"><div class="card-header"><h3 class="card-title">Broken sets</h3></div>
       <div class="card-body text-secondary">None: every set in stock is complete and in one place.</div></div>{% endif %}</div>
 </div>
 
-{{ ui.section("Pieces to act on", "old stock, and stock away from a counter") }}
+{{ ui.section("Pieces to act on") }}
 <div class="mb-3">{{ ui.table_card("Oldest stock: over " ~ f.old_days ~ " days, highest value first", t_oldest,
                                     sub="Top 200", icon="ti-hourglass") }}</div>
 <div class="mb-3">{% if t_stale %}{{ ui.table_card("Stale approvals: out more than " ~ f.approval_days ~ " days", t_stale,
-    sub=(stale_kpi[0] | num) ~ " pieces, " ~ (stale_kpi[1] | money) ~ ". Still counted as stock: confirm each is with a customer, or close the approval in the ERP. Longest out first.",
+    sub=(stale_kpi[0] | num) ~ " pieces, " ~ (stale_kpi[1] | money) ~ "",
     icon="ti-clock-exclamation") }}{% else %}
-  <div class="card"><div class="card-body text-secondary"><i class="ti ti-clock-exclamation me-2"></i>No piece has been out on approval
+  <div class="card"><div class="card-body text-secondary">No piece has been out on approval
     for more than {{ f.approval_days }} days.</div></div>{% endif %}</div>
-<div class="mb-3">{{ ui.table_card("Not on a counter", t_away, sub="On approval, in transit or in repair; longest days since branch-in",
+<div class="mb-3">{{ ui.table_card("Not on a counter", t_away,
                                     icon="ti-truck") }}</div>
 {% endif %}
 </div>
