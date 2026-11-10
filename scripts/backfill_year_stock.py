@@ -28,14 +28,21 @@ ap.add_argument("--from", dest="start", required=True)
 ap.add_argument("--to", dest="end", required=True)
 ap.add_argument("--pause", type=float, default=5)
 ap.add_argument("--legacy-dates", action="store_true", help="also every legacy-file snapshot date in the range")
+ap.add_argument("--month-ends", action="store_true", help="the first date and each month's last day (not weekly)")
 a = ap.parse_args()
 year = os.environ.get("ERP_YEAR", "current")
 start, end = (datetime.strptime(x, "%d/%m/%Y").date() for x in (a.start, a.end))
 dates = [start]
-d = start + timedelta(days=(2 - start.weekday()) % 7 or 7)        # then every Wednesday, like this year's
-while d <= end:
-    dates.append(d)
-    d += timedelta(days=7)
+if a.month_ends:                                                  # older years: month-end stock only
+    d = (pd.Timestamp(start) + pd.offsets.MonthEnd(1)).date()
+    while d <= end:
+        dates.append(d)
+        d = (pd.Timestamp(d) + pd.offsets.MonthEnd(1)).date()
+else:
+    d = start + timedelta(days=(2 - start.weekday()) % 7 or 7)    # then every Wednesday, like this year's
+    while d <= end:
+        dates.append(d)
+        d += timedelta(days=7)
 with settings.etl_engine().connect() as c:
     if a.legacy_dates:
         legacy = pd.read_sql(text("SELECT DISTINCT snapshot_date FROM stock_hist.snapshot_status WHERE source = 'csv_legacy'"), c)

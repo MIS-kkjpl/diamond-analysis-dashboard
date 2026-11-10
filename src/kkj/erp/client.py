@@ -10,7 +10,7 @@ import requests
 
 HOST = "https://kothari.gold:8443"
 SPROGRAM_KEY = "5"
-TIMEOUT = 400            # seconds per report request; as-on stock step A can take 3+ minutes
+TIMEOUT = 900            # seconds per report request; as-on stock step A can take 7+ minutes when the ERP is busy
 LOGIN_TIMEOUT = 30
 VERIFY_SSL = True        # set False only if you get an SSL certificate error
 CUSTOM_LOCALE = "Asia/Kolkata;en-US;dd/MM/yyyy;HH:mm:ss;dd/MM/yyyy HH:mm:ss"

@@ -19,7 +19,7 @@ Per label (each skipped when already in the cache, so a stopped run just carries
 
 No new label starts after --stop-at (default 23:30; the PC shuts down at midnight).
 
-Run:  .venv\\Scripts\\python scripts\\pull_label_details.py [--stop-at 23:30] [--pause 0.5] [--limit N] [--sold-all]
+Run:  .venv\\Scripts\\python scripts\\pull_label_details.py [--stop-at 23:30] [--pause 0.5] [--workers 4] [--limit N] [--sold-all]
 """
 import argparse
 import base64
@@ -27,6 +27,7 @@ import csv
 import io
 import json
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -88,24 +89,83 @@ def save_photo(raw, barcode):
 
 
 class Erp:
+    """One ERP login shared by all workers (a second login could end the first one's session)."""
     def __init__(self):
         self.cfg = settings.erp_login_settings()
         self.s = new_session(self.cfg)
+        self.lock = threading.Lock()
+        self.logins = 0
         login(self.s, self.cfg)
 
     def call(self, fn):
-        """Run fn(); on a rejected token log in again once and retry."""
+        """Run fn(); on a rejected token log in again once (one worker only) and retry."""
+        seen = self.logins
         r = fn()
         if getattr(r, "status_code", 200) in (401, 403):
-            login(self.s, self.cfg)
+            with self.lock:
+                if self.logins == seen:              # nobody else has logged in again meanwhile
+                    login(self.s, self.cfg)
+                    self.logins += 1
             r = fn()
         return r
+
+
+def pull_one(erp, r):
+    """Details and photo for one label -> one index record. Never raises."""
+    rec = {"barcode": r.barcode, "item": r.item_name, "why": r.why, "at": f"{datetime.now():%Y-%m-%d %H:%M:%S}"}
+    try:
+        t = time.time()
+        hist = erp.call(lambda: label_status.fetch(erp.s, r.barcode, erp.cfg["role_code"]))
+        rec["status_s"] = round(time.time() - t, 2)
+        (DIRS["status"] / f"{r.barcode}.json").write_text(json.dumps(hist, ensure_ascii=False), encoding="utf-8")
+        owns = [h.get("ownCode") for h in hist if h.get("ownCode")]
+        if owns:
+            rec["own_code"] = owns[-1]
+            t = time.time()
+            resp = erp.call(lambda: erp.s.get(
+                f"{HOST}/acme-inventory-web/inv/getInventoryAttributeForInv/{owns[-1]}/false",
+                params={"sProgramKey": SPROGRAM_KEY}, timeout=60))
+            rec["attr_s"] = round(time.time() - t, 2)
+            attrs = (resp.json() or {}).get("data") if resp.ok else None
+            (DIRS["attr"] / f"{r.barcode}.json").write_text(json.dumps(attrs, ensure_ascii=False), encoding="utf-8")
+            rec["attrs"] = len(attrs) if isinstance(attrs, list) else 0
+        if r.item_name not in NO_PHOTO_ITEMS:
+            t = time.time()
+            resp = erp.call(lambda: post(
+                erp.s, "acme-inventory-web/inv/getCriteriaStkSalesRptImages", "full image", timeout=180,
+                headers=JSON_HEADERS,
+                json={"params": {"reportParam": "1", "dataList": [{"index": 0, "barcode": r.barcode}],
+                                 "storeImgOn": 1, "imageView": "1", "flagForOneStone": False,
+                                 "stoneCodeList": [], "ftpMasterCode": 1}}))
+            inner = (resp.json() or {}).get("data") if resp.ok else None
+            items = inner.get("data") if isinstance(inner, dict) else inner
+            raw = b64((items or [{}])[0].get("img") or (items or [{}])[0].get("src")) if items else b""
+            rec["photo_from"] = "full"
+            if not raw:
+                resp = erp.call(lambda: post(
+                    erp.s, "acme-document-web/doc/downloadBarcodeImage", "image", headers=JSON_HEADERS,
+                    json={"params": {"fileId": r.barcode, "moduleCode": 46, "ftpMasterCode": 1,
+                                     "storeOnFtp": 1, "storeImgOn": 1, "uiCall": True}}))
+                data = (resp.json() or {}).get("data") if resp.ok else None
+                shots = sorted(data or [], key=lambda x: x.get("imgSrNo", 9)) if isinstance(data, list) else []
+                raw = b64(shots[0].get("src")) if shots else b""
+                rec["photo_from"] = "thumbnail"
+            rec["img_s"] = round(time.time() - t, 2)
+            if raw:
+                size = save_photo(raw, r.barcode)
+                rec.update(photo=1, orig_px=f"{size[0]}x{size[1]}", orig_bytes=len(raw))
+            else:
+                rec.update(photo=0, photo_from="none")
+    except Exception as e:                       # one label failing never stops the run
+        rec["error"] = f"{type(e).__name__}: {str(e)[:150]}"
+    return rec
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stop-at", default="23:30")
-    ap.add_argument("--pause", type=float, default=0.5)
+    ap.add_argument("--pause", type=float, default=0.5, help="seconds each worker waits between labels")
+    ap.add_argument("--workers", type=int, default=1, help="labels pulled at the same time (one shared login)")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--sold-all", action="store_true")
     a = ap.parse_args()
@@ -117,73 +177,42 @@ def main():
     todo = todo[~todo["barcode"].isin(done)]
     if a.limit:
         todo = todo.head(a.limit)
-    print(f"{len(done)} labels already cached; {len(todo)} to pull "
+    print(f"{len(done)} labels already cached; {len(todo)} to pull with {a.workers} worker(s) "
           f"({todo['why'].value_counts().to_dict()})", flush=True)
     stop = datetime.strptime(a.stop_at, "%H:%M").time()
     erp = Erp()
     new_file = not index.exists()
+    queue = iter(list(todo.itertuples()))
+    take, write = threading.Lock(), threading.Lock()
+    count = [0]
+
+    def worker():
+        while datetime.now().time() < stop:
+            with take:
+                r = next(queue, None)
+            if r is None:
+                return
+            rec = pull_one(erp, r)
+            with write:
+                w.writerow(rec)
+                f.flush()
+                count[0] += 1
+                if count[0] % 100 == 0:
+                    print(f"{datetime.now():%H:%M} {count[0]}/{len(todo)} done", flush=True)
+            time.sleep(a.pause)
+
     with open(index, "a", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, FIELDS)
         if new_file:
             w.writeheader()
-        n = 0
-        for r in todo.itertuples():
-            if datetime.now().time() >= stop:
-                print(f"Stopped at {a.stop_at}: {len(todo) - n} labels left for the next run.", flush=True)
-                break
-            rec = {"barcode": r.barcode, "item": r.item_name, "why": r.why, "at": f"{datetime.now():%Y-%m-%d %H:%M:%S}"}
-            try:
-                t = time.time()
-                hist = erp.call(lambda: label_status.fetch(erp.s, r.barcode, erp.cfg["role_code"]))
-                rec["status_s"] = round(time.time() - t, 2)
-                (DIRS["status"] / f"{r.barcode}.json").write_text(json.dumps(hist, ensure_ascii=False), encoding="utf-8")
-                owns = [h.get("ownCode") for h in hist if h.get("ownCode")]
-                if owns:
-                    rec["own_code"] = owns[-1]
-                    t = time.time()
-                    resp = erp.call(lambda: erp.s.get(
-                        f"{HOST}/acme-inventory-web/inv/getInventoryAttributeForInv/{owns[-1]}/false",
-                        params={"sProgramKey": SPROGRAM_KEY}, timeout=60))
-                    rec["attr_s"] = round(time.time() - t, 2)
-                    attrs = (resp.json() or {}).get("data") if resp.ok else None
-                    (DIRS["attr"] / f"{r.barcode}.json").write_text(json.dumps(attrs, ensure_ascii=False), encoding="utf-8")
-                    rec["attrs"] = len(attrs) if isinstance(attrs, list) else 0
-                if r.item_name not in NO_PHOTO_ITEMS:
-                    t = time.time()
-                    resp = erp.call(lambda: post(
-                        erp.s, "acme-inventory-web/inv/getCriteriaStkSalesRptImages", "full image", timeout=180,
-                        headers=JSON_HEADERS,
-                        json={"params": {"reportParam": "1", "dataList": [{"index": 0, "barcode": r.barcode}],
-                                         "storeImgOn": 1, "imageView": "1", "flagForOneStone": False,
-                                         "stoneCodeList": [], "ftpMasterCode": 1}}))
-                    inner = (resp.json() or {}).get("data") if resp.ok else None
-                    items = inner.get("data") if isinstance(inner, dict) else inner
-                    raw = b64((items or [{}])[0].get("img") or (items or [{}])[0].get("src")) if items else b""
-                    rec["photo_from"] = "full"
-                    if not raw:
-                        resp = erp.call(lambda: post(
-                            erp.s, "acme-document-web/doc/downloadBarcodeImage", "image", headers=JSON_HEADERS,
-                            json={"params": {"fileId": r.barcode, "moduleCode": 46, "ftpMasterCode": 1,
-                                             "storeOnFtp": 1, "storeImgOn": 1, "uiCall": True}}))
-                        data = (resp.json() or {}).get("data") if resp.ok else None
-                        shots = sorted(data or [], key=lambda x: x.get("imgSrNo", 9)) if isinstance(data, list) else []
-                        raw = b64(shots[0].get("src")) if shots else b""
-                        rec["photo_from"] = "thumbnail"
-                    rec["img_s"] = round(time.time() - t, 2)
-                    if raw:
-                        size = save_photo(raw, r.barcode)
-                        rec.update(photo=1, orig_px=f"{size[0]}x{size[1]}", orig_bytes=len(raw))
-                    else:
-                        rec.update(photo=0, photo_from="none")
-            except Exception as e:                       # one label failing never stops the run
-                rec["error"] = f"{type(e).__name__}: {str(e)[:150]}"
-            w.writerow(rec)
-            f.flush()
-            n += 1
-            if n % 100 == 0:
-                print(f"{datetime.now():%H:%M} {n}/{len(todo)} done", flush=True)
-            time.sleep(a.pause)
-    print(f"Finished: {n} labels this run.", flush=True)
+        threads = [threading.Thread(target=worker) for _ in range(max(1, a.workers))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    left = len(todo) - count[0]
+    print(f"Finished: {count[0]} labels this run" + (f"; stopped at {a.stop_at} with {left} left." if left else "."),
+          flush=True)
 
 
 if __name__ == "__main__":
