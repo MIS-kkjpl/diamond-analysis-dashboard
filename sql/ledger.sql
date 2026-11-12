@@ -85,14 +85,14 @@ INSERT INTO config.location (location, kind, counts_as_stock, note, updated_by) 
     ('HO MD COUNTER', 'out', false, 'Pieces leaving by Stock Outward: damaged piece or tag (MHODDJ), remaining piece of a broken set (MHODB); relabelled later under a new barcode', 'setup'),
     ('HO Repair', 'repair', true, NULL, 'setup'),
     ('KJ2 Repairing Counter', 'repair', true, NULL, 'setup'),
-    ('MO Gold Rep', 'unclassified', true, 'Mumbai: gold repair? to confirm', 'setup'),
+    ('MO Gold Rep', 'approval', true, 'Mumbai: pieces out for repair that come back under the same tag (unlike HO MD COUNTER); still our stock', 'setup'),
     ('HO Safe', 'storage', true, NULL, 'setup'),
     ('HO Vault', 'storage', true, NULL, 'setup'),
     ('KJ2 Safe', 'storage', true, NULL, 'setup'),
     ('HO Parcel', 'dispatch', true, 'Packed for dispatch, before HO In Transit', 'setup'),
-    ('Supply Counter', 'unclassified', true, 'Head Office; what is held here? to confirm', 'setup'),
-    ('RJ Supply Counter', 'unclassified', true, 'to confirm', 'setup'),
-    ('MO Supply Counter', 'unclassified', true, 'to confirm', 'setup')
+    ('Supply Counter', 'supply', true, 'HO dispatch point: pieces arrive after labelling and leave for branches / exhibitions; sets are made here', 'setup'),
+    ('RJ Supply Counter', 'supply', true, 'Dispatch point for Rajasthan', 'setup'),
+    ('MO Supply Counter', 'supply', true, 'Dispatch point for Mumbai', 'setup')
 ON CONFLICT (location) DO NOTHING;
 
 INSERT INTO config.voucher_type (voucher, series, effect, note, updated_by) VALUES
@@ -121,7 +121,7 @@ SELECT location,
        CASE WHEN location ILIKE '%approval%' THEN 'approval'
             WHEN location ~* 'trans' THEN 'in_transit'
             WHEN location ILIKE '%repair%' THEN 'repair'
-            WHEN location ~* 'z counter' THEN 'unclassified'
+            WHEN location ~* 'z counter' THEN 'counter'   -- temporary promotional counters
             WHEN location ~* 'counter|branch|mo diamond|exhibition' THEN 'counter'
             ELSE 'unclassified' END,
        'setup'
