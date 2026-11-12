@@ -364,7 +364,7 @@ def stock_flow(a, st, sa, kinds, out_locations=()):
     t, b = int(s["left"].sum() - s["left_showroom"].sum()), int(s["left_unexplained"].sum() - s["left_unexplained_showroom"].sum())
     a.info(3, "Labels that left Head Office / wholesale / other without a retail sale", span, b,
            note=f"of {t:,} that left, {int(s['left_delabelled'].sum()):,} were delabelled at HO MD COUNTER (Stock Outward "
-                "MHODDJ); the rest are likely wholesale sales, returns to suppliers and melting")
+                "MHODDJ / MHODB); the rest are likely wholesale sales, returns to suppliers and melting")
     t, b = int(s["arrived"].sum()), int(s["arrived_unexplained"].sum())
     a.check(3, "Every label that arrived in stock is new, returned or back", span, 0, b,
             note=f"{t:,} arrived; {100 * (1 - b / max(t, 1)):.2f}% explained")
