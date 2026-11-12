@@ -46,7 +46,7 @@
           <tbody>{% for p in follow_pieces %}<tr>
             <td>{% if feature("lookup") %}<a href="/lookup?q={{ p.barcode | urlencode }}">{{ p.barcode }}</a>{% else %}{{ p.barcode }}{% endif %} <span class="text-secondary small">{{ p.item_name or "" }}</span></td>
             <td class="small">{{ p.location or "–" }}</td><td class="small">{{ p.now_where or "–" }}</td>
-            <td><span class="badge bg-{{ {'sold': 'green', 'moved': 'blue', 'unchanged': 'secondary', 'left stock, no sale': 'orange'}[p.outcome] }}-lt">{{ p.outcome }}</span>
+            <td><span class="badge bg-{{ {'sold': 'green', 'moved': 'blue', 'unchanged': 'secondary', 'left stock, no sale': 'orange', 'delabelled': 'red'}.get(p.outcome, 'secondary') }}-lt">{{ p.outcome }}</span>
               {% if p.sale_date %}<span class="small text-secondary">{{ p.sale_date | date }}</span>{% endif %}</td>
             <td class="text-end">{{ p.sold_value | money if p.sold_value is not none else "–" }}</td></tr>{% endfor %}</tbody>
         </table></div>{% endif %}

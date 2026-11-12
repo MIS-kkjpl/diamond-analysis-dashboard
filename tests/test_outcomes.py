@@ -31,7 +31,7 @@ def test_piece_recommendation_is_followed(conn):
     assert len(f) == 1 and f.iloc[0]["days"] >= 19
     p = outcomes.pieces(conn, f)
     assert len(p) == f.iloc[0]["n_pieces"] > 0
-    assert set(p["outcome"]) <= {"sold", "moved", "unchanged", "left stock, no sale"}
+    assert set(p["outcome"]) <= {"sold", "moved", "unchanged", "left stock, no sale", "delabelled"}
     assert "of" in f.iloc[0]["outcome"]
 
 

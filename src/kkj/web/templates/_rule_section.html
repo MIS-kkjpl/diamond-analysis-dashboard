@@ -29,11 +29,11 @@
             <select id="rule-{{ r.key }}" class="form-select form-select-sm" name="{{ r.key }}" style="max-width: 16rem">
               {% for c in r.choices %}<option value="{{ c }}" {% if c == v %}selected{% endif %}>{{ choice_label(c) }}</option>{% endfor %}
             </select>
-          {% elif r.key == "excluded_products" %}
+          {% elif r.key in ("excluded_products", "excluded_locations") %}
             <div class="filter-pick" style="max-width: 32rem">
               <select name="{{ r.key }}" multiple class="form-select form-select-sm js-multi" aria-label="{{ r.label }}"
-                      data-placeholder="None: type to search products">
-                {% for c in s.product_names %}<option value="{{ c }}" {% if c in v %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                      data-placeholder="None">
+                {% for c in (s.product_names if r.key == "excluded_products" else s.location_names) %}<option value="{{ c }}" {% if c in v %}selected{% endif %}>{{ c }}</option>{% endfor %}
               </select>
             </div>
           {% elif r.choices or r.key == "transfer_excluded_branches" %}

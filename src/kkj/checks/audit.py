@@ -313,7 +313,7 @@ def same_dates(a, st, sa):
 
 
 # ── Layer 3: stock-flow continuity ────────────────────────────────────────────
-def stock_flow(a, st, sa, kinds):
+def stock_flow(a, st, sa, kinds, out_locations=()):
     best = st.assign(rank=st["source"].map(SOURCE_RANK)).sort_values("rank")
     first_src = best.drop_duplicates("snapshot_date")[["snapshot_date", "source"]]
     chain = best.merge(first_src, on=["snapshot_date", "source"])
@@ -330,8 +330,9 @@ def stock_flow(a, st, sa, kinds):
         sold_in = set(sold.loc[(sold["sale_date"] >= d0) & (sold["sale_date"] <= d1), "barcode"])
         back_in = set(returned.loc[(returned["sale_date"] >= d0) & (returned["sale_date"] <= d1), "barcode"])
         g = pd.DataFrame(index=gone)
-        g["why"] = np.select([g.index.isin(list(sold_in)), ever_seen.reindex(g.index)["max"] > d1],
-                             ["sold", "back in a later snapshot"], "UNEXPLAINED")
+        delabelled = A.loc[gone, "location"].isin(list(out_locations)).values   # HO MD COUNTER: Stock Outward (MHODDJ)
+        g["why"] = np.select([g.index.isin(list(sold_in)), ever_seen.reindex(g.index)["max"] > d1, delabelled],
+                             ["sold", "back in a later snapshot", "delabelled"], "UNEXPLAINED")
         n = B.loc[new, ["label_date"]].copy()
         n["why"] = np.select([(n["label_date"] >= d0) & (n["label_date"] <= d1), n.index.isin(list(back_in)),
                               ever_seen.reindex(n.index)["min"] < d0],
@@ -341,7 +342,8 @@ def stock_flow(a, st, sa, kinds):
         summary.append({"from": d0.date(), "to": d1.date(), "days": (d1 - d0).days,
                         "source": f"{SOURCE_NAME[A['source'].iloc[0]]} → {SOURCE_NAME[B['source'].iloc[0]]}",
                         "labels_from": len(A), "labels_to": len(B), "left": len(gone),
-                        "left_sold": int((g["why"] == "sold").sum()), "left_unexplained": int((g["why"] == "UNEXPLAINED").sum()),
+                        "left_sold": int((g["why"] == "sold").sum()), "left_delabelled": int((g["why"] == "delabelled").sum()),
+                        "left_unexplained": int((g["why"] == "UNEXPLAINED").sum()),
                         "arrived": len(new), "arrived_new": int((n["why"] == "newly labelled").sum()),
                         "arrived_unexplained": int((n["why"] == "UNEXPLAINED").sum()), "branch_moves": len(moved)})
         gone_rows.append(A.loc[g.index[g["why"] == "UNEXPLAINED"], ["branch", "location", "item_class_group", "item_amt"]]
@@ -361,8 +363,8 @@ def stock_flow(a, st, sa, kinds):
             note=f"{t:,} left showrooms; {100 * (1 - b / max(t, 1)):.2f}% explained")
     t, b = int(s["left"].sum() - s["left_showroom"].sum()), int(s["left_unexplained"].sum() - s["left_unexplained_showroom"].sum())
     a.info(3, "Labels that left Head Office / wholesale / other without a retail sale", span, b,
-           note=f"of {t:,} that left; most likely wholesale sales, returns to suppliers and melting: ERP transactions "
-                "the pipelines do not load yet (only retail sales are pulled)")
+           note=f"of {t:,} that left, {int(s['left_delabelled'].sum()):,} were delabelled at HO MD COUNTER (Stock Outward "
+                "MHODDJ); the rest are likely wholesale sales, returns to suppliers and melting")
     t, b = int(s["arrived"].sum()), int(s["arrived_unexplained"].sum())
     a.check(3, "Every label that arrived in stock is new, returned or back", span, 0, b,
             note=f"{t:,} arrived; {100 * (1 - b / max(t, 1)):.2f}% explained")
@@ -394,10 +396,12 @@ def run(today=None):
         st = stock_rows(conn)
         sa = sales_rows(conn)
         kinds = _read(conn, "SELECT erp_branch, kind FROM config.branch").set_index("erp_branch")["kind"]
+        from kkj.scope import excluded_locations
+        out_locations = excluded_locations(conn)
     stock_fields(a, st)
     sales_fields(a, sa, today)
     same_dates(a, st, sa)
-    stock_flow(a, st, sa, kinds)
+    stock_flow(a, st, sa, kinds, out_locations)
     return a
 
 

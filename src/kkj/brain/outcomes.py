@@ -61,6 +61,8 @@ def pieces(conn, actions):
     p["outcome"] = "unchanged"
     p.loc[p["now_location"].notna() & (p["now_location"] != was), "outcome"] = "moved"
     p.loc[p["now_location"].isna(), "outcome"] = "left stock, no sale"
+    from kkj.scope import excluded_locations
+    p.loc[p["now_location"].isin(excluded_locations(conn)), "outcome"] = "delabelled"
     p.loc[p["sale_date"].notna(), "outcome"] = "sold"
     return p
 

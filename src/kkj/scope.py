@@ -7,6 +7,8 @@ What the app covers.
    excluded_groups / excluded_products, with history). Customers' own items ('Customer Diamond': repairs,
    exchanges) are the standard case; any niche product can be added the same way. They stay in the raw tables
    (the loads mirror the ERP exactly); every company query filters them with own_goods().
+3. Out-of-stock locations (rule excluded_locations): pieces at HO MD COUNTER are delabelled (damaged piece or tag)
+   and go to repair or out by Stock Outward (doc series MHODDJ), so they are not stock. Stock queries add in_stock().
 """
 # the item groups the ERP diamond product groups (5, 100, 126, 14, 121, 127, 69, 18) return
 DIAMOND_GROUPS = ["Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND",
@@ -19,6 +21,18 @@ def own_goods(alias=""):
     a = f"{alias}." if alias else ""
     return (f"NOT (coalesce({a}item_class_group, '') = ANY(:x_groups) "
             f"OR coalesce({a}item_name, '') = ANY(:x_products))")
+
+
+def in_stock(alias=""):
+    """SQL condition for stock rows: not at an out-of-stock location. Needs :x_locations (added by
+    kkj.db.queries.read())."""
+    a = f"{alias}." if alias else ""
+    return f"NOT coalesce({a}location, '') = ANY(:x_locations)"
+
+
+def excluded_locations(conn):
+    from kkj import rules
+    return list(rules.load(conn)["excluded_locations"])
 
 
 def excluded(conn):

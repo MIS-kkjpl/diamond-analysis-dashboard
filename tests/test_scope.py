@@ -33,3 +33,16 @@ def test_own_goods_condition_takes_aliases_and_lists():
                                WHERE {own_goods('t')}"""),
                       {"x_groups": ["Customer Diamond"], "x_products": ["NICHE"]}).scalar()
     assert n == 2                                   # D RING and the row with no group or name
+
+
+def test_out_of_stock_locations_are_not_stock_but_their_sales_count():
+    from kkj.scope import excluded_locations
+    with settings.app_engine().connect() as c:
+        out = excluded_locations(c)
+        assert "HO MD COUNTER" in out                       # delabelled pieces (Stock Outward, MHODDJ)
+        latest = q.stock_latest(c)
+        hist = q.stock_history(c, pd.Timestamp("2026-10-01").date())
+        dates = q.stock_dates(c)["snapshot_date"].tail(2)
+        bricks = q.brick_stock(c, list(dates))
+    for df in (latest, hist, bricks):
+        assert not df["location"].isin(out).any()

@@ -26,7 +26,14 @@ def _section_ctx(section, saved=None, error=None):
     with engine().connect() as conn:
         current = rules_mod.load(conn)
     return {"section": section, "rules": [r for r in rules_mod.RULES if r.section == section], "current": current,
-            "branch_names": _branch_names(), "product_names": _product_names(), "saved": saved, "error": error}
+            "branch_names": _branch_names(), "product_names": _product_names(), "location_names": _location_names(),
+            "saved": saved, "error": error}
+
+
+def _location_names():
+    """Every location in the latest stock (for the out-of-stock locations picker)."""
+    return read("""SELECT DISTINCT location FROM erp.stock_snapshot WHERE location IS NOT NULL
+                   AND snapshot_date = (SELECT max(snapshot_date) FROM erp.stock_snapshot) ORDER BY 1""")["location"].tolist()
 
 
 def _product_names():
@@ -226,7 +233,7 @@ def _parse(rule, form):
         if form[key] not in rule.choices:
             raise ValueError(f"{rule.label}: choose one of {', '.join(rule.choices)}")
         return form[key]
-    if rule.choices or key in ("transfer_excluded_branches", "excluded_products"):
+    if rule.choices or key in ("transfer_excluded_branches", "excluded_products", "excluded_locations"):
         return [v for v in form.getlist(key) if v]
     items = [x.strip() for x in form.get(key, "").split(",") if x.strip()]
     if rule.default and all(isinstance(d, (int, float)) for d in rule.default):

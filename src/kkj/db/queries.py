@@ -5,7 +5,7 @@ engine (kkj.brain.run). Each takes an open SQLAlchemy connection and returns a D
 import pandas as pd
 from sqlalchemy import text
 
-from kkj.scope import DIAMOND_GROUPS, excluded, own_goods
+from kkj.scope import DIAMOND_GROUPS, excluded, excluded_locations, in_stock, own_goods
 
 STOCK_COLUMNS = """snapshot_date, barcode, label_no, branch, location, set_item_barcode, item_class_group, item_name,
     category, supplier, pcs, gross_wt, net_wt, dia_wt, dia_amt, rate, item_amt, taxable_amount, age_days,
@@ -16,17 +16,20 @@ def read(conn, sql, **params):
     """A query as a DataFrame. Queries using kkj.scope.own_goods() get the current exclusions as parameters."""
     if ":x_groups" in sql:
         params["x_groups"], params["x_products"] = excluded(conn)
+    if ":x_locations" in sql:
+        params["x_locations"] = excluded_locations(conn)
     return pd.read_sql(text(sql), conn, params=params)
 
 
 def stock_latest(conn):
     """Every label that counts in the latest production snapshot (erp.stock_snapshot): exclusions left out."""
     return read(conn, f"""SELECT {STOCK_COLUMNS} FROM erp.stock_snapshot
-                         WHERE snapshot_date = (SELECT max(snapshot_date) FROM erp.stock_snapshot) AND {own_goods()}""")
+                         WHERE snapshot_date = (SELECT max(snapshot_date) FROM erp.stock_snapshot) AND {own_goods()}
+                           AND {in_stock()}""")
 
 
 def stock_on(conn, snapshot_date):
-    return read(conn, f"SELECT {STOCK_COLUMNS} FROM erp.stock_snapshot WHERE snapshot_date = :d AND {own_goods()}",
+    return read(conn, f"SELECT {STOCK_COLUMNS} FROM erp.stock_snapshot WHERE snapshot_date = :d AND {own_goods()} AND {in_stock()}",
                 d=snapshot_date)
 
 
@@ -35,12 +38,12 @@ def stock_series(conn):
     df = read(conn, f"""
         SELECT snapshot_date, 'ERP daily' AS source, 1 AS rank,
                sum(coalesce(taxable_amount, item_amt)) AS value, sum(pcs) AS pcs, count(*) AS labels
-        FROM erp.stock_snapshot WHERE {own_goods()} GROUP BY 1
+        FROM erp.stock_snapshot WHERE {own_goods()} AND {in_stock()} GROUP BY 1
         UNION ALL
         SELECT snapshot_date, CASE source WHEN 'erp_asof' THEN 'ERP as-on' ELSE 'Legacy file' END,
                CASE source WHEN 'erp_asof' THEN 2 ELSE 3 END,
                sum(coalesce(taxable_amount, item_amt)), sum(pcs), count(*)
-        FROM stock_hist.snapshot WHERE {own_goods()} GROUP BY 1, 2, 3""")
+        FROM stock_hist.snapshot WHERE {own_goods()} AND {in_stock()} GROUP BY 1, 2, 3""")
     df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
     df = df.sort_values(["snapshot_date", "rank"]).drop_duplicates("snapshot_date")
     return df.drop(columns="rank").reset_index(drop=True)
@@ -63,7 +66,7 @@ def stock_history(conn, date_from):
             FROM stock_hist.snapshot WHERE snapshot_date >= :d),
         best AS (SELECT snapshot_date, min(rank) AS rank FROM all_rows GROUP BY 1)
         SELECT a.* FROM all_rows a JOIN best USING (snapshot_date, rank)
-        WHERE {own_goods('a')}""", d=date_from)
+        WHERE {own_goods('a')} AND {in_stock('a')}""", d=date_from)
     df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
     df["age"] = (df["snapshot_date"] - pd.to_datetime(df["label_date"])).dt.days
     df["source"] = df.pop("rank").map({1: "ERP daily", 2: "ERP as-on", 3: "Legacy file"})
@@ -105,11 +108,11 @@ def brick_stock(conn, dates):
     asof = [d.date() for d in best.loc[best["rank"] == 2, "snapshot_date"]]
     legacy = [d.date() for d in best.loc[best["rank"] == 3, "snapshot_date"]]
     df = read(conn, f"""
-        SELECT {BRICK_STOCK} FROM erp.stock_snapshot WHERE snapshot_date = ANY(:erp) AND {own_goods()}
+        SELECT {BRICK_STOCK} FROM erp.stock_snapshot WHERE snapshot_date = ANY(:erp) AND {own_goods()} AND {in_stock()}
         UNION ALL
         SELECT {BRICK_STOCK} FROM stock_hist.snapshot
         WHERE ((source = 'erp_asof' AND snapshot_date = ANY(:asof)) OR (source = 'csv_legacy' AND snapshot_date = ANY(:legacy)))
-          AND {own_goods()}""",
+          AND {own_goods()} AND {in_stock()}""",
               erp=erp, asof=asof, legacy=legacy)
     df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
     return df

@@ -35,6 +35,9 @@ RULES = [
     Rule("excluded_products", "Scope", "Leave out these products", [], "",
          "Products (item names) that should not count, e.g. a niche or non-merchandise line. Same effect as above.",
          "list"),
+    Rule("excluded_locations", "Scope", "Out-of-stock locations", ["HO MD COUNTER"], "",
+         "Pieces at these locations are not counted as stock: HO MD COUNTER holds delabelled pieces (damaged piece "
+         "or tag) on their way to repair or a Stock Outward (MHODDJ). Sales are not affected.", "list"),
     # ── targets ──
     Rule("overstock_days", "Targets", "Overstocked above", 365, "days of stock", "A group of similar pieces at a "
          "branch holding more than this many days of sales at its current rate is overstocked.", "int", min=30, max=1460),
