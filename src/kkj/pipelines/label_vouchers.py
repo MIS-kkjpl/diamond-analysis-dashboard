@@ -9,6 +9,9 @@ Which labels:
   --recent N      every label that left or arrived in the last N snapshot intervals, explained or not (the daily
                   refresh uses --recent 1)
   --barcodes ...  these labels
+  --all-labels    every diamond label we ever held or sold, in every financial year it existed (from 2021-22),
+                  newest years first; resumable (skips what is fetched), --until HH:MM stops it in time. Gives each
+                  label's days on display per location, for measuring demand per day on display.
 
 A label's history lives in the financial-year company of the event (current year: the normal login; earlier
 years: ERP_<year>_* in .env), so each label is fetched from the year(s) of its events. One small call per label.
@@ -73,6 +76,36 @@ def targets(conn, unexplained=False, recent=0):
     return pairs.groupby(["barcode", "fy"], as_index=False)["d1"].max()
 
 
+HISTORY_FROM = date(2021, 4, 1)
+
+
+def all_labels(conn):
+    """(barcode, fy) for every diamond label held or sold since HISTORY_FROM, each financial year from its first to
+    its last sighting; d1 = the end of that year (or today), so a closed year fetched once is never fetched again."""
+    from kkj.scope import DIAMOND_GROUPS
+    b = pd.read_sql(text("""
+        WITH s AS (SELECT barcode, snapshot_date d FROM stock_hist.snapshot WHERE item_class_group = ANY(:g)
+                   UNION ALL SELECT barcode, snapshot_date FROM erp.stock_snapshot WHERE item_class_group = ANY(:g)
+                   UNION ALL SELECT barcode, sale_date FROM sales.v_sales_line
+                             WHERE source = 'erp' AND item_class_group = ANY(:g))
+        SELECT barcode, min(d) AS f, max(d) AS l FROM s WHERE barcode IS NOT NULL AND barcode <> '' GROUP BY 1"""),
+                    conn, params={"g": DIAMOND_GROUPS})
+    rows = []
+    for bc, f, l in zip(b["barcode"], pd.to_datetime(b["f"]), pd.to_datetime(b["l"])):
+        y0 = max(f, pd.Timestamp(HISTORY_FROM))
+        y0 = y0.year if y0.month >= 4 else y0.year - 1
+        y1 = l.year if l.month >= 4 else l.year - 1
+        for y in range(y0, y1 + 1):
+            rows.append((bc, f"{y}-{str(y + 1)[2:]}", min(pd.Timestamp(f"{y + 1}-03-31"), pd.Timestamp.today().normalize())))
+    out = pd.DataFrame(rows, columns=["barcode", "fy", "d1"])
+    # the 2021-22 and 2022-23 logins open the same ERP company (vouchers 31/03/2021 - 31/03/2023): fetch it once
+    out["fy"] = out["fy"].replace(SAME_COMPANY)
+    return out.groupby(["barcode", "fy"], as_index=False)["d1"].max()
+
+
+SAME_COMPANY = {"2021-22": "2022-23"}
+
+
 def due(conn, pairs):
     """Drop pairs already fetched after their event (a fetch before the event can't show it)."""
     done = pd.read_sql(text("SELECT barcode, fy, fetched_at FROM erp.label_voucher_fetch WHERE error IS NULL"), conn)
@@ -108,11 +141,14 @@ def save(conn, barcode, fy, rows, error=None):
                              error = EXCLUDED.error"""), {"b": barcode, "f": fy, "n": len(rows), "e": error})
 
 
-def fetch(pairs, pause=0.15):
-    """Fetch every (barcode, fy); one login per financial year. Returns (fetched, failed)."""
+def fetch(pairs, pause=0.15, until=None):
+    """Fetch every (barcode, fy), newest year first; one login per financial year. Stops at `until` (a datetime).
+    Returns (fetched, failed)."""
     engine = settings.etl_engine()
     ok = bad = 0
-    for fy, group in pairs.groupby("fy"):
+    for fy, group in sorted(pairs.groupby("fy"), key=lambda x: x[0], reverse=True):
+        if until and pd.Timestamp.now() >= until:
+            break
         cfg = settings.erp_login_settings(None if fy == current_fy() else fy)
         s = new_session(cfg)
         login(s, cfg)
@@ -131,9 +167,12 @@ def fetch(pairs, pause=0.15):
                 with engine.begin() as conn:
                     save(conn, b, fy, [], error=f"{type(e).__name__}: {e}"[:300])
                 bad += 1
-            if i % 200 == 0:
+            if i % 500 == 0:
                 log.info(f"  {i}/{len(group)}")
             time.sleep(pause)
+            if until and pd.Timestamp.now() >= until:
+                log.info(f"Stopped at {until:%H:%M} as asked; run again to continue")
+                break
     return ok, bad
 
 
@@ -175,6 +214,9 @@ def main(argv=None):
     ap.add_argument("--fy", help="with --barcodes: financial year (default current)")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--all", action="store_true", help="refetch even if already fetched after the event")
+    ap.add_argument("--all-labels", action="store_true", help="every diamond label, every year it existed (resumable)")
+    ap.add_argument("--until", help="stop at this time today, HH:MM")
+    ap.add_argument("--pause", type=float, default=0.15, help="seconds between calls")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     engine = settings.etl_engine()
@@ -182,13 +224,14 @@ def main(argv=None):
         pairs = pd.DataFrame({"barcode": args.barcodes, "fy": args.fy or current_fy(), "d1": pd.Timestamp.today()})
     else:
         with engine.connect() as conn:
-            pairs = targets(conn, args.unexplained, args.recent)
+            pairs = all_labels(conn) if args.all_labels else targets(conn, args.unexplained, args.recent)
             if not args.all:
                 pairs = due(conn, pairs)
     if args.limit:
         pairs = pairs.head(args.limit)
     log.info(f"{len(pairs)} label histories to fetch")
-    ok, bad = fetch(pairs)
+    until = pd.Timestamp(f"{date.today()} {args.until}") if args.until else None
+    ok, bad = fetch(pairs, pause=args.pause, until=until)
     log.info(f"Fetched {ok}, failed {bad}")
     with engine.begin() as conn:
         locs, vts = sync_catalogue(conn)
