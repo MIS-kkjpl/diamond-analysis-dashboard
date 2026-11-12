@@ -330,7 +330,7 @@ def insights(request: Request, group: list[str] = Query(default=["Diamond Jewell
 
 # ── Ideal stock (demand forecast) ─────────────────────────────────────────────
 IDEAL_STATUS = {"increase": ("Buy more", "green"), "reduce": ("Too much", "orange"), "phase_out": ("Stop stocking", "red"),
-                "keep": ("About right", "secondary")}
+                "unproven": ("Not proven yet", "secondary"), "keep": ("About right", "secondary")}
 LATEST_IDEAL = "as_of = (SELECT max(as_of) FROM brain.ideal_stock)"
 REASONS = ["Wedding / festival season", "New counter or display", "Customer orders expected", "Slow seller, clear it",
            "Supplier can't deliver", "Trying a new design"]
@@ -369,6 +369,8 @@ def _editor_row(key, branch, label, held, calc, ideal, status, fix=None, sub="",
         detail = f"{-change:,} extra"
     elif status == "phase_out":
         detail = f"clear {held:,}"
+    elif status == "unproven":
+        detail = "too little time on display"
     else:
         detail = ""
     return {"key": key, "branch": branch, "label": label, "sub": sub, "link": link, "held": held, "calc": calc,
@@ -381,10 +383,12 @@ def branch_editor(level, key, title=None):
     from kkj.brain import fixes
     level = level if level in fixes.FIX_LEVELS else "group"
     col = fixes.COLUMN[level]
+    from kkj.metrics import ideal_stock as ist
     rows = read(f"""SELECT scope, sum(current_pcs) AS held, sum(coalesce(calc_pcs, ideal_pcs)) AS calc,
-                           sum(ideal_pcs) AS ideal, sum(annual) AS annual
+                           sum(ideal_pcs) AS ideal, sum(annual) AS annual,
+                           bool_and(current_pcs <= 0 OR (coalesce(display_months, 0) >= :m AND coalesce(sold_12m, 0) <= 0)) AS dead
                     FROM brain.ideal_stock WHERE {LATEST_IDEAL} AND scope <> 'Company' AND {col} = :k
-                    GROUP BY scope""", k=key)
+                    GROUP BY scope""", k=key, m=_rules()["stop_display_months"])
     rules = _rules()
     fx = _fixes()
     mine = fx[(fx["level"] == level) & (fx["key"] == key)]
@@ -394,7 +398,8 @@ def branch_editor(level, key, title=None):
         if not (r.held or r.ideal or r.calc):
             continue
         out.append(_editor_row(key, r.scope, _short(r.scope), r.held, r.calc, r.ideal,
-                               ideal_status(r.held, r.ideal, rules), by_branch.get(r.scope),
+                               str(ist.status([float(r.held or 0)], [float(r.ideal or 0)], rules, [bool(r.dead)])[0]),
+                               by_branch.get(r.scope),
                                sub=f"{r.annual:.1f} / yr forecast" if r.annual and r.annual >= 0.05 else "no forecast sales"))
     others = [_fix_info(f) for f in mine.to_dict("records") if f["branch"] == "*"]
     if level == "group" and len(rows):
@@ -409,8 +414,10 @@ def branch_editor(level, key, title=None):
 
 @router.get("/ideal-stock", response_class=HTMLResponse)
 def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Query(default=[]),
-                status: list[str] = Query(default=[]), search: str = ""):
+                status: list[str] = Query(default=[]), search: str = "", view: str = "product"):
+    from kkj.metrics import ideal_stock as ist
     rules = _rules()
+    view = view if view in ("product", "group") else "product"
     t = read(f"SELECT * FROM brain.ideal_stock WHERE {LATEST_IDEAL}")
     if t.empty:
         return render(request, "ideal_stock.html", "ideal_stock", empty=True, f={}, rules=rules)
@@ -432,6 +439,13 @@ def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Que
     if search:
         t = t[t["brick_group"].str.contains(search, case=False, regex=False)
               | t["item_name"].fillna("").str.contains(search, case=False, regex=False)]
+    if view == "product":
+        g = t.groupby("item_name", dropna=False).agg(held_value=("held_value", "sum"), ideal_value=("ideal_value", "sum"))
+        t = ist.by_product(t, rules).merge(g, on="item_name", how="left")
+        t["unit_value"] = (t["held_value"] + t["ideal_value"]) / (t["current_pcs"] + t["ideal_pcs"]).where(
+            (t["current_pcs"] + t["ideal_pcs"]) > 0)
+        t["change_value"] = t["change_pcs"] * t["unit_value"].fillna(0)
+        t["brick_group"] = t["item_name"].fillna("(unknown)")
 
     by = t.groupby("status").agg(n=("brick_group", "size"), held=("held_value", "sum"), change=("change_value", "sum"))
     tiles = []
@@ -441,7 +455,7 @@ def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Que
             sub = f"{money(by.loc[key, 'change'])} to add" if n else ""
         elif key == "reduce":
             sub = f"{money(-by.loc[key, 'change'])} over" if n else ""
-        elif key == "phase_out":
+        elif key in ("phase_out", "unproven"):
             sub = f"{money(by.loc[key, 'held'])} held" if n else ""
         else:
             sub = f"{money(by.loc[key, 'held'])} held" if n else ""
@@ -450,8 +464,8 @@ def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Que
 
     fx = _fixes()
     level_branch = "*" if scope == "Company" else scope
-    exact = {f["key"]: _fix_info(f) for f in fx.to_dict("records") if f["level"] == "group" and f["branch"] == level_branch}
-    touched = set(fx[fx["level"] == "group"]["key"]) | set()
+    exact = {f["key"]: _fix_info(f) for f in fx.to_dict("records") if f["level"] == view and f["branch"] == level_branch}
+    touched = set(fx[fx["level"] == view]["key"])
     shown = t[t["status"].isin(status)] if status else t
     shown = shown.assign(order=shown["change_value"].abs().where(shown["status"] != "phase_out", shown["held_value"]))
     shown = shown.sort_values("order", ascending=False).head(400)
@@ -460,26 +474,41 @@ def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Que
         fix = exact.get(r.brick_group)
         note = "set by hand at a branch" if not fix and r.brick_group in touched and r.ideal_pcs != r.calc_pcs else None
         sells = f"{r.annual:.1f} / yr" if r.annual and r.annual >= 0.05 else "no forecast sales"
+        if view == "product":
+            sub = f"{r.item_class_group or ''} · {sells} · {r.groups} group{'s' if r.groups != 1 else ''}"
+            link = f"/ideal-stock/group?level=product&g={quote(r.brick_group)}"
+        else:
+            sub, link = f"{r.item_class_group or ''} · {sells}", f"/ideal-stock/group?g={quote(r.brick_group)}"
         rows.append(_editor_row(r.brick_group, level_branch, r.brick_group, r.current_pcs, r.calc_pcs, r.ideal_pcs,
-                                r.status, fix, sub=f"{r.item_class_group or ''} · {sells}",
-                                link=f"/ideal-stock/group?g={quote(r.brick_group)}", note=note))
+                                r.status, fix, sub=sub, link=link, note=note))
     n_total = len(t[t["status"].isin(status)] if status else t)
-    editor = {"id": "ed-groups", "level": "group", "mode": "groups", "rows": rows, "reasons": REASONS,
-              "what": "Group", "review_days": rules["override_review_days"], "n_total": n_total,
+    editor = {"id": "ed-groups", "level": view, "mode": "groups", "rows": rows, "reasons": REASONS,
+              "what": "Product" if view == "product" else "Group", "review_days": rules["override_review_days"],
+              "n_total": n_total,
               "title": "All branches" if scope == "Company" else _short(scope)}
 
     # forecast accuracy (for the How it works section)
-    acc = read("""SELECT level, key, horizon_months, origins, actual, wape, wape_last_year, wape_avg12, bias, better
+    acc = read("""SELECT level, key, horizon_months, origins, actual, forecast, wape, wape_last_year, wape_avg12, bias, better
                   FROM brain.forecast_accuracy WHERE as_of = (SELECT max(as_of) FROM brain.forecast_accuracy)""")
-    top = pd.concat([acc[acc["level"] == "company"].assign(key="Whole company"),
-                     acc[acc["level"] == "item_group"].sort_values("actual", ascending=False),
-                     acc[acc["level"] == "product"].sort_values("actual", ascending=False).head(15)])
-    acc_table = charts.table(top[["key", "actual", "wape", "wape_avg12", "wape_last_year", "bias"]],
-                             {"actual": "num", "wape": "pct", "wape_last_year": "pct", "wape_avg12": "pct", "bias": "pct"},
-                             {"key": "", "actual": "pieces sold", "wape": "error", "wape_avg12": "12-month avg error",
-                              "wape_last_year": "last-year error", "bias": "bias"})
-    fine = acc[acc["level"] == "group_branch"]
-    fine_err = ((fine["wape"] * fine["actual"]).sum() / fine["actual"].sum()) if len(fine) and fine["actual"].sum() else None
+    def weighted(level, label):
+        d = acc[(acc["level"] == level) & acc["wape"].notna()]
+        if not len(d) or not d["actual"].sum():
+            return None
+        return {"key": label, "actual": d["actual"].sum(), "forecast": d["forecast"].sum(),
+                "accuracy": 1 - (d["wape"] * d["actual"]).sum() / d["actual"].sum(),
+                "bias": d["forecast"].sum() / d["actual"].sum() - 1}
+    levels = [weighted("company", "Whole company"), weighted("item_group", "By item group"),
+              weighted("product", "By product"), weighted("product_branch", "By product at a branch")]
+    lv = pd.DataFrame([x for x in levels if x])
+    acc_table = charts.table(lv[["key", "actual", "accuracy", "bias"]] if len(lv) else lv,
+                             {"actual": "num", "accuracy": "pct", "bias": "pct"},
+                             {"key": "", "actual": "pieces sold", "accuracy": "accuracy", "bias": "forecast vs sold"})
+    band = acc[acc["level"] == "band"].assign(ratio=lambda d: d["actual"] / d["forecast"].where(d["forecast"] > 0))
+    band_table = charts.table(band[["key", "forecast", "actual", "ratio"]] if len(band) else band,
+                              {"forecast": "num", "actual": "num", "ratio": "dec"},
+                              {"key": "forecast per product at a branch", "forecast": "forecast", "actual": "sold",
+                               "ratio": "sold ÷ forecast"})
+    fine_err = None
     horizon = int(acc["horizon_months"].iloc[0]) if len(acc) else None
     origins = int(acc["origins"].max()) if len(acc) else None
 
@@ -492,9 +521,11 @@ def ideal_stock(request: Request, scope: str = "Company", group: list[str] = Que
                   held=held, ideal=ideal, scopes=scopes, groups=groups,
                   statuses={k: v[0] for k, v in IDEAL_STATUS.items()},
                   f={"scope": scope, "group": group, "status": status, "search": search}, ed=editor,
-                  acc=acc_table, fine_err=fine_err, horizon=horizon, origins=origins, learn=learn, mine=mine,
+                  acc=acc_table, band=band_table, fine_err=fine_err, horizon=horizon, origins=origins, learn=learn, mine=mine,
                   due=[m for m in mine if m["due"]],
-                  base_q=urlencode([("scope", scope)] + [("group", g) for g in group] + ([("search", search)] if search else [])))
+                  view=view,
+                  base_q=urlencode([("scope", scope), ("view", view)] + [("group", g) for g in group]
+                                   + ([("search", search)] if search else [])))
 
 
 def _back(form):
@@ -551,15 +582,29 @@ def ideal_group(request: Request, g: str = "", level: str = "group"):
     rows = rows[(rows["current_pcs"] > 0) | (rows["ideal_pcs"] > 0) | (rows["calc_pcs"].fillna(0) > 0)]
     rows = rows.sort_values(["ideal_pcs", "current_pcs"], ascending=False)
     reason = {"demand": "cover", "choice": "choice", "display minimum": "display", "override": "set by hand", "no demand": "–"}
-    table = charts.table(
-        rows[["scope", "brick_group", "current_pcs", "annual", "for_demand", "for_choice", "display_min", "calc_pcs",
-              "ideal_from"]].assign(scope=rows["scope"].map(_short),
-                                    ideal_from=rows["ideal_from"].map(lambda x: reason.get(x, x))),
-        {"current_pcs": "num", "annual": "dec", "for_demand": "num", "for_choice": "num", "display_min": "num",
-         "calc_pcs": "num"},
-        {"scope": "branch", "brick_group": "group", "current_pcs": "held", "annual": "forecast 12m",
-         "for_demand": "cover", "for_choice": "choice", "display_min": "display", "calc_pcs": "suggested",
-         "ideal_from": "driven by"})
+    why = rows["calc_from"].where(rows["calc_from"].notna(), rows["ideal_from"]) if "calc_from" in rows else rows["ideal_from"]
+    rows = rows.assign(why=why.map(lambda x: reason.get(x, x)))
+    if level == "product":
+        # decided per product at each branch: demand, choice and display added up over its groups
+        pb = rows.groupby("scope").agg(current_pcs=("current_pcs", "sum"), annual=("annual", "sum"),
+                                       for_demand=("for_demand", "first"), for_choice=("for_choice", "first"),
+                                       display_min=("display_min", "sum"), product_ideal=("product_ideal", "first"),
+                                       why=("why", "first")).reset_index().sort_values("product_ideal", ascending=False)
+        table = charts.table(pb.assign(scope=pb["scope"].map(_short)),
+                             {"current_pcs": "num", "annual": "dec", "for_demand": "num", "for_choice": "num",
+                              "display_min": "num", "product_ideal": "num"},
+                             {"scope": "branch", "current_pcs": "held", "annual": "forecast 12m", "for_demand": "cover",
+                              "for_choice": "choice", "display_min": "display", "product_ideal": "suggested",
+                              "why": "driven by"})
+    else:
+        table = charts.table(
+            rows[["scope", "current_pcs", "annual", "mix_share", "product_ideal", "calc_pcs", "display_months",
+                  "sold_12m"]].assign(scope=rows["scope"].map(_short)),
+            {"current_pcs": "num", "annual": "dec", "mix_share": "pct", "product_ideal": "num", "calc_pcs": "num",
+             "display_months": "num", "sold_12m": "num"},
+            {"scope": "branch", "current_pcs": "held", "annual": "forecast 12m", "mix_share": "share of product",
+             "product_ideal": "product ideal", "calc_pcs": "suggested", "display_months": "months on display",
+             "sold_12m": "sold 12m"})
     first = rows.iloc[0]
     acc = read("""SELECT level, key, wape, wape_last_year, wape_avg12, bias, better, actual FROM brain.forecast_accuracy
                   WHERE as_of = (SELECT max(as_of) FROM brain.forecast_accuracy)

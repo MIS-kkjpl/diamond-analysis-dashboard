@@ -18,6 +18,16 @@ all branches).
                display_min_months), unless an override fixes it (with its reason)
   implied turn = the forecast year's sales ÷ ideal: the check that replaces the ideal-turn target.
 
+The ideal is DECIDED per product at a branch, where the forecast is reliable enough to act on (a brick group at a
+branch typically sells one or two pieces a year, so its own forecast is mostly noise). Demand, choice and the
+display minimum are added up over the product's brick groups at the branch, the product's ideal is the largest of
+them, and it is then split over its brick groups: each keeps its display minimum, the rest goes by forecast (the
+mix). Rounding happens once, per product, so small groups no longer each round down to nothing.
+
+Stop stocking (phase_out) needs proof: a group the company held on display for at least stop_display_months of the
+last 12 months without a sale. Sales follow what is on display, so a group with an ideal of 0 that has hardly been
+stocked is "not proven yet" (unproven) instead.
+
 A brick group's company ideal is the sum of its branches' ideals; stock held anywhere else (Head Office, wholesale)
 counts towards the company's stock but has no ideal of its own.
 """
@@ -86,7 +96,8 @@ def param_lookup(rows, param, params):
     return out
 
 
-def compute(fc, current, value_by_group, sold_recently, rules, params, overrides, dispersion):
+def compute(fc, current, value_by_group, sold_recently, rules, params, overrides, dispersion, exposure=None,
+            held_attrs=None):
     """Ideal stock per (brick group, branch).
 
     fc:             kkj.metrics.forecast.forecast_at (index brick_group, branch; f_1.., annual, attrs)
@@ -95,6 +106,8 @@ def compute(fc, current, value_by_group, sold_recently, rules, params, overrides
     sold_recently:  set of (brick_group, branch) that sold within display_min_months
     params:         config.stock_param rows; overrides: config.ideal_stock_override rows (brick_group, branch, pcs, reason)
     dispersion:     ({item group: dispersion}, overall default) from kkj.metrics.forecast.dispersion
+    exposure:       per brick group (company): display_months (of the last 12 with stock anywhere) and sold_12m
+    held_attrs:     item group / purity / product per (brick_group, branch) for groups held but never forecast
     """
     by_group, default_disp = dispersion
     df = fc.copy()
@@ -102,6 +115,12 @@ def compute(fc, current, value_by_group, sold_recently, rules, params, overrides
     df = df.reindex(keys)
     df["current_pcs"] = current.reindex(keys).fillna(0).to_numpy() if len(current) else 0.0
     rows = df.reset_index()
+    if held_attrs is not None and len(held_attrs):
+        look = pd.MultiIndex.from_frame(rows[["brick_group", "branch"]])
+        for c in ("item_class_group", "purity", "item_name"):
+            if c in held_attrs:
+                fill = held_attrs[c].reindex(look).to_numpy()
+                rows[c] = rows[c].where(rows[c].notna(), fill) if c in rows else fill
     fcols = [c for c in rows if c.startswith("f_")]
     rows[fcols + ["rate", "annual"]] = rows[fcols + ["rate", "annual"]].fillna(0)
 
@@ -126,19 +145,66 @@ def compute(fc, current, value_by_group, sold_recently, rules, params, overrides
     rows["display_min"] = np.where(recent, dmin, 0)
     choice = pd.to_numeric(param_lookup(rows, "choice_months", params), errors="coerce").fillna(rules["choice_months"])
     rows["choice_months"] = choice
-    rows["for_choice"] = np.round(rows["annual"] * choice / 12)
-    parts = rows[["for_demand", "display_min", "for_choice"]].astype(float)
-    rows["ideal_pcs"] = parts.max(axis=1)
-    rows["ideal_from"] = parts.idxmax(axis=1).map({"for_demand": "demand", "display_min": "display minimum",
-                                                   "for_choice": "choice"})
-    rows.loc[rows["ideal_pcs"] == 0, "ideal_from"] = "no demand"
+    decide_by_product(rows)
+    rows["calc_from"] = rows["ideal_from"]
 
     apply_overrides(rows, overrides)
 
+    ex = exposure if exposure is not None else pd.DataFrame(columns=["display_months", "sold_12m"])
+    rows["display_months"] = ex["display_months"].reindex(rows["brick_group"]).to_numpy(dtype=float)
+    rows["sold_12m"] = ex["sold_12m"].reindex(rows["brick_group"]).to_numpy(dtype=float)
     rows["change_pcs"] = rows["ideal_pcs"] - rows["current_pcs"]
     rows["implied_turn"] = np.where(rows["ideal_pcs"] > 0, rows["annual"] / rows["ideal_pcs"].where(rows["ideal_pcs"] > 0), np.nan)
-    rows["status"] = status(rows["current_pcs"], rows["ideal_pcs"], rules)
+    rows["status"] = status(rows["current_pcs"], rows["ideal_pcs"], rules, proven_dead(rows, rules))
     return rows
+
+
+def decide_by_product(rows):
+    """In place: the ideal per product at a branch (largest of demand, choice and display minimum, each added up over
+    the product's brick groups), split over its brick groups: each keeps its display minimum, the rest by forecast.
+    for_demand / for_choice become the product's figures at the branch (the same on each of its rows), mix_share the
+    row's share of the product's forecast, product_ideal the product's ideal at the branch."""
+    r = rows.assign(_name=rows["item_name"].fillna("(unknown)"))
+    r["_choice"] = r["annual"] * r["choice_months"] / 12
+    r["_svc"] = r["service_pct"] * r["annual"]
+    r["_disp"] = r["dispersion"] * r["cover_demand"]
+    g = r.groupby(["_name", "branch"])
+    p = pd.DataFrame({"cover": g["cover_demand"].sum(), "annual": g["annual"].sum(), "choice": g["_choice"].sum(),
+                      "display": g["display_min"].sum(), "svc": g["_svc"].sum(), "svc_max": g["service_pct"].max(),
+                      "disp": g["_disp"].sum(), "disp_mean": g["dispersion"].mean()})
+    p["service"] = np.where(p["annual"] > 0, p["svc"] / p["annual"].where(p["annual"] > 0), p["svc_max"])
+    p["dispersion"] = np.where(p["cover"] > 0, p["disp"] / p["cover"].where(p["cover"] > 0), p["disp_mean"])
+    p["for_demand"] = [count_quantile(m, d, s_ / 100) for m, d, s_ in zip(p["cover"], p["dispersion"], p["service"])]
+    p["for_choice"] = np.round(p["choice"])
+    parts = p[["for_demand", "display", "for_choice"]].astype(float)
+    p["ideal"] = parts.max(axis=1)
+    p["from"] = parts.idxmax(axis=1).map({"for_demand": "demand", "display": "display minimum", "for_choice": "choice"})
+    p.loc[p["ideal"] == 0, "from"] = "no demand"
+
+    ideal = pd.Series(0.0, index=r.index)
+    for key, idx in g.groups.items():
+        sub = r.loc[idx]
+        base = sub["display_min"].to_numpy(dtype=float)
+        rest = max(0.0, float(p.at[key, "ideal"]) - base.sum())
+        share = split(rest, sub["annual"].to_numpy(dtype=float)) if rest > 0 else np.zeros(len(sub))
+        ideal.loc[idx] = base + share
+    look = pd.MultiIndex.from_arrays([r["_name"], r["branch"]])
+    rows["for_demand"] = p["for_demand"].reindex(look).to_numpy()
+    rows["for_choice"] = p["for_choice"].reindex(look).to_numpy()
+    rows["product_ideal"] = p["ideal"].reindex(look).to_numpy()
+    tot = p["annual"].reindex(look).to_numpy()
+    rows["mix_share"] = np.where(tot > 0, rows["annual"].to_numpy() / np.where(tot > 0, tot, 1), np.nan)
+    rows["ideal_pcs"] = ideal.to_numpy()
+    rows["ideal_from"] = np.where(rows["ideal_pcs"] > 0, p["from"].reindex(look).to_numpy(), "no demand")
+
+
+def proven_dead(rows, rules):
+    """Per row: the group was held on display (anywhere in the company) for at least stop_display_months of the last
+    12 months and sold nothing in them, so stopping it is backed by evidence."""
+    n = len(rows)
+    months = pd.to_numeric(rows["display_months"], errors="coerce").fillna(0).to_numpy() if "display_months" in rows else np.zeros(n)
+    sold = pd.to_numeric(rows["sold_12m"], errors="coerce").fillna(0).to_numpy() if "sold_12m" in rows else np.zeros(n)
+    return (months >= rules["stop_display_months"]) & (sold <= 0)
 
 
 def split(total, weights):
@@ -178,14 +244,35 @@ def apply_overrides(rows, overrides):
     rows.loc[fixed, "ideal_from"] = "override"
 
 
-def status(current, ideal, rules):
-    """keep / increase / reduce / phase_out: outside the ideal ± ideal_band_pct AND at least ideal_min_change_pcs."""
+def status(current, ideal, rules, proven=None):
+    """keep / increase / reduce: outside the ideal ± ideal_band_pct AND at least ideal_min_change_pcs. Held with an
+    ideal of 0: phase_out when proven (proven_dead), else unproven. proven None = treat as proven."""
     current, ideal = np.asarray(current, dtype=float), np.asarray(ideal, dtype=float)
+    proven = np.ones(len(current), dtype=bool) if proven is None else np.asarray(proven, dtype=bool)
     band = rules["ideal_band_pct"] / 100
     need = np.maximum(rules["ideal_min_change_pcs"], band * ideal)
     change = ideal - current
-    return np.select([(ideal == 0) & (current > 0), change >= need, -change >= need],
-                     ["phase_out", "increase", "reduce"], "keep")
+    dead = (ideal == 0) & (current > 0)
+    return np.select([dead & proven, dead, change >= need, -change >= need],
+                     ["phase_out", "unproven", "increase", "reduce"], "keep")
+
+
+def by_product(rows, rules, keys=("item_name",)):
+    """Rows (brick groups) added up per product (and any other keys): held, ideal, calculated ideal, forecast and the
+    status. A product with an ideal of 0 is phase_out only when every held group in it is proven dead."""
+    keys = list(keys)
+    r = rows.copy()
+    for c in ("current_pcs", "ideal_pcs", "calc_pcs", "annual"):
+        r[c] = pd.to_numeric(r[c], errors="coerce").astype(float)
+    r["calc_pcs"] = r["calc_pcs"].fillna(r["ideal_pcs"])
+    r["_dead"] = proven_dead(r, rules) | (r["current_pcs"].fillna(0) <= 0)
+    g = r.groupby(keys, dropna=False).agg(item_class_group=("item_class_group", "first"), current_pcs=("current_pcs", "sum"),
+                                          ideal_pcs=("ideal_pcs", "sum"), calc_pcs=("calc_pcs", "sum"),
+                                          annual=("annual", "sum"), groups=("brick_group", "nunique"),
+                                          all_dead=("_dead", "all"))
+    g["change_pcs"] = g["ideal_pcs"] - g["current_pcs"]
+    g["status"] = status(g["current_pcs"], g["ideal_pcs"], rules, g["all_dead"])
+    return g.reset_index()
 
 
 def company(rows, rules):
@@ -196,8 +283,9 @@ def company(rows, rules):
         current_pcs=("current_pcs", "sum"), ideal_pcs=("ideal_pcs", "sum"), calc_pcs=("calc_pcs", "sum"),
         annual=("annual", "sum"),
         cover_demand=("cover_demand", "sum"), grade=("grade", "first"), service_pct=("service_pct", "first"),
-        cover_days=("cover_days", "max"), overrides=("override_pcs", lambda s: int(s.notna().sum())))
+        cover_days=("cover_days", "max"), overrides=("override_pcs", lambda s: int(s.notna().sum())),
+        display_months=("display_months", "first"), sold_12m=("sold_12m", "first"))
     agg["change_pcs"] = agg["ideal_pcs"] - agg["current_pcs"]
     agg["implied_turn"] = np.where(agg["ideal_pcs"] > 0, agg["annual"] / agg["ideal_pcs"].where(agg["ideal_pcs"] > 0), np.nan)
-    agg["status"] = status(agg["current_pcs"], agg["ideal_pcs"], rules)
+    agg["status"] = status(agg["current_pcs"], agg["ideal_pcs"], rules, proven_dead(agg, rules))
     return agg.reset_index()

@@ -115,6 +115,65 @@ def test_ideal_is_the_largest_of_demand_choice_and_display_minimum():
     assert r2["for_choice"] == 6 and r2["ideal_pcs"] == max(6, r2["for_demand"])            # product override applies
 
 
+def _two_groups():
+    """Two brick groups of one product at one branch: a big seller and a group that sells about once in 5 years."""
+    s1, sa1, end = make(2, group="18KT · D RING · 0.25–0.5ct")
+    s2, sa2, _ = make(0, group="18KT · D RING · 0.5–1ct")
+    sa2 = sa1.head(1).assign(brick_group="18KT · D RING · 0.5–1ct")
+    stock, sales = pd.concat([s1, s2]), pd.concat([sa1, sa2])
+    f, *_ = run(stock, sales, end)
+    current = pd.Series({("18KT · D RING · 0.25–0.5ct", "KJ2"): 10.0, ("18KT · D RING · 0.5–1ct", "KJ2"): 3.0})
+    current.index = pd.MultiIndex.from_tuples(current.index, names=fc.BASE)
+    return f, current
+
+
+def test_the_ideal_is_decided_per_product_and_split_over_its_groups():
+    f, current = _two_groups()
+    rules = {**RULES, "choice_months": 18}
+    rows = ist.compute(f, current, pd.Series({"18KT · D RING · 0.25–0.5ct": 1e6, "18KT · D RING · 0.5–1ct": 1.0}),
+                       set(), rules, pd.DataFrame(columns=["param", "level", "key", "value"]), pd.DataFrame(), ({}, 1.0))
+    product = round(f["annual"].sum() * 18 / 12)
+    assert rows["ideal_pcs"].sum() == product == rows["product_ideal"].iloc[0]      # rounded once, per product
+    assert rows["mix_share"].sum() == pytest.approx(1.0)
+    big = rows.set_index("brick_group").loc["18KT · D RING · 0.25–0.5ct"]
+    assert big["ideal_pcs"] >= product - 1                                       # the mix follows the forecast
+
+
+def test_stop_stocking_needs_time_on_display_without_a_sale():
+    f, current = _two_groups()
+    dead = ("18KT · D RING · 0.5–1ct", "KJ2")
+    f.loc[dead, [c for c in f if c.startswith("f_")] + ["rate", "annual"]] = 0.0       # no demand expected
+    rules = {**RULES, "choice_months": 18, "stop_display_months": 9}
+    empty = pd.DataFrame(columns=["param", "level", "key", "value"])
+    for months, sold, expected in ((12, 0, "phase_out"), (4, 0, "unproven"), (12, 1, "unproven")):
+        ex = pd.DataFrame({"display_months": [12, months], "sold_12m": [24, sold]},
+                          index=["18KT · D RING · 0.25–0.5ct", "18KT · D RING · 0.5–1ct"])
+        rows = ist.compute(f, current, pd.Series(dtype=float), set(), rules, empty, pd.DataFrame(), ({}, 1.0), exposure=ex)
+        small = rows.set_index("brick_group").loc["18KT · D RING · 0.5–1ct"]
+        assert small["ideal_pcs"] == 0 and small["status"] == expected, (months, sold, small["status"])
+    s = ist.status([3, 3, 0], [0, 0, 0], rules, [True, False, False])
+    assert list(s) == ["phase_out", "unproven", "keep"]
+
+
+def test_buy_more_and_too_much_are_raised_per_product_stop_stocking_per_proven_group():
+    from kkj.brain import generators as gen
+    rules = {**RULES, "ideal_min_change_pcs": 2, "ideal_band_pct": 20.0, "no_buy_groups": []}
+    comp = pd.DataFrame({"brick_group": ["18KT · D RING · A", "18KT · D RING · B", "18KT · D TOPS · A"],
+                         "item_name": ["D RING", "D RING", "D TOPS"], "item_class_group": "Diamond Jewellery",
+                         "current_pcs": [5.0, 1.0, 4.0], "ideal_pcs": [12.0, 4.0, 0.0], "calc_pcs": [12.0, 4.0, 0.0],
+                         "annual": [8.0, 3.0, 0.0], "display_months": [12, 12, 12], "sold_12m": [9, 3, 0]})
+    comp["status"] = ist.status(comp["current_pcs"], comp["ideal_pcs"], rules, ist.proven_dead(comp, rules))
+    branch = comp.assign(branch="KJ2", n_window=5.0)
+    turns = pd.DataFrame({"level": "group", "scope": "Company", "brick": comp["brick_group"], "avg_piece_value": 1e5,
+                          "current_value": comp["current_pcs"] * 1e5, "blended_turn": 1.0})
+    acts = gen.ideal_stock({"company": comp, "branch": branch, "accuracy": pd.DataFrame()}, turns, rules)
+    kinds = {(a["kind"], a["action_key"].split("|", 1)[1]) for a in acts}
+    assert ("turn_increase", "D RING") in kinds                       # one card for the product, not per group
+    assert ("turn_phase_out", "18KT · D TOPS · A") in kinds           # on display 12 months, no sale
+    ring = next(a for a in acts if a["kind"] == "turn_increase")
+    assert "A +7" in ring["summary"] and "B +3" in ring["summary"]    # the mix to buy
+
+
 def test_a_fixed_ideal_due_for_review_comes_back_with_what_sold_since():
     from kkj.brain import generators as gen
     as_of = pd.Timestamp("2026-11-09")

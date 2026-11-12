@@ -92,6 +92,32 @@ def brick_turns(conn, rules, as_of, showrooms, ideal=None):
 FORECAST_FROM = date(2021, 4, 1)          # the start of the ERP sales history
 ACCURACY_LEVELS = {"company": [], "item_group": ["item_class_group"], "product": ["item_name"],
                    "product_branch": ["item_name", "branch"], "group_branch": ["brick_group", "branch"]}
+ACCURACY_HORIZON = 12                     # the ideal is mostly months of forecast demand: test the 12-month forecast
+BANDS = [(0, 1, "under 1 a year"), (1, 3, "1-3 a year"), (3, 10, "3-10 a year"), (10, 30, "10-30 a year"),
+         (30, float("inf"), "30+ a year")]
+
+
+def calibration(test):
+    """Per band of yearly forecast at a product × branch: forecast vs actual over the test. A sound forecast sells
+    about what it said in every band (no band systematically over or under)."""
+    d = test.groupby(["origin", "item_name", "branch"])[["forecast", "actual"]].sum().reset_index()
+    rows = []
+    for lo, hi, name in BANDS:
+        b = d[(d["forecast"] >= lo) & (d["forecast"] < hi)]
+        if len(b) and b["actual"].sum() > 0:
+            rows.append({"level": "band", "key": name, "origins": d["origin"].nunique(), "actual": b["actual"].sum(),
+                         "forecast": b["forecast"].sum(),
+                         "wape": (b["forecast"] - b["actual"]).abs().sum() / b["actual"].sum(),
+                         "bias": (b["forecast"].sum() - b["actual"].sum()) / b["actual"].sum()})
+    return pd.DataFrame(rows)
+
+
+def exposure(p, last):
+    """Per brick group, the company's last 12 months: months it was on display anywhere, pieces sold."""
+    w = p[(p["month"] > last - 12) & (p["month"] <= last)]
+    m = w.groupby(["brick_group", "month"]).agg(held=("held", "sum"), sold=("sold", "sum"))
+    return m.groupby(level="brick_group").agg(display_months=("held", lambda x: int((x > 0).sum())),
+                                              sold_12m=("sold", "sum"))
 
 
 def forecast_dates(dates, as_of):
@@ -123,18 +149,25 @@ def demand_and_ideal(conn, rules, as_of):
         return {"branch": pd.DataFrame(), "company": pd.DataFrame(), "accuracy": pd.DataFrame()}
     f = fc.forecast_at(p, attrs, last, rules, fc.season_tables(sales, rules, until=last.end_time))
 
+    # safety stock: the spread of errors over the cover (replacement + review time)
     horizon = max(1, round((rules["replacement_days"] + rules["review_days"]) / 30.4375))
     n = int(rules["fc_backtest_months"])
     origins = [last - horizon - i for i in range(n - horizon, -1, -1)]
     test = fc.backtest(p, attrs, sales, rules, origins, horizon)
+    # accuracy shown: the 12-month forecast the ideal is built from
+    h = ACCURACY_HORIZON
+    origins12 = [last - h - i for i in range(max(0, n - h), -1, -1)]
+    test12 = fc.backtest(p, attrs, sales, rules, origins12, h)
     acc = []
     for level, by in ACCURACY_LEVELS.items():
-        a = fc.accuracy(test, by) if len(test) else pd.DataFrame()
+        a = fc.accuracy(test12, by) if len(test12) else pd.DataFrame()
         if len(a):
             a["key"] = a[by].astype(str).agg(" @ ".join, axis=1) if by else ""
-            acc.append(a.assign(level=level, horizon_months=horizon)[
+            acc.append(a.assign(level=level, horizon_months=h)[
                 ["level", "key", "horizon_months", "origins", "actual", "forecast", "wape", "wape_last_year",
                  "wape_avg12", "bias", "better"]])
+    if len(test12):
+        acc.append(calibration(test12).assign(horizon_months=h))
     accuracy = pd.concat(acc, ignore_index=True) if acc else pd.DataFrame()
 
     now = stock[stock["snapshot_date"] == as_of]
@@ -145,15 +178,11 @@ def demand_and_ideal(conn, rules, as_of):
     months = int(rules["display_min_months"])
     recent = demand[(demand["pcs"] > 0) & (demand["sale_date"] > as_of - pd.DateOffset(months=months))]
     sold_recently = set(zip(recent["brick_group"], recent["branch"]))
-    rows = ist.compute(f, current, value, sold_recently, rules, q.stock_params(conn), q.ideal_overrides(conn),
-                       fc.dispersion(test) if len(test) else ({}, 1.5))
     # attributes also for groups held but never forecast (stock with no sales history)
     info = now.drop_duplicates(["brick_group", "branch"]).set_index(["brick_group", "branch"])
-    for c in ("item_class_group", "purity", "item_name"):
-        miss = rows[c].isna()
-        if miss.any():
-            look = pd.MultiIndex.from_frame(rows.loc[miss, ["brick_group", "branch"]])
-            rows.loc[miss, c] = info[c].reindex(look).to_numpy()
+    rows = ist.compute(f, current, value, sold_recently, rules, q.stock_params(conn), q.ideal_overrides(conn),
+                       fc.dispersion(test) if len(test) else ({}, 1.5), exposure=exposure(p, last),
+                       held_attrs=info[["item_class_group", "purity", "item_name"]])
     return {"branch": rows, "company": ist.company(rows, rules), "accuracy": accuracy, "demand": demand,
             "as_of": as_of}
 

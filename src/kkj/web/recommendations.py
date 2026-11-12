@@ -179,6 +179,9 @@ def detail(request: Request, action_id: int):
     if a["kind"] in ("turn_increase", "turn_reduce", "turn_phase_out") and subject.get("group"):
         from kkj.web.analytics import branch_editor
         ed = branch_editor("group", subject["group"], title="Ideal by branch")
+    elif a["kind"] in ("turn_increase", "turn_reduce") and subject.get("item"):
+        from kkj.web.analytics import branch_editor
+        ed = branch_editor("product", subject["item"], title="Ideal by branch")
     elif a["kind"] == "ideal_review" and subject.get("fix_key"):
         from kkj.web.analytics import branch_editor
         ed = branch_editor(subject.get("fix_level", "group"), subject["fix_key"],

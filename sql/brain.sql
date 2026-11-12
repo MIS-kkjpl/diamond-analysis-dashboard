@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS brain.ideal_stock (
     ideal_from       text,                         -- demand | display minimum | override
     change_pcs       numeric,
     implied_turn     double precision,
-    status           text NOT NULL,                -- increase, reduce, keep, phase_out
+    status           text NOT NULL,                -- increase, reduce, keep, phase_out, unproven
     PRIMARY KEY (as_of, scope, brick_group)
 );
 
@@ -166,6 +166,11 @@ GRANT DELETE ON brain.ideal_stock, brain.forecast_accuracy TO dashboard_app;
 ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS calc_pcs numeric;     -- the calculated ideal (before any fix)
 ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS choice_months numeric;
 ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS for_choice numeric;
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS product_ideal numeric;   -- the product's ideal at the branch (decided there)
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS mix_share double precision;   -- the group's share of its product's forecast
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS calc_from text;          -- what set the calculated ideal (before any fix)
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS display_months numeric;  -- company: months on display of the last 12
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS sold_12m numeric;        -- company: pieces sold in the last 12 months
 ALTER DEFAULT PRIVILEGES FOR ROLE erp_etl IN SCHEMA brain GRANT SELECT ON TABLES TO powerbi_reader, dashboard_app;
 
 RESET ROLE;

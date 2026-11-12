@@ -174,15 +174,13 @@ def apply_now(conn, rules):
     for c in ("current_pcs", "ideal_pcs", "calc_pcs", "annual", "for_demand", "display_min", "for_choice"):
         br[c] = pd.to_numeric(br[c], errors="coerce").astype(float)
     br["ideal_pcs"] = br["calc_pcs"].fillna(br["ideal_pcs"])
-    parts = br[["for_demand", "display_min", "for_choice"]].fillna(0)
-    br["ideal_from"] = parts.idxmax(axis=1).map({"for_demand": "demand", "display_min": "display minimum",
-                                                 "for_choice": "choice"})
+    br["ideal_from"] = br["calc_from"].where(br["calc_from"].notna(), br["ideal_from"])
     br.loc[br["ideal_pcs"] == 0, "ideal_from"] = "no demand"
     overrides = pd.read_sql(text("SELECT level, key, branch, pcs, reason FROM config.ideal_stock_override"), conn)
     ist.apply_overrides(br, overrides)
     br["change_pcs"] = br["ideal_pcs"] - br["current_pcs"]
     br["implied_turn"] = np.where(br["ideal_pcs"] > 0, br["annual"] / br["ideal_pcs"].where(br["ideal_pcs"] > 0), np.nan)
-    br["status"] = ist.status(br["current_pcs"], br["ideal_pcs"], rules)
+    br["status"] = ist.status(br["current_pcs"], br["ideal_pcs"], rules, ist.proven_dead(br, rules))
     comp = rows[rows["scope"] == "Company"].set_index("brick_group")
     agg = br.groupby("brick_group").agg(ideal_pcs=("ideal_pcs", "sum"), calc_pcs=("calc_pcs", "sum"),
                                         n_fixed=("override_pcs", lambda s: int(s.notna().sum())))
@@ -191,7 +189,7 @@ def apply_now(conn, rules):
     annual = pd.to_numeric(comp.loc[agg.index, "annual"], errors="coerce").astype(float)
     agg["change_pcs"] = agg["ideal_pcs"] - cur
     agg["implied_turn"] = np.where(agg["ideal_pcs"] > 0, annual / agg["ideal_pcs"].where(agg["ideal_pcs"] > 0), np.nan)
-    agg["status"] = ist.status(cur, agg["ideal_pcs"], rules)
+    agg["status"] = ist.status(cur, agg["ideal_pcs"], rules, ist.proven_dead(comp.loc[agg.index], rules))
     as_of = rows["as_of"].iloc[0]
     clean = lambda v: None if v is None or (isinstance(v, float) and np.isnan(v)) else (float(v) if isinstance(v, (int, float, np.number)) else v)
     old = rows.set_index(["scope", "brick_group"])

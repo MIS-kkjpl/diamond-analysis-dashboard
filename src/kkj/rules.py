@@ -118,7 +118,7 @@ RULES = [
     Rule("fc_min_availability_pct", "Demand forecast", "Ignore months in stock less than", 25.0, "% of the month",
          "Such months (if nothing sold) say nothing about demand. Availability is never taken below this either, "
          "so one lucky sale cannot blow up the rate.", min=5, max=100),
-    Rule("fc_shrink_months", "Demand forecast", "A group relies on its own history after about", 6,
+    Rule("fc_shrink_months", "Demand forecast", "A group relies on its own history after about", 24,
          "months of selling data", "Before that it leans on its parent (product, then item group) at the branch: "
          "with this many months observed, own history and parent count equally. Higher = more borrowing, steadier "
          "forecasts.", min=0.5, max=60),
@@ -175,6 +175,11 @@ RULES = [
     Rule("override_review_days", "Ideal stock", "Review an adjusted ideal after", 90, "days",
          "An ideal fixed by hand comes back as a recommendation after this long, with what sold since, to keep, change "
          "or remove: so adjustments are checked against what actually happened.", "int", min=7, max=730),
+    Rule("stop_display_months", "Ideal stock", "Stop stocking a group only after it was on display, without a sale, for",
+         9, "of the last 12 months", "Sales follow what is on display: a group that was hardly stocked has not had a "
+         "chance to sell. Groups on display 9-12 months with no sale sold again within a year 17% of the time; with "
+         "less time on display, about 35% (Nov 2026 test). Groups with too little time on display are shown as not "
+         "proven yet instead.", "int", min=1, max=12),
     Rule("ideal_band_pct", "Ideal stock", "Leave stock as it is when within", 20.0, "% of the ideal",
          "Small differences are not worth acting on. A change also has to be at least the smallest change worth "
          "recommending (above).", min=0, max=100),

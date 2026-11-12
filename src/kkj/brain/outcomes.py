@@ -79,9 +79,20 @@ def groups(conn, actions):
     a = actions[actions["kind"].isin(GROUP_KINDS)].copy()
     if a.empty:
         return pd.DataFrame(columns=["action_id", "pcs_then", "pcs_now", "turn_then", "turn_now", "ideal_pcs_then"])
-    a["group"] = a["subject"].map(lambda s: _as_obj(s).get("group"))
+    def key(s):
+        s = _as_obj(s)
+        return s.get("group") or (f"product:{s['item']}" if s.get("level") == "product" and s.get("item") else None)
+    a["group"] = a["subject"].map(key)
     t = _read(conn, """SELECT as_of, brick, current_pcs, blended_turn, ideal_pcs FROM brain.brick_turn
                        WHERE scope = 'Company' AND level = 'group' AND brick = ANY(:g)""", g=a["group"].dropna().tolist())
+    # product-level recommendations: the product's company stock and ideal from each refresh's ideal stock
+    prods = [g[8:] for g in a["group"].dropna() if g.startswith("product:")]
+    if prods:
+        pt = _read(conn, """SELECT as_of, 'product:' || item_name AS brick, sum(current_pcs) AS current_pcs,
+                                   NULL::float AS blended_turn, sum(ideal_pcs) AS ideal_pcs
+                            FROM brain.ideal_stock WHERE scope = 'Company' AND item_name = ANY(:p)
+                            GROUP BY as_of, item_name""", p=prods)
+        t = pd.concat([t, pt], ignore_index=True)
     t["as_of"] = pd.to_datetime(t["as_of"])
     out = []
     for r in a.itertuples():

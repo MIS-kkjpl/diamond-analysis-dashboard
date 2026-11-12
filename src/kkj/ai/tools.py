@@ -230,7 +230,7 @@ TOOLS = [
          "start": S, "end": S, "group_by": {"type": "string", "enum": ["month", "day", "item_group", "product", "branch", "salesperson"]},
          "item_group": S, "product": S, "branch": S}, ["group_by"])},
     {"name": "stock_turn", "description": "Stock turn per brick group (purity · product · weight range) or brick: pieces now vs "
-     "ideal, turn vs ideal turn, verdict (increase, reduce, keep, phase_out, ...). Search by part of the name, e.g. 'D RING'.",
+     "ideal, turn vs ideal turn, verdict (increase, reduce, keep, phase_out, unproven = held, no demand, too little time on display to stop it, ...). Search by part of the name, e.g. 'D RING'.",
      "input_schema": _schema({"search": S, "verdict": S, "branch": S,
                               "level": {"type": "string", "enum": ["group", "brick"]}})},
     {"name": "recommendations", "description": "Recommendations the system has raised, most important first, with their summary "

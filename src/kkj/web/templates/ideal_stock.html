@@ -39,6 +39,12 @@
 {% endfor %}
 
 {% call flt.form("/ideal-stock") %}
+  <div class="btn-group btn-group-sm" role="group" aria-label="View">
+    <input type="radio" class="btn-check" name="view" id="v-product" value="product" {% if view == "product" %}checked{% endif %}>
+    <label class="btn" for="v-product">Products</label>
+    <input type="radio" class="btn-check" name="view" id="v-group" value="group" {% if view == "group" %}checked{% endif %}>
+    <label class="btn" for="v-group">Brick groups</label>
+  </div>
   <select name="scope" aria-label="Branch" class="form-select form-select-sm" style="width: auto">
     {% for s in scopes %}<option value="{{ s }}" {% if s == f.scope %}selected{% endif %}>{{ s | short if s != "Company" else "All branches" }}</option>{% endfor %}
   </select>
@@ -76,8 +82,9 @@
 {% endif %}
 
 <details class="sw-fold">
-  <summary>Forecast accuracy <span class="text-secondary">last {{ origins }} month-ends, {{ horizon }}-month horizon</span></summary>
+  <summary>Forecast accuracy <span class="text-secondary">next {{ horizon }} months, tested at the last {{ origins }} month-ends</span></summary>
   {{ ui.data_table(acc) }}
+  {% if band %}{{ ui.data_table(band) }}{% endif %}
 </details>
 {% endif %}
 </div>
