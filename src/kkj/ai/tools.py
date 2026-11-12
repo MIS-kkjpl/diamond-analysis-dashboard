@@ -16,6 +16,7 @@ from kkj import rules as rules_mod
 from kkj import settings
 from kkj.ai.client import share_names
 from kkj.db import queries as q
+from kkj.scope import location_kinds
 from kkj.metrics import core as m
 from kkj.metrics import sellers as sl
 from kkj.metrics.summary import fy_start, headline
@@ -77,7 +78,7 @@ def overview():
 def stock(group_by="item_group", item_group=None, product=None, branch=None, older_than_days=None):
     with _conn() as c:
         s = q.stock_latest(c)
-    s = s.assign(value=m.value(s), branch=s["branch"].map(_short), where=m.location_type(s["location"]),
+    s = s.assign(value=m.value(s), branch=s["branch"].map(_short), where=m.location_type(s["location"], location_kinds(c)),
                  age_band=m.age_bucket(s["age_days"]).astype(str))
     s = _filter(s, item_class_group=item_group, item_name=product, branch=branch)
     if older_than_days:

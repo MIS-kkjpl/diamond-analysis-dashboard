@@ -47,12 +47,23 @@ def price_band(amount):
     return pd.cut(pd.Series(amount, dtype="float"), bins=edges, labels=labels, right=False)
 
 
-def location_type(location):
-    """Counter / approval / in transit / repair: where the stock physically is."""
-    loc = pd.Series(location, dtype="object").fillna("").str.lower()
-    return np.select([loc.str.contains("approval"), loc.str.contains("transit"),
-                      loc.str.contains("repair"), loc.str.contains("counter|branch|mo diamond")],
-                     ["Approval", "In transit", "Repair", "Counter"], default="Other")
+KIND_LABEL = {"counter": "Counter", "approval": "Approval", "in_transit": "In transit", "repair": "Repair",
+              "storage": "Safe / vault", "dispatch": "Dispatch", "supply": "Supply", "out": "Out of stock",
+              "unclassified": "Unclassified"}
+
+
+def location_type(location, kinds=None):
+    """Where the stock physically is (Counter, Approval, In transit, Repair, ...). kinds: {location: kind} from
+    config.location (kkj.scope.location_kinds); a location not in it falls back to rules on its name."""
+    loc = pd.Series(location, dtype="object").fillna("")
+    low = loc.str.lower()
+    guess = np.select([low.str.contains("approval"), low.str.contains("transit"),
+                       low.str.contains("repair"), low.str.contains("counter|branch|mo diamond")],
+                      ["Approval", "In transit", "Repair", "Counter"], default="Other")
+    if not kinds:
+        return guess
+    known = loc.map(lambda x: KIND_LABEL.get(kinds.get(x), None))
+    return np.where(known.notna(), known, guess)
 
 
 def net_sales(lines):

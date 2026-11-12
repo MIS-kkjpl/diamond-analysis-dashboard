@@ -7,9 +7,9 @@ What the app covers.
    excluded_groups / excluded_products, with history). Customers' own items ('Customer Diamond': repairs,
    exchanges) are the standard case; any niche product can be added the same way. They stay in the raw tables
    (the loads mirror the ERP exactly); every company query filters them with own_goods().
-3. Out-of-stock locations (rule excluded_locations): pieces at HO MD COUNTER leave by Stock Outward: damaged
-   piece or tag (doc series MHODDJ) or the remaining piece of a broken set (MHODB), relabelled later under a new
-   barcode. They are not stock. Stock queries add in_stock().
+3. Locations (config.location, Settings -> Locations): each stock location has a kind and counts as stock or not.
+   HO MD COUNTER does not: pieces there leave by Stock Outward (damaged piece or tag, doc series MHODDJ; remaining
+   piece of a broken set, MHODB) and are relabelled later under a new barcode. Stock queries add in_stock().
 """
 # the item groups the ERP diamond product groups (5, 100, 126, 14, 121, 127, 69, 18) return
 DIAMOND_GROUPS = ["Diamond Jewellery", "D Kundan Jewellery", "LOOSE DIAMOND", "MRP DIAMOND",
@@ -25,15 +25,21 @@ def own_goods(alias=""):
 
 
 def in_stock(alias=""):
-    """SQL condition for stock rows: not at an out-of-stock location. Needs :x_locations (added by
-    kkj.db.queries.read())."""
+    """SQL condition for stock rows: not at a location that does not count as stock (config.location)."""
     a = f"{alias}." if alias else ""
-    return f"NOT coalesce({a}location, '') = ANY(:x_locations)"
+    return (f"coalesce({a}location, '') NOT IN (SELECT location FROM config.location WHERE NOT counts_as_stock)")
 
 
 def excluded_locations(conn):
-    from kkj import rules
-    return list(rules.load(conn)["excluded_locations"])
+    """Locations whose pieces do not count as stock."""
+    from sqlalchemy import text
+    return [r[0] for r in conn.execute(text("SELECT location FROM config.location WHERE NOT counts_as_stock"))]
+
+
+def location_kinds(conn):
+    """{location: kind} from config.location."""
+    from sqlalchemy import text
+    return dict(conn.execute(text("SELECT location, kind FROM config.location")).all())
 
 
 def excluded(conn):

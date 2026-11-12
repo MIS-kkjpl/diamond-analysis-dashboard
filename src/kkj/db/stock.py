@@ -100,22 +100,23 @@ def _to_python(value):
     return value
 
 
-def load_snapshot(df, snapshot_date, run_id):
-    """Replace one day's rows in erp.stock_snapshot: DELETE + COPY in ONE transaction.
+def load_snapshot(df, snapshot_date, run_id, table="erp.stock_snapshot"):
+    """Replace one day's rows in erp.stock_snapshot (or erp.order_snapshot): DELETE + COPY in ONE transaction.
 
     df must use the DB column names. Re-running a day replaces it, never duplicates.
     Rolls back on any error. Returns the number of rows loaded.
     """
     df = df.assign(run_id=run_id)
     columns = list(df.columns)
-    copy_sql = sql.SQL("COPY erp.stock_snapshot ({}) FROM STDIN").format(
-        sql.SQL(", ").join(sql.Identifier(c) for c in columns))
+    schema, name = table.split(".")
+    copy_sql = sql.SQL("COPY {} ({}) FROM STDIN").format(
+        sql.Identifier(schema, name), sql.SQL(", ").join(sql.Identifier(c) for c in columns))
 
     raw = get_engine().raw_connection()
     conn = raw.driver_connection          # the underlying psycopg connection
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM erp.stock_snapshot WHERE snapshot_date = %s",
+            cur.execute(sql.SQL("DELETE FROM {} WHERE snapshot_date = %s").format(sql.Identifier(schema, name)),
                         (snapshot_date,))
             with cur.copy(copy_sql) as copy:
                 for row in df.itertuples(index=False, name=None):
@@ -147,13 +148,14 @@ def finish_run(run_id, status, rows_loaded, validation, error=None, dq_warnings=
         )
 
 
-def verify_snapshot(snapshot_date):
+def verify_snapshot(snapshot_date, table="erp.stock_snapshot"):
     """Read back what is stored for one day: {count, sum_gross_wt, sum_item_amt}."""
+    assert table in ("erp.stock_snapshot", "erp.order_snapshot")
     with get_engine().connect() as conn:
         row = conn.execute(
-            text("""
+            text(f"""
                 SELECT count(*), sum(gross_wt), sum(item_amt)
-                FROM erp.stock_snapshot
+                FROM {table}
                 WHERE snapshot_date = :d
             """),
             {"d": snapshot_date},

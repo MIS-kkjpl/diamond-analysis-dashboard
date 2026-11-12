@@ -1,0 +1,10 @@
+{# One stock location; any change saves this row and swaps it back. #}
+<tr hx-post="/settings/location/{{ l.location | urlencode }}" hx-trigger="change" hx-include="this" hx-target="this"
+    hx-swap="outerHTML" {% if saved %}class="row-saved"{% endif %}>
+  <td class="text-nowrap">{{ l.location }}{% if saved %} <i class="ti ti-check text-green" title="Saved"></i>{% endif %}</td>
+  <td class="text-end">{{ l.labels | num if l.labels else "–" }}</td>
+  <td><select class="form-select form-select-sm" name="kind" {% if not who %}disabled{% endif %}>
+    {% for k, label in kinds.items() %}<option value="{{ k }}" {% if l.kind == k %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></td>
+  <td class="text-center"><input class="form-check-input" type="checkbox" name="counts_as_stock" {% if l.counts_as_stock %}checked{% endif %} {% if not who %}disabled{% endif %}></td>
+  <td><input class="form-control form-control-sm" name="note" value="{{ l.note or '' }}" {% if not who %}disabled{% endif %}></td>
+</tr>

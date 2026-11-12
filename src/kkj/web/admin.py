@@ -26,14 +26,9 @@ def _section_ctx(section, saved=None, error=None):
     with engine().connect() as conn:
         current = rules_mod.load(conn)
     return {"section": section, "rules": [r for r in rules_mod.RULES if r.section == section], "current": current,
-            "branch_names": _branch_names(), "product_names": _product_names(), "location_names": _location_names(),
+            "branch_names": _branch_names(), "product_names": _product_names(),
             "saved": saved, "error": error}
 
-
-def _location_names():
-    """Every location in the latest stock (for the out-of-stock locations picker)."""
-    return read("""SELECT DISTINCT location FROM erp.stock_snapshot WHERE location IS NOT NULL
-                   AND snapshot_date = (SELECT max(snapshot_date) FROM erp.stock_snapshot) ORDER BY 1""")["location"].tolist()
 
 
 def _product_names():
@@ -50,6 +45,39 @@ def _plain(df):
 def _people():
     return _plain(read("""SELECT sales_code, name, employee_code, branch, kind, active, left_on, match_status, note
                    FROM config.salesperson ORDER BY (match_status = 'matched'), name"""))
+
+
+LOCATION_KINDS = {"counter": "Counter", "approval": "Approval", "in_transit": "In transit", "repair": "Repair",
+                  "storage": "Safe / vault", "dispatch": "Dispatch", "supply": "Supply", "out": "Out of stock",
+                  "unclassified": "Unclassified"}
+
+
+def _locations():
+    return _plain(read("""SELECT l.location, l.kind, l.counts_as_stock, l.note, n.labels
+                          FROM config.location l LEFT JOIN (
+                              SELECT location, count(*) AS labels FROM erp.stock_snapshot
+                              WHERE snapshot_date = (SELECT max(snapshot_date) FROM erp.stock_snapshot) GROUP BY 1) n
+                          USING (location)
+                          ORDER BY l.kind <> 'unclassified', n.labels DESC NULLS LAST, l.location"""))
+
+
+VOUCHER_EFFECTS = {"sale": "Sale", "sale_return": "Sales return", "booking": "Booked for a customer",
+                   "booking_return": "Booking released", "outward": "Stock Outward (out of stock)",
+                   "inward": "Stock Inward", "labelling": "Labelling", "transfer": "Transfer",
+                   "repair_issue": "Issued for repair", "repair_receipt": "Back from repair",
+                   "approval_issue": "Issued on approval", "approval_return": "Back from approval",
+                   "purchase": "Purchase", "purchase_return": "Return to supplier", "set_combine": "Combined into a set",
+                   "set_split": "Set broken up", "relabel": "Relabelled (same barcode)", "no_effect": "No stock effect",
+                   "other": "Other",
+                   "unknown": "Unknown"}
+
+
+def _voucher_types():
+    return _plain(read("""SELECT t.voucher, t.series, t.effect, t.note, n.vouchers
+                          FROM config.voucher_type t LEFT JOIN (
+                              SELECT voucher, series, count(*) AS vouchers FROM erp.label_voucher GROUP BY 1, 2) n
+                          ON n.voucher = t.voucher AND (t.series = n.series)
+                          ORDER BY t.effect <> 'unknown', t.voucher, t.series"""))
 
 
 def _branches():
@@ -214,7 +242,10 @@ def page(request: Request):
     history = read("""SELECT changed_at AT TIME ZONE 'Asia/Kolkata' AS changed_at, changed_by, table_name, row_key,
                              old_value, new_value FROM config.change_log ORDER BY change_id DESC LIMIT 200""").to_dict("records")
     return render(request, "settings.html", "settings", sections=[_section_ctx(s) for s in SECTIONS], people=people,
-                  to_review=sum(p["match_status"] in ("unmapped", "name_match") for p in people), branches=_branches(),
+                  to_review=sum(p["match_status"] in ("unmapped", "name_match") for p in people), branches=_branches(), locations=(locs := _locations()), location_kinds=LOCATION_KINDS,
+                  n_unclassified=sum(x["kind"] == "unclassified" for x in locs),
+                  voucher_types=(vts := _voucher_types()), voucher_effects=VOUCHER_EFFECTS,
+                  n_unknown_vouchers=sum(x["effect"] == "unknown" for x in vts),
                   person_kinds=PERSON_KINDS, branch_kinds=BRANCH_KINDS, history=history)
 
 
@@ -233,7 +264,7 @@ def _parse(rule, form):
         if form[key] not in rule.choices:
             raise ValueError(f"{rule.label}: choose one of {', '.join(rule.choices)}")
         return form[key]
-    if rule.choices or key in ("transfer_excluded_branches", "excluded_products", "excluded_locations"):
+    if rule.choices or key in ("transfer_excluded_branches", "excluded_products"):
         return [v for v in form.getlist(key) if v]
     items = [x.strip() for x in form.get(key, "").split(",") if x.strip()]
     if rule.default and all(isinstance(d, (int, float)) for d in rule.default):
@@ -317,3 +348,56 @@ async def save_branch(request: Request, erp_branch: str):
         return Response(error, status_code=400)
     return templates.TemplateResponse(request, "_branch_row.html",
                                       {"b": row, "kinds": BRANCH_KINDS, "who": who(request), "saved": True})
+
+
+@router.post("/location/{location:path}", response_class=HTMLResponse)
+async def save_location(request: Request, location: str):
+    """Kind / counts as stock / note of one location (config.location). Stock queries follow at once
+    (kkj.scope.in_stock); recommendations at the next refresh."""
+    name = who(request)
+    form = await request.form()
+    kind = form.get("kind")
+    if not name:
+        return Response("Sign in first.", status_code=400)
+    if kind not in LOCATION_KINDS:
+        return Response("Unknown kind", status_code=400)
+    before = read("SELECT kind, counts_as_stock, note FROM config.location WHERE location = :k", k=location)
+    if before.empty:
+        return Response("Not found", status_code=404)
+    new = {"kind": kind, "counts_as_stock": "counts_as_stock" in form, "note": (form.get("note") or "").strip() or None}
+    with engine().begin() as conn:
+        conn.execute(text("""UPDATE config.location SET kind = :kind, counts_as_stock = :counts_as_stock, note = :note,
+                             updated_at = now(), updated_by = :by WHERE location = :loc"""), {**new, "by": name, "loc": location})
+        conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value)
+                             VALUES (:by, 'location', :k, CAST(:old AS jsonb), CAST(:new AS jsonb))"""),
+                     {"by": name, "k": location, "old": json.dumps(_plain(before)[0], default=str),
+                      "new": json.dumps(new, default=str)})
+    row = next(x for x in _locations() if x["location"] == location)
+    return templates.TemplateResponse(request, "_location_row.html",
+                                      {"l": row, "kinds": LOCATION_KINDS, "who": name, "saved": True})
+
+
+@router.post("/voucher-type", response_class=HTMLResponse)
+async def save_voucher_type(request: Request):
+    """What an ERP voucher type (and series) does to stock (config.voucher_type); the audit uses it at its next run."""
+    name = who(request)
+    form = await request.form()
+    voucher, series, effect = form.get("voucher", ""), form.get("series", ""), form.get("effect")
+    if not name:
+        return Response("Sign in first.", status_code=400)
+    if effect not in VOUCHER_EFFECTS:
+        return Response("Unknown effect", status_code=400)
+    before = read("SELECT effect, note FROM config.voucher_type WHERE voucher = :v AND series = :s", v=voucher, s=series)
+    if before.empty:
+        return Response("Not found", status_code=404)
+    new = {"effect": effect, "note": (form.get("note") or "").strip() or None}
+    with engine().begin() as conn:
+        conn.execute(text("""UPDATE config.voucher_type SET effect = :effect, note = :note, updated_at = now(),
+                             updated_by = :by WHERE voucher = :v AND series = :s"""), {**new, "by": name, "v": voucher, "s": series})
+        conn.execute(text("""INSERT INTO config.change_log (changed_by, table_name, row_key, old_value, new_value)
+                             VALUES (:by, 'voucher_type', :k, CAST(:old AS jsonb), CAST(:new AS jsonb))"""),
+                     {"by": name, "k": f"{voucher} {series}", "old": json.dumps(_plain(before)[0], default=str),
+                      "new": json.dumps(new, default=str)})
+    row = next(x for x in _voucher_types() if x["voucher"] == voucher and x["series"] == series)
+    return templates.TemplateResponse(request, "_voucher_row.html",
+                                      {"t": row, "effects": VOUCHER_EFFECTS, "who": name, "saved": True})

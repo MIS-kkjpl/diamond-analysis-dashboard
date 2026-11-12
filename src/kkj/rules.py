@@ -35,10 +35,6 @@ RULES = [
     Rule("excluded_products", "Scope", "Leave out these products", [], "",
          "Products (item names) that should not count, e.g. a niche or non-merchandise line. Same effect as above.",
          "list"),
-    Rule("excluded_locations", "Scope", "Out-of-stock locations", ["HO MD COUNTER"], "",
-         "Pieces at these locations are not counted as stock. HO MD COUNTER holds pieces leaving by Stock Outward: "
-         "damaged piece or tag (MHODDJ) and the remaining piece of a broken set (MHODB), relabelled later under a "
-         "new barcode. Sales are not affected.", "list"),
     # ── targets ──
     Rule("overstock_days", "Targets", "Overstocked above", 365, "days of stock", "A group of similar pieces at a "
          "branch holding more than this many days of sales at its current rate is overstocked.", "int", min=30, max=1460),

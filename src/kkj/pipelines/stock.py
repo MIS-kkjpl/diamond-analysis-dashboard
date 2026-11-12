@@ -264,6 +264,27 @@ def run_as_on(cfg, stamp):
     return same
 
 
+def run_order_labels(cfg, stamp):
+    """Today's customer-order labels (Show Order Labels: Only) -> checks -> erp.order_snapshot. The normal pull
+    leaves these out, so available stock stays as it is; this records what is reserved for customer orders."""
+    name = f"{cfg['name']}_orders"
+    raw_path = settings.STOCK_RAW_DIR / f"{name}_{stamp}.xlsx"
+    meta_path = settings.STOCK_META_DIR / f"{name}_{stamp}_stepA.json"
+    fetch_report(cfg, settings.erp_login_settings(), raw_path, meta_path, LocalRun())
+    df, checks, totals = clean_export(raw_path, meta_path)
+    log_checks(checks, "Validation")
+    if not all(c["passed"] for c in checks):
+        log.error("Validation failed. Nothing loaded.")
+        return False
+    snapshot_date = df["snapshot_date"].iloc[0]
+    rows = db.load_snapshot(df, snapshot_date, None, table="erp.order_snapshot")
+    stored = db.verify_snapshot(snapshot_date, table="erp.order_snapshot")
+    same = stored["count"] == totals["count"] and abs(stored["sum_item_amt"] - totals["item_amt"]) <= SUM_TOLERANCE
+    log.info(f"Loaded {rows} customer-order labels into erp.order_snapshot for {snapshot_date:%d/%m/%Y}; read back "
+             f"{stored['count']} rows, item_amt {stored['sum_item_amt']:,.2f} {'OK' if same else 'MISMATCH'}")
+    return same
+
+
 def files_for_raw(raw_path):
     """From <name>_<YYYYMMDD_HHMM>.xlsx work out name, stamp and the step A meta file."""
     m = re.match(r"(.+)_(\d{8}_\d{4})$", raw_path.stem)
@@ -306,6 +327,8 @@ def parse_args(argv=None):
                     help="stock as it stood on --date; loads into stock_hist, never erp.*")
     ap.add_argument("--no-load", action="store_true",
                     help="with --as-on: fetch + check only; no database writes")
+    ap.add_argument("--order-labels", action="store_true",
+                    help="today's customer-order labels only, into erp.order_snapshot (normal stock is untouched)")
     ap.add_argument("--dry-run", action="store_true",
                     help="build both request bodies and show the overrides; do not call the ERP")
     args = ap.parse_args(argv)
@@ -323,7 +346,7 @@ def parse_args(argv=None):
             "items": args.items, "date": args.date, "dry_run": args.dry_run,
             "role": args.role, "keep_logcode": args.keep_logcode,
             "from_file": args.from_file, "check_only": args.check_only,
-            "as_on": args.as_on, "no_load": args.no_load}
+            "as_on": args.as_on, "no_load": args.no_load, "order_labels": args.order_labels}
 
 
 def dry_run(cfg):
@@ -353,6 +376,16 @@ def main(argv=None):
         return
 
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M")
+
+    if cfg["order_labels"]:
+        log_path = setup_logging(run_stamp)
+        try:
+            ok = run_order_labels(cfg, run_stamp)
+        except (ErpError, settings.ConfigError) as e:
+            log.error(f"ERROR: {e}")
+            ok = False
+        log.info(f"Log: {rel(log_path)}")
+        sys.exit(0 if ok else 1)
 
     if cfg["as_on"]:
         log_path = setup_logging(run_stamp)

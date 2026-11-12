@@ -1,0 +1,11 @@
+{# One ERP voucher type (and document series); any change saves this row and swaps it back. #}
+<tr hx-post="/settings/voucher-type" hx-trigger="change" hx-include="this" hx-target="this"
+    hx-swap="outerHTML" {% if saved %}class="row-saved"{% endif %}>
+  <td class="text-nowrap">{{ t.voucher }}<input type="hidden" name="voucher" value="{{ t.voucher }}">
+    {% if saved %} <i class="ti ti-check text-green" title="Saved"></i>{% endif %}</td>
+  <td>{{ "any" if t.series == "*" else t.series }}<input type="hidden" name="series" value="{{ t.series }}"></td>
+  <td class="text-end">{{ t.vouchers | num if t.vouchers else "–" }}</td>
+  <td><select class="form-select form-select-sm" name="effect" {% if not who %}disabled{% endif %}>
+    {% for k, label in effects.items() %}<option value="{{ k }}" {% if t.effect == k %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></td>
+  <td><input class="form-control form-control-sm" name="note" value="{{ t.note or '' }}" {% if not who %}disabled{% endif %}></td>
+</tr>

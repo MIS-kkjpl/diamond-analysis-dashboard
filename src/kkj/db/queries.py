@@ -5,7 +5,7 @@ engine (kkj.brain.run). Each takes an open SQLAlchemy connection and returns a D
 import pandas as pd
 from sqlalchemy import text
 
-from kkj.scope import DIAMOND_GROUPS, excluded, excluded_locations, in_stock, own_goods
+from kkj.scope import DIAMOND_GROUPS, excluded, in_stock, own_goods
 
 STOCK_COLUMNS = """snapshot_date, barcode, label_no, branch, location, set_item_barcode, item_class_group, item_name,
     category, supplier, pcs, gross_wt, net_wt, dia_wt, dia_amt, rate, item_amt, taxable_amount, age_days,
@@ -16,8 +16,6 @@ def read(conn, sql, **params):
     """A query as a DataFrame. Queries using kkj.scope.own_goods() get the current exclusions as parameters."""
     if ":x_groups" in sql:
         params["x_groups"], params["x_products"] = excluded(conn)
-    if ":x_locations" in sql:
-        params["x_locations"] = excluded_locations(conn)
     return pd.read_sql(text(sql), conn, params=params)
 
 

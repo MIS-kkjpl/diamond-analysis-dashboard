@@ -128,6 +128,9 @@ def build_filters(cfg, log_code=None):
     p["productCodeList"] = cfg["products"]
     p["itemCodeList"] = cfg["items"]
     p["labelDate"] = cfg["date"]
+    if cfg.get("order_labels"):
+        # only customer-order labels (Show Order Labels: Only); the normal pull leaves them out (showOrderItem "2")
+        p.update(showOrder=2, showOrderItem="3")
     if cfg.get("as_on"):
         # Stock as it stood on labelDate (the screen's "as on date" option); without
         # these flags a past labelDate still returns today's stock

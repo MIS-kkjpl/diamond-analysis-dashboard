@@ -6,7 +6,10 @@ The daily refresh (to be scheduled once the permanent setup is decided):
      day misses that evening's sales (4 Nov 2026: 20 of 29 lines)
   2b. the same days' order-booked sales (the report with "Show Order Labels: Only"), marked so the demand
       forecast leaves customer orders out (kkj.pipelines.order_booked)
-  3. today's stock -> erp.stock_snapshot
+  3. today's stock -> erp.stock_snapshot, and today's customer-order labels (which that pull leaves out) ->
+     erp.order_snapshot
+  3b. the ERP voucher history of every label that left or arrived since the last snapshot, and of any label
+      still unexplained (kkj.pipelines.label_vouchers -> erp.label_voucher), so the audit knows what happened
   4. refresh the recommendations, then the accuracy audit (python -m kkj.brain.run)
   5. if switched on (kkj.features): the AI second look; on Mondays the weekly brief
 
@@ -32,7 +35,8 @@ def step(name, args, log):
     r = subprocess.run([str(PYTHON), "-m", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
                        errors="replace", env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"})
     keep = [l for l in (r.stdout + r.stderr).splitlines() if any(k in l for k in (
-        "recordCount", "FAIL", "Load ", "Loaded", "range(s)", "ERROR", "Error", "Run ", "Audit"))]
+        "recordCount", "FAIL", "Load ", "Loaded", "range(s)", "ERROR", "Error", "Run ", "Audit", "Fetched",
+        "histories to fetch", "New on the lists"))]
     log(f"{name}: exit {r.returncode} in {(datetime.now() - t0).seconds} s; " + " | ".join(keep[-5:]))
     return r.returncode == 0
 
@@ -58,6 +62,9 @@ def main():
                                                         f"{today:%d/%m/%Y}", "--order-labels", "3"], log),
           step("mark order-booked sales", ["kkj.pipelines.order_booked", "--pulled-on", f"{today:%Y%m%d}"], log),
           step("stock today", ["kkj.pipelines.stock"], log),
+          step("customer-order labels today", ["kkj.pipelines.stock", "--order-labels"], log),
+          step("ERP voucher histories of the day's movements", ["kkj.pipelines.label_vouchers", "--recent", "1",
+                                                                "--unexplained"], log),
           step("recommendations + audit", ["kkj.brain.run", "--trigger", "pipeline"], log)]
     # AI steps (kkj.features): only when switched on in .env with an API key; a failure here never fails the refresh
     from kkj import features

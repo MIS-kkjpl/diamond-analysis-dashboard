@@ -9,6 +9,10 @@
   <li class="nav-item"><a href="#tab-people" class="nav-link" data-bs-toggle="tab">Salespeople
     {% if to_review %}<span class="badge bg-orange-lt ms-1">{{ to_review }} to review</span>{% endif %}</a></li>
   <li class="nav-item"><a href="#tab-branches" class="nav-link" data-bs-toggle="tab">Branches</a></li>
+  <li class="nav-item"><a href="#tab-locations" class="nav-link" data-bs-toggle="tab">Locations
+    {% if n_unclassified %}<span class="badge bg-orange-lt ms-1">{{ n_unclassified }} to classify</span>{% endif %}</a></li>
+  <li class="nav-item"><a href="#tab-vouchers" class="nav-link" data-bs-toggle="tab">Voucher types
+    {% if n_unknown_vouchers %}<span class="badge bg-orange-lt ms-1">{{ n_unknown_vouchers }} to classify</span>{% endif %}</a></li>
   <li class="nav-item"><a href="#tab-stock" class="nav-link" data-bs-toggle="tab">Ideal stock by group</a></li>
   <li class="nav-item"><a href="#tab-festivals" class="nav-link" data-bs-toggle="tab">Festivals</a></li>
   {% if feature("ai_ask") or feature("ai_brief") or feature("ai_review") or feature("ai_season") %}
@@ -45,6 +49,28 @@
         <table class="table table-sm table-vcenter card-table">
           <thead><tr><th>Branch in the ERP</th><th>Short name</th><th>HR code</th><th>Place</th><th>Type</th><th>Active</th></tr></thead>
           <tbody>{% set kinds = branch_kinds %}{% for b in branches %}{% include "_branch_row.html" %}{% endfor %}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-locations">
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-sm table-vcenter card-table">
+          <thead><tr><th>Location in the ERP</th><th class="text-end">Labels now</th><th>Kind</th><th class="text-center">Counts as stock</th><th>Note</th></tr></thead>
+          <tbody>{% set kinds = location_kinds %}{% for l in locations %}{% include "_location_row.html" %}{% endfor %}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-vouchers">
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-sm table-vcenter card-table">
+          <thead><tr><th>Voucher in the ERP</th><th>Series</th><th class="text-end">Seen</th><th>Effect on stock</th><th>Note</th></tr></thead>
+          <tbody>{% set effects = voucher_effects %}{% for t in voucher_types %}{% include "_voucher_row.html" %}{% endfor %}</tbody>
         </table>
       </div>
     </div>

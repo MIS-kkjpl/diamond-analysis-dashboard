@@ -49,7 +49,10 @@ def inventory(request: Request, branch: list[str] = Query(default=[]), group: li
         return render(request, "inventory.html", "inventory", empty=True, **ctx)
     stock["value"] = m.value(stock)
     stock["age_band"] = m.age_bucket(stock["age_days"]).values
-    stock["where"] = m.location_type(stock["location"])
+    with engine().connect() as conn:
+        from kkj.scope import location_kinds
+        kinds = location_kinds(conn)
+    stock["where"] = m.location_type(stock["location"], kinds)
     total = stock["value"].sum()
     old = stock[stock["age_days"] > old_days]
     approval, transit = stock[stock["where"] == "Approval"], stock[stock["where"] == "In transit"]
