@@ -455,6 +455,9 @@ def test_stale_approvals_bills_to_check_and_outcomes():
     assert chk.status_code == 200 and "Bills to check" in chk.text
     out = client.get("/recommendations/outcomes")
     assert out.status_code == 200 and "Outcomes" in out.text
+    assert "Ideal stock: followed?" in out.text and "By branch" in out.text and "Largest gaps" in out.text
+    first = client.get("/recommendations/outcomes", params={"start": "2026-11-12"})
+    assert first.status_code == 200 and 'value="2026-11-12" selected' in first.text
 
 
 def test_switched_off_pages_vanish(monkeypatch):

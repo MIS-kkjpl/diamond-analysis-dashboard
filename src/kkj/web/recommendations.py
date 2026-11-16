@@ -4,7 +4,10 @@ import json
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+import pandas as pd
+
 from kkj.brain import store
+from kkj.web.analytics import _short
 from kkj.web.common import engine, read, render, templates, who
 
 router = APIRouter()
@@ -129,26 +132,57 @@ def summary_part(request: Request):
 
 
 @router.get("/recommendations/outcomes", response_class=HTMLResponse)
-def outcomes_page(request: Request):
-    """Every decided recommendation and what happened since (kkj.brain.outcomes)."""
-    from kkj.brain import outcomes
+def outcomes_page(request: Request, start: str = ""):
+    """Whether the branches followed the ideal stock and what sold (kkj.brain.tracking), and every decided
+    recommendation with what happened since (kkj.brain.outcomes)."""
+    from urllib.parse import quote
+    from kkj import rules as rules_mod
+    from kkj.brain import outcomes, tracking
     from kkj.web import charts
     with engine().connect() as conn:
         followed = outcomes.follow(conn)
-    if followed.empty:
+        starts = tracking.starts(conn)
+        tr_rows, tr_start, tr_now = tracking.follow_ideal(conn, rules_mod.load(conn), start or None)
+    ideal = {}
+    if len(tr_rows):
+        lab = {k: v[0] for k, v in tracking.VERDICTS.items()}
+        fmt = {"products": "num", "gap_pcs": "num", "closed_share": "pct", "sold": "num", "expected": "dec",
+               "sold_vs_expected": "pct"}
+        names = {"gap_pcs": "gap (pcs)", "closed_share": "gap closed", "sold_vs_expected": "sold vs expected"}
+        v = tracking.summary(tr_rows, ["verdict"])
+        v = v.assign(verdict=v["verdict"].map(lab)).rename(columns={"verdict": "stock vs ideal"})
+        br = tracking.summary(tr_rows, ["branch"])
+        br = br.assign(branch=br["branch"].map(_short))
+        top = tr_rows[tr_rows["verdict"] != "no_gap"].assign(a=lambda d: d["gap"].abs()).sort_values("a", ascending=False).head(60)
+        top = top.assign(product=[(n, f"/ideal-stock/group?level=product&g={quote(n)}") for n in top["item_name"]],
+                         branch=top["branch"].map(_short), verdict=top["verdict"].map(lab))
+        ideal = dict(start=tr_start, now=tr_now, days=int(tr_rows["days"].iloc[0]),
+                     starts=[pd.Timestamp(s).date() for s in starts],
+                     t_verdict=charts.table(v[["stock vs ideal", "products", "gap_pcs", "closed_share", "sold", "expected",
+                                               "sold_vs_expected"]], fmt, names),
+                     t_branch=charts.table(br[["branch", "products", "gap_pcs", "closed_share", "sold", "expected",
+                                               "sold_vs_expected"]], fmt, names),
+                     t_products=charts.table(top[["product", "branch", "held_start", "ideal_start", "held_now", "verdict",
+                                                  "sold", "expected"]],
+                                             {"product": "link", "held_start": "num", "ideal_start": "num", "held_now": "num",
+                                              "sold": "num", "expected": "dec"},
+                                             {"held_start": "held then", "ideal_start": "ideal then", "held_now": "held now"}))
+    if followed.empty and not ideal:
         return render(request, "outcomes.html", "recommendations", empty=True)
-    kinds = outcomes.by_kind(followed).assign(kind=lambda d: d["kind"].map(lambda k: KINDS.get(k, (k,))[0]))
-    rows = followed.sort_values("decided_at", ascending=False).assign(
-        kind=lambda d: d["kind"].map(lambda k: KINDS.get(k, (k,))[0]),
-        status=lambda d: d["status"].map(STATUS),
-        title=lambda d: [(t, f"/recommendations/{i}") for t, i in zip(d["title"], d["action_id"])])
-    return render(request, "outcomes.html", "recommendations", empty=False,
-                  t_kinds=charts.table(kinds, {"recommendations": "num", "pieces": "num", "sold": "num", "sold_share": "pct",
-                                               "sold_value": "money"}, {"sold_share": "share sold", "sold_value": "sold for"}),
-                  t_rows=charts.table(rows[["title", "kind", "status", "decided_by", "decided_at", "days", "outcome", "sold_value"]],
-                                      {"title": "link", "decided_at": "date", "days": "num", "sold_value": "money"},
-                                      {"title": "recommendation", "decided_by": "by", "decided_at": "decided", "days": "days since",
-                                       "sold_value": "sold for"}))
+    ctx = {}
+    if not followed.empty:
+        kinds = outcomes.by_kind(followed).assign(kind=lambda d: d["kind"].map(lambda k: KINDS.get(k, (k,))[0]))
+        rows = followed.sort_values("decided_at", ascending=False).assign(
+            kind=lambda d: d["kind"].map(lambda k: KINDS.get(k, (k,))[0]),
+            status=lambda d: d["status"].map(STATUS),
+            title=lambda d: [(t, f"/recommendations/{i}") for t, i in zip(d["title"], d["action_id"])])
+        ctx = dict(t_kinds=charts.table(kinds, {"recommendations": "num", "pieces": "num", "sold": "num", "sold_share": "pct",
+                                                "sold_value": "money"}, {"sold_share": "share sold", "sold_value": "sold for"}),
+                   t_rows=charts.table(rows[["title", "kind", "status", "decided_by", "decided_at", "days", "outcome", "sold_value"]],
+                                       {"title": "link", "decided_at": "date", "days": "num", "sold_value": "money"},
+                                       {"title": "recommendation", "decided_by": "by", "decided_at": "decided",
+                                        "days": "days since", "sold_value": "sold for"}))
+    return render(request, "outcomes.html", "recommendations", empty=False, ideal=ideal, **ctx)
 
 
 @router.get("/recommendations/{action_id}", response_class=HTMLResponse)

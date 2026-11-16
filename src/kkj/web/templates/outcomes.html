@@ -13,9 +13,26 @@
   <div class="empty-action"><a href="/recommendations" class="btn btn-primary">Go to recommendations</a></div>
 </div>
 {% else %}
+{% if ideal %}
+{{ ui.section("Ideal stock: followed?") }}
+<form method="get" class="d-flex align-items-center gap-2 mb-2">
+  <span class="text-secondary">Since</span>
+  <select name="start" class="form-select form-select-sm w-auto" onchange="this.form.submit()" aria-label="Since">
+    {% for s in ideal.starts %}<option value="{{ s }}" {% if s == ideal.start.date() %}selected{% endif %}>{{ s.strftime('%d %b %Y') }}</option>{% endfor %}
+  </select>
+  <span class="text-secondary">· {{ ideal.days }} days, stock and sales to {{ ideal.now.strftime('%d %b') }}{% if ideal.days < 60 %} · too early to judge sales{% endif %}</span>
+</form>
+<div class="row row-cards mb-3">
+  <div class="col-lg-6">{{ ui.table_card("By how far stock moved", ideal.t_verdict, icon="ti-arrows-exchange") }}</div>
+  <div class="col-lg-6">{{ ui.table_card("By branch", ideal.t_branch, icon="ti-building-store") }}</div>
+</div>
+<div class="mb-3">{{ ui.table_card("Largest gaps", ideal.t_products, icon="ti-list") }}</div>
+{% endif %}
+{% if t_kinds %}
 {{ ui.section("Approved vs dismissed") }}
 <div class="mb-3">{{ ui.table_card("How each kind turned out", t_kinds, icon="ti-scale") }}</div>
 {{ ui.section("Every decision") }}
 <div class="mb-3">{{ ui.table_card("Decided recommendations", t_rows, icon="ti-list-check") }}</div>
+{% endif %}
 {% endif %}
 {% endblock %}
