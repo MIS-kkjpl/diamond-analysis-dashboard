@@ -316,7 +316,12 @@ def candidates(conn, rules):
     showrooms = branches.loc[(branches["kind"] == "showroom") & branches["active"], "erp_branch"].tolist()
     people = q.salespeople(conn)
 
-    actions = gen.transfers_and_understock(stock, sales, rules, showrooms)
+    ideal = demand_and_ideal(conn, rules, as_of)
+    if len(ideal["branch"]):   # transfers follow the ideal stock; shortfalls left over are Buy more cards
+        units = bt.add_brick(sets.stock_units(q.brick_stock(conn, [as_of])), rules)
+        actions = gen.transfers_from_ideal(ideal["branch"], units, stock, rules, showrooms)
+    else:
+        actions = gen.transfers_and_understock(stock, sales, rules, showrooms)
     moving = {p["barcode"] for a in actions if a["kind"] == "transfer" for p in a["pieces"]}
     existing = {k for (k,) in conn.execute(text("""SELECT action_key FROM brain.action
                                                    WHERE kind = 'offer' AND status IN ('open', 'approved', 'snoozed')"""))}
@@ -336,7 +341,6 @@ def candidates(conn, rules):
     card = ins.supplier_scorecard(history, long_sales, h_start, h_end, bands, rules["min_supplier_pcs"])
     actions += gen.suppliers(card, stock)
 
-    ideal = demand_and_ideal(conn, rules, as_of)
     turns = brick_turns(conn, rules, as_of, showrooms, ideal)
     if len(ideal["company"]):            # increase / reduce follow the ideal stock; fixed ideals come back for review
         actions += gen.ideal_stock(ideal, turns, rules)

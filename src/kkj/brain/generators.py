@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 from kkj.metrics import core as m
+from kkj.metrics import sets as sets_mod
 from kkj.metrics.sets import PLACE_SEP, unit_word
 
 KIND_WEIGHT = {"understock": 1.0, "transfer": 1.0, "discount": 0.9, "offer": 0.8, "liquidate": 0.7,
@@ -166,6 +167,88 @@ def transfers_and_understock(stock, sales, rules, showrooms):
                     {"group": group, "window_days": window, "pcs": r["pcs"], "sold_pcs": r["sold_pcs"],
                      "days_of_stock": r["days_of_stock"], "suggested_qty": wanted},
                     branch=receiver, subject={"group": group, "qty": wanted}))
+    return actions
+
+
+def transfers_from_ideal(rows, units, stock, rules, showrooms):
+    """Transfers from the ideal stock: a product held above its ideal at one showroom (status reduce) and below it at
+    another (status increase) moves between them before anything is bought. Per product, the receiver furthest
+    short takes from the donor with most to spare, up to the smaller of the two gaps. Pieces chosen: brick groups the
+    donor holds above their ideal and the receiver below first, then the transfer_piece_priority order.
+
+    rows:  ideal stock per (brick group, branch) (kkj.brain.run.demand_and_ideal "branch")
+    units: latest stock, one row per selling unit (sets as one) with brick_group (bt.add_brick(sets.stock_units))
+    stock: latest stock labels (age, location, value per label) for the piece list"""
+    from kkj.metrics import ideal_stock as ist
+    if not rules["transfer_enabled"] or rows is None or rows.empty or units.empty:
+        return []
+    shops = [b for b in showrooms if b not in rules["transfer_excluded_branches"]]
+    r = rows[rows["branch"].isin(shops) & rows["item_name"].notna()].copy()
+    for c in ("current_pcs", "ideal_pcs", "annual"):
+        r[c] = pd.to_numeric(r[c], errors="coerce").fillna(0).astype(float)
+    r["gap"] = r["ideal_pcs"] - r["current_pcs"]
+    p = r.groupby(["item_name", "branch"]).agg(held=("current_pcs", "sum"), ideal=("ideal_pcs", "sum"),
+                                               annual=("annual", "sum")).reset_index()
+    p["status"] = ist.status(p["held"], p["ideal"], rules)
+    brick_gap = r.set_index(["item_name", "branch", "brick_group"])["gap"]
+
+    labels = stock.assign(set_id=stock["set_item_barcode"].map(sets_mod.set_id))
+    labels["unit"] = labels["set_id"].fillna(labels["barcode"])
+    u = units.assign(unit=units["set_id"].fillna(units["barcode"]) if "set_id" in units else units["barcode"])
+    u = u[u["branch"].isin(shops)]
+    info = labels.groupby("unit").agg(age_days=("age_days", "max"), value=("value", "sum"))
+    u = u.drop(columns=[c for c in ("age_days", "value") if c in u]).join(info, on="unit")
+    sort_col, ascending = {"oldest": ("age_days", False), "lowest_value": ("value", True),
+                           "highest_value": ("value", False)}[rules["transfer_piece_priority"]]
+    window = rules["demand_window_days"]
+    actions = []
+    for name, g in p.groupby("item_name"):
+        need = (g["ideal"] - g["held"]).where(g["status"] == "increase", 0).set_axis(g["branch"]).sort_values(ascending=False)
+        spare = (g["held"] - g["ideal"]).where(g["status"] == "reduce", 0).set_axis(g["branch"]).sort_values(ascending=False)
+        need, spare = need[need >= 1], spare[spare >= 1]
+        if need.empty or spare.empty:
+            continue
+        g = g.set_index("branch")
+        taken = set()
+        for receiver, wanted in need.items():
+            wanted = int(wanted)
+            for donor in spare.index:
+                n = int(min(wanted, spare[donor]))
+                if n < 1:
+                    continue
+                pool = u[(u["item_name"] == name) & (u["branch"] == donor) & ~u["unit"].isin(taken)].copy()
+                if pool.empty:
+                    continue
+                over = -pool["brick_group"].map(lambda b: brick_gap.get((name, donor, b), 0.0))
+                behind = pool["brick_group"].map(lambda b: brick_gap.get((name, receiver, b), 0.0))
+                pool["_fit"] = (over > 0).astype(int) + (behind > 0).astype(int)
+                pick = pool.sort_values(["_fit", sort_col], ascending=[False, ascending]).head(n)
+                value = float(pick["value"].sum())
+                if value < rules["transfer_min_value"]:
+                    continue
+                taken |= set(pick["unit"])
+                spare[donor] -= len(pick)
+                wanted -= len(pick)
+                rc, dn = g.loc[receiver], g.loc[donor]
+                uw = unit_word(name)
+                mix = pick["brick_group"].value_counts().head(3)
+                summary = (f"{short(receiver)} holds {rc['held']:.0f} {uw}, ideal {rc['ideal']:.0f}; {short(donor)} "
+                           f"holds {dn['held']:.0f}, ideal {dn['ideal']:.0f}. "
+                           f"Mostly {', '.join(f'{b} ({k})' for b, k in mix.items())}.")
+                pieces = labels[labels["unit"].isin(pick["unit"])].assign(
+                    group=lambda d: d["unit"].map(pick.set_index("unit")["brick_group"]))
+                actions.append(_action(
+                    "transfer", f"{name}|{donor}|{receiver}",
+                    f"Transfer {len(pick)} {name} from {short(donor)} to {short(receiver)}", summary,
+                    value, f"{money(value)} moved instead of bought",
+                    confidence(float(rc["annual"])),
+                    {f"{short(receiver)} held ({uw})": float(rc["held"]), f"{short(receiver)} ideal ({uw})": float(rc["ideal"]),
+                     f"{short(receiver)} forecast, 12 months ({uw})": round(float(rc["annual"]), 1),
+                     f"{short(donor)} held ({uw})": float(dn["held"]), f"{short(donor)} ideal ({uw})": float(dn["ideal"]),
+                     f"{short(donor)} forecast, 12 months ({uw})": round(float(dn["annual"]), 1)},
+                    branch=receiver, subject={"item": name, "from": donor, "to": receiver}, pieces=[{**x, "group": gr} for x, gr in zip(_piece_list(pieces), pieces["group"])]))
+                if wanted <= 0:
+                    break
     return actions
 
 

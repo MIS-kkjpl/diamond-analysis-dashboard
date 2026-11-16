@@ -242,3 +242,26 @@ def test_fixes_pointing_the_same_way_suggest_a_rule_change():
     s = fixes.suggestions(o, latest, 18)
     assert len(s) == 1 and s[0]["product"] == "D NOSE PIN" and s[0]["months"] == pytest.approx(5.4)
     assert fixes.suggestions(o.iloc[:1], latest, 18) == []          # one fix is not a pattern
+
+
+def test_transfers_move_a_product_from_where_it_is_above_ideal_to_where_it_is_short():
+    from kkj.brain import generators as gen
+    rows = pd.DataFrame({"item_name": ["D RING"] * 4, "branch": ["A", "A", "B", "B"],
+                         "brick_group": ["18KT · D RING · small", "18KT · D RING · big"] * 2,
+                         "item_class_group": ["DIAMOND"] * 4,
+                         "current_pcs": [10, 2, 0, 1], "ideal_pcs": [2, 2, 8, 1], "annual": [3, 1, 12, 1]})
+    units = pd.DataFrame({"barcode": [f"R{i}" for i in range(13)], "set_id": [None] * 13,
+                          "branch": ["A"] * 12 + ["B"], "item_name": ["D RING"] * 13,
+                          "brick_group": ["18KT · D RING · small"] * 10 + ["18KT · D RING · big"] * 3})
+    stock = units[["barcode", "branch", "item_name"]].assign(set_item_barcode=None, location="Counter",
+                                                            age_days=range(13), dia_wt=0.2, value=50_000.0)
+    rules = {**RULES, "transfer_min_value": 0, "transfer_excluded_branches": []}
+    acts = gen.transfers_from_ideal(rows, units, stock, rules, ["A", "B"])
+    assert len(acts) == 1
+    a = acts[0]
+    assert a["title"] == "Transfer 8 D RING from A to B" and a["subject"] == {"item": "D RING", "from": "A", "to": "B"}
+    moved = {p["barcode"] for p in a["pieces"]}
+    assert moved <= {f"R{i}" for i in range(10)}          # the brick group A has too many of and B lacks
+    assert moved == {f"R{i}" for i in range(2, 10)}       # oldest first
+    # within range at both: nothing moves
+    assert gen.transfers_from_ideal(rows.assign(ideal_pcs=rows["current_pcs"]), units, stock, rules, ["A", "B"]) == []
