@@ -312,6 +312,12 @@ def _reapply_fixes():
         fixes.apply_now(c, rules_mod.load(c))
 
 
+def test_a_product_shows_what_its_branches_held_and_would_sell_at_the_suggestion():
+    r = client.get("/ideal-stock/group", params={"g": "D RING", "level": "product"})
+    t = r.text.lower()
+    assert r.status_code == 200 and "held, 12m avg" in t and "sales at suggested" in t
+
+
 def test_changing_ideals_in_place_saves_applies_and_resets():
     group = "18KT · D RING · 0.25–0.5ct"
     try:

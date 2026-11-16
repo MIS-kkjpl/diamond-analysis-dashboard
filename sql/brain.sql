@@ -171,6 +171,8 @@ ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS mix_share double precisio
 ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS calc_from text;          -- what set the calculated ideal (before any fix)
 ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS display_months numeric;  -- company: months on display of the last 12
 ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS sold_12m numeric;        -- company: pieces sold in the last 12 months
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS held_12m numeric;        -- product at the branch: average pieces held, last 12 months
+ALTER TABLE brain.ideal_stock ADD COLUMN IF NOT EXISTS annual_at_ideal numeric; -- forecast 12 months if the ideal is held
 ALTER DEFAULT PRIVILEGES FOR ROLE erp_etl IN SCHEMA brain GRANT SELECT ON TABLES TO powerbi_reader, dashboard_app;
 
 RESET ROLE;

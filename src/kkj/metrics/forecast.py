@@ -295,6 +295,50 @@ def backtest(p, attrs, sales, rules, origins, horizon):
     return out
 
 
+HELD_C = 0.25        # pieces: keeps the response finite for products held only part of the time
+HELD_RANGE = 2.0     # the response is applied within 1/2 .. 2x what was held (the range it was measured on)
+
+
+def held_response(x, x0, beta):
+    """Sales when holding x pieces relative to holding x0 (product at a branch): ((x + c) / (x0 + c)) ** beta, within
+    the measured range; 1 where nothing was held (no basis) or beta is 0."""
+    x, x0 = np.asarray(x, dtype=float), np.asarray(x0, dtype=float)
+    if not beta:
+        return np.ones(len(x))
+    r = np.where(x0 > 0, ((np.maximum(x, 0) + HELD_C) / (x0 + HELD_C)) ** beta, 1.0)
+    return np.clip(r, HELD_RANGE ** -beta, HELD_RANGE ** beta)
+
+
+def product_held(p, attrs, months):
+    """Average pieces held per (item_name, branch) over `months` (Periods), from the panel's monthly held."""
+    names = attrs.reset_index().drop_duplicates("brick_group")[["brick_group", "item_name"]]
+    w = p[p["month"].isin(list(months))].merge(names, on="brick_group")
+    return w.groupby(["item_name", "branch"])["held"].sum() / max(len(months), 1)
+
+
+def held_adjusted(test, p, attrs, horizon, beta):
+    """Backtest rows (kkj.metrics.forecast.backtest) with each forecast rescaled by what its product's branch actually
+    held over the months forecast against the 12 months before: the forecast's accuracy GIVEN the stock held, which is
+    what ideal stock relies on (it decides the stock). The rescaling only moves forecast between products: each item
+    group's total at each branch stays as forecast (its trend already follows the stock it had), so the company and
+    item group figures don't change. Measured Nov 2026: product at a branch 57.1% -> 62.2%."""
+    if not beta or test.empty:
+        return test
+    out = []
+    for origin, t in test.groupby("origin", sort=False):
+        o = pd.Period(origin, "M")
+        before = product_held(p, attrs, [o - i for i in range(12)])
+        ahead = product_held(p, attrs, [o + h for h in range(1, horizon + 1)])
+        key = pd.MultiIndex.from_arrays([t["item_name"], t["branch"]])
+        r = held_response(ahead.reindex(key).fillna(0).to_numpy(), before.reindex(key).fillna(0).to_numpy(), beta)
+        adj = t["forecast"].to_numpy() * r
+        grp = [t["item_class_group"].fillna(""), t["branch"]]
+        f_raw = t["forecast"].groupby(grp).transform("sum").to_numpy()
+        f_adj = pd.Series(adj, index=t.index).groupby(grp).transform("sum").to_numpy()
+        out.append(t.assign(forecast=adj * np.where(f_adj > 0, f_raw / np.where(f_adj > 0, f_adj, 1), 1.0)))
+    return pd.concat(out, ignore_index=True)
+
+
 def accuracy(bt, by):
     """Error per `by` (e.g. ["item_class_group"]) after summing forecasts and actuals to that level per origin:
     WAPE = Σ|forecast − actual| / Σ actual, bias = Σ(forecast − actual) / Σ actual, for the forecast and both

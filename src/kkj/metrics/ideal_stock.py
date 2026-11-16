@@ -12,8 +12,11 @@ all branches).
                with the spread measured by the accuracy test (dispersion 1 = Poisson; lumpier groups need more).
                Low-volume jewellery sells 0, 1 or 2 pieces in a month, so this is a quantile of a count
                distribution (negative binomial), not "average + z × sigma".
-  choice     = choice_months of forecast demand: customers choose among designs, and holding more of a group
-               sells more of it, so a branch holds at least this much (per item group / product / brick group)
+  choice     = customers choose among designs, and holding more of a product sells more of it. At showrooms: hold
+               another piece while it adds at least 1 / choice_pcs_per_sale sales a year (the measured sales response
+               to pieces held, fc_held_effect; held_choice), with demand taken at that holding, and branches in
+               choice_floor_branches never below the months-of-choice ideal. Elsewhere, and for products a branch has
+               not held in the last 12 months: choice_months of forecast demand (per item group / product / group)
   ideal      = the largest of demand, choice and the display minimum (for groups the branch sold in the last
                display_min_months), unless an override fixes it (with its reason)
   implied turn = the forecast year's sales ÷ ideal: the check that replaces the ideal-turn target.
@@ -35,6 +38,8 @@ import math
 
 import numpy as np
 import pandas as pd
+
+from kkj.metrics import forecast as fcm
 
 GRADES = ("A", "B", "C")
 PARAM_LEVELS = {"group": "brick_group", "product": "item_name", "item_group": "item_class_group"}  # most specific first
@@ -97,7 +102,7 @@ def param_lookup(rows, param, params):
 
 
 def compute(fc, current, value_by_group, sold_recently, rules, params, overrides, dispersion, exposure=None,
-            held_attrs=None):
+            held_attrs=None, held=None, showrooms=None):
     """Ideal stock per (brick group, branch).
 
     fc:             kkj.metrics.forecast.forecast_at (index brick_group, branch; f_1.., annual, attrs)
@@ -108,6 +113,8 @@ def compute(fc, current, value_by_group, sold_recently, rules, params, overrides
     dispersion:     ({item group: dispersion}, overall default) from kkj.metrics.forecast.dispersion
     exposure:       per brick group (company): display_months (of the last 12 with stock anywhere) and sold_12m
     held_attrs:     item group / purity / product per (brick_group, branch) for groups held but never forecast
+    held:           average pieces held per (item_name, branch) over the last 12 months (forecast.product_held)
+    showrooms:      branches where choice follows the sales response to pieces held (decide_by_product)
     """
     by_group, default_disp = dispersion
     df = fc.copy()
@@ -145,7 +152,7 @@ def compute(fc, current, value_by_group, sold_recently, rules, params, overrides
     rows["display_min"] = np.where(recent, dmin, 0)
     choice = pd.to_numeric(param_lookup(rows, "choice_months", params), errors="coerce").fillna(rules["choice_months"])
     rows["choice_months"] = choice
-    decide_by_product(rows)
+    decide_by_product(rows, rules, held, showrooms)
     rows["calc_from"] = rows["ideal_from"]
 
     apply_overrides(rows, overrides)
@@ -154,16 +161,34 @@ def compute(fc, current, value_by_group, sold_recently, rules, params, overrides
     rows["display_months"] = ex["display_months"].reindex(rows["brick_group"]).to_numpy(dtype=float)
     rows["sold_12m"] = ex["sold_12m"].reindex(rows["brick_group"]).to_numpy(dtype=float)
     rows["change_pcs"] = rows["ideal_pcs"] - rows["current_pcs"]
-    rows["implied_turn"] = np.where(rows["ideal_pcs"] > 0, rows["annual"] / rows["ideal_pcs"].where(rows["ideal_pcs"] > 0), np.nan)
+    rows["implied_turn"] = np.where(rows["ideal_pcs"] > 0,
+                                    rows["annual_at_ideal"] / rows["ideal_pcs"].where(rows["ideal_pcs"] > 0), np.nan)
     rows["status"] = status(rows["current_pcs"], rows["ideal_pcs"], rules, proven_dead(rows, rules))
     return rows
 
 
-def decide_by_product(rows):
+def held_choice(F, x0, beta, pcs_per_sale, cap):
+    """Pieces to hold for choice from the sales response to pieces held: S(x) = F * ((x + c) / (x0 + c)) ** beta, F
+    the forecast at what was held (x0). One more piece is held while it adds at least 1 / pcs_per_sale sales a year:
+    x = (beta * F / (m * (x0 + c) ** beta)) ** (1 / (1 - beta)) - c, at most twice x0 (or `cap`, the months-of-choice
+    figure, if higher). Where nothing was held there is no basis: `cap`."""
+    F, x0, cap = (np.asarray(a, dtype=float) for a in (F, x0, cap))
+    m, c = 1.0 / pcs_per_sale, fcm.HELD_C
+    x = (beta * F / (m * (x0 + c) ** beta)) ** (1 / (1 - beta)) - c
+    x = np.minimum(np.maximum(x, 0), np.maximum(fcm.HELD_RANGE * x0, cap))
+    return np.round(np.where(x0 > 0, x, cap))
+
+
+def decide_by_product(rows, rules=None, held=None, showrooms=None):
     """In place: the ideal per product at a branch (largest of demand, choice and display minimum, each added up over
     the product's brick groups), split over its brick groups: each keeps its display minimum, the rest by forecast.
     for_demand / for_choice become the product's figures at the branch (the same on each of its rows), mix_share the
-    row's share of the product's forecast, product_ideal the product's ideal at the branch."""
+    row's share of the product's forecast, product_ideal the product's ideal at the branch.
+
+    With held (average pieces held per (item_name, branch) over the last 12 months), showrooms and a sales response
+    (rules fc_held_effect): at showrooms, choice comes from held_choice, demand is the forecast at the new holding,
+    and branches in choice_floor_branches never go below the months-of-choice ideal. annual_at_ideal = the forecast
+    at the ideal holding."""
     r = rows.assign(_name=rows["item_name"].fillna("(unknown)"))
     r["_choice"] = r["annual"] * r["choice_months"] / 12
     r["_svc"] = r["service_pct"] * r["annual"]
@@ -179,6 +204,27 @@ def decide_by_product(rows):
     parts = p[["for_demand", "display", "for_choice"]].astype(float)
     p["ideal"] = parts.max(axis=1)
     p["from"] = parts.idxmax(axis=1).map({"for_demand": "demand", "display": "display minimum", "for_choice": "choice"})
+    beta = float(rules.get("fc_held_effect", 0) or 0) if rules else 0.0
+    p["held_12m"] = held.reindex(p.index).fillna(0).to_numpy(dtype=float) if held is not None else 0.0
+    p["annual_at_ideal"] = p["annual"]
+    if beta > 0 and held is not None and showrooms is not None:
+        shop = p.index.get_level_values("branch").isin(list(showrooms)) & (p["held_12m"] > 0)
+        months_ideal = p["ideal"].copy()
+        choice = held_choice(p["annual"], p["held_12m"], beta, rules["choice_pcs_per_sale"], p["for_choice"])
+        resp = fcm.held_response(np.maximum(choice, p["for_demand"]), p["held_12m"], beta)
+        demand = np.array([count_quantile(m, d, s_ / 100) for m, d, s_ in
+                           zip(p["cover"] * resp, p["dispersion"], p["service"])])
+        new = np.c_[demand, p["display"], choice]
+        new_ideal = new.max(axis=1)
+        floor = p.index.get_level_values("branch").isin(list(rules.get("choice_floor_branches") or []))
+        new_ideal = np.where(floor, np.maximum(new_ideal, months_ideal), new_ideal)
+        new_from = np.array(["demand", "display minimum", "choice"])[new.argmax(axis=1)]
+        new_from = np.where(floor & (months_ideal > new.max(axis=1)), p["from"], new_from)
+        p["for_demand"] = np.where(shop, demand, p["for_demand"])
+        p["for_choice"] = np.where(shop, choice, p["for_choice"])
+        p["ideal"] = np.where(shop, new_ideal, p["ideal"])
+        p["from"] = np.where(shop, new_from, p["from"])
+        p["annual_at_ideal"] = p["annual"] * np.where(shop, fcm.held_response(p["ideal"], p["held_12m"], beta), 1.0)
     p.loc[p["ideal"] == 0, "from"] = "no demand"
 
     ideal = pd.Series(0.0, index=r.index)
@@ -192,8 +238,11 @@ def decide_by_product(rows):
     rows["for_demand"] = p["for_demand"].reindex(look).to_numpy()
     rows["for_choice"] = p["for_choice"].reindex(look).to_numpy()
     rows["product_ideal"] = p["ideal"].reindex(look).to_numpy()
+    rows["held_12m"] = p["held_12m"].reindex(look).to_numpy()
     tot = p["annual"].reindex(look).to_numpy()
     rows["mix_share"] = np.where(tot > 0, rows["annual"].to_numpy() / np.where(tot > 0, tot, 1), np.nan)
+    resp = (p["annual_at_ideal"] / p["annual"].where(p["annual"] > 0)).fillna(1.0).reindex(look).to_numpy()
+    rows["annual_at_ideal"] = rows["annual"].to_numpy() * resp
     rows["ideal_pcs"] = ideal.to_numpy()
     rows["ideal_from"] = np.where(rows["ideal_pcs"] > 0, p["from"].reindex(look).to_numpy(), "no demand")
 
@@ -281,11 +330,12 @@ def company(rows, rules):
     agg = rows.groupby("brick_group").agg(
         item_class_group=("item_class_group", "first"), purity=("purity", "first"), item_name=("item_name", "first"),
         current_pcs=("current_pcs", "sum"), ideal_pcs=("ideal_pcs", "sum"), calc_pcs=("calc_pcs", "sum"),
-        annual=("annual", "sum"),
+        annual=("annual", "sum"), annual_at_ideal=("annual_at_ideal", "sum"),
         cover_demand=("cover_demand", "sum"), grade=("grade", "first"), service_pct=("service_pct", "first"),
         cover_days=("cover_days", "max"), overrides=("override_pcs", lambda s: int(s.notna().sum())),
         display_months=("display_months", "first"), sold_12m=("sold_12m", "first"))
     agg["change_pcs"] = agg["ideal_pcs"] - agg["current_pcs"]
-    agg["implied_turn"] = np.where(agg["ideal_pcs"] > 0, agg["annual"] / agg["ideal_pcs"].where(agg["ideal_pcs"] > 0), np.nan)
+    agg["implied_turn"] = np.where(agg["ideal_pcs"] > 0,
+                                   agg["annual_at_ideal"] / agg["ideal_pcs"].where(agg["ideal_pcs"] > 0), np.nan)
     agg["status"] = status(agg["current_pcs"], agg["ideal_pcs"], rules, proven_dead(agg, rules))
     return agg.reset_index()

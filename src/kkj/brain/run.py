@@ -86,7 +86,41 @@ def brick_turns(conn, rules, as_of, showrooms, ideal=None):
             if level == "brick_group":
                 df = df.assign(brick=df["brick_group"])
             parts.append(df.assign(level=name))
-    return pd.concat(parts, ignore_index=True)
+    return align_to_ideal(pd.concat(parts, ignore_index=True), ideal, rules)
+
+
+TURN_STATUS = {"increase": "increase", "reduce": "reduce", "keep": "keep", "phase_out": "phase_out", "unproven": "hold"}
+
+
+def align_to_ideal(t, ideal, rules):
+    """Stock turn rows with the ideal stock's pieces, so the two pages agree: a brick group's ideal is its ideal stock
+    (company, or at the branch); a brick's is its group's split by the bricks' sales (largest remainder). What to do
+    follows the ideal against what is held; 'new' and 'not enough history' stay (turn has nothing to say yet)."""
+    if ideal is None or ideal.get("company") is None or ideal["company"].empty:
+        return t
+    t = t.copy()
+    comp = ideal["company"].set_index("brick_group")
+    br = ideal["branch"].groupby(["brick_group", "branch"])["ideal_pcs"].sum()
+    grp = t["brick"].where(t["level"] == "group", t.get("brick_group"))
+    look = [comp["ideal_pcs"].get(g, np.nan) if s == "Company" else br.get((g, s), np.nan)
+            for g, s in zip(grp, t["scope"])]
+    t["_group_ideal"] = pd.to_numeric(pd.Series(look, index=t.index), errors="coerce")
+    t["_group_proven"] = [comp["status"].get(g) == "phase_out" for g in grp]
+    ideal_pcs = t["ideal_pcs"].astype(float).copy()
+    g = t[t["level"] == "group"]
+    ideal_pcs[g.index] = g["_group_ideal"].fillna(g["ideal_pcs"])
+    b = t[(t["level"] == "brick") & t["_group_ideal"].notna()]
+    for _, sub in b.groupby([grp[b.index], b["scope"]]):
+        w = sub["annual_sales"].fillna(0).clip(lower=0).to_numpy(dtype=float)
+        if w.sum() == 0:
+            w = sub["current_pcs"].to_numpy(dtype=float)
+        ideal_pcs[sub.index] = ist.split(float(sub["_group_ideal"].iloc[0]), w)
+    has = t["_group_ideal"].notna() & ~t["status"].isin(["new", "no_history"])
+    st = pd.Series(ist.status(t["current_pcs"], ideal_pcs, rules, t["_group_proven"]), index=t.index).map(TURN_STATUS)
+    t["ideal_pcs"] = ideal_pcs
+    t.loc[has, "status"] = st[has]
+    t["change_pcs"] = t["ideal_pcs"] - t["current_pcs"]
+    return t.drop(columns=["_group_ideal", "_group_proven"])
 
 
 FORECAST_FROM = date(2021, 4, 1)          # the start of the ERP sales history
@@ -158,6 +192,8 @@ def demand_and_ideal(conn, rules, as_of):
     h = ACCURACY_HORIZON
     origins12 = [last - h - i for i in range(max(0, n - h), -1, -1)]
     test12 = fc.backtest(p, attrs, sales, rules, origins12, h)
+    # scored given what each branch actually held: ideal stock decides the stock, so that is the forecast it relies on
+    test12 = fc.held_adjusted(test12, p, attrs, h, rules.get("fc_held_effect", 0))
     acc = []
     for level, by in ACCURACY_LEVELS.items():
         a = fc.accuracy(test12, by) if len(test12) else pd.DataFrame()
@@ -180,9 +216,12 @@ def demand_and_ideal(conn, rules, as_of):
     sold_recently = set(zip(recent["brick_group"], recent["branch"]))
     # attributes also for groups held but never forecast (stock with no sales history)
     info = now.drop_duplicates(["brick_group", "branch"]).set_index(["brick_group", "branch"])
+    branches = q.branches(conn)
+    showrooms = set(branches.loc[(branches["kind"] == "showroom") & branches["active"], "erp_branch"])
     rows = ist.compute(f, current, value, sold_recently, rules, q.stock_params(conn), q.ideal_overrides(conn),
                        fc.dispersion(test) if len(test) else ({}, 1.5), exposure=exposure(p, last),
-                       held_attrs=info[["item_class_group", "purity", "item_name"]])
+                       held_attrs=info[["item_class_group", "purity", "item_name"]],
+                       held=fc.product_held(p, attrs, [last - i for i in range(12)]), showrooms=showrooms)
     return {"branch": rows, "company": ist.company(rows, rules), "accuracy": accuracy, "demand": demand,
             "as_of": as_of}
 

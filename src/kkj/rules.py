@@ -138,6 +138,12 @@ RULES = [
          "A product growing fast is not assumed to keep growing without limit.", min=0, max=200),
     Rule("fc_trend_pseudo_pcs", "Demand forecast", "Steady a product's trend with its item group's over", 20,
          "pieces", "Higher = products follow their item group's trend more closely.", min=0, max=500),
+    Rule("fc_held_effect", "Demand forecast", "Sales response to pieces held", 0.5, "",
+         "A branch sells more of a product when it holds more of it, but not in proportion: 0.5 = twice the pieces "
+         "sell about 1.4 times as much (five years of label histories, Nov 2026: 10% more pieces held, about 5% more "
+         "sales). The accuracy test scores the forecast given what each branch actually held, and ideal stock uses it "
+         "to judge whether one more piece is worth holding. Applied within half to double what a branch held, the range "
+         "it was measured on. 0 = off.", min=0, max=0.9),
     Rule("fc_backtest_months", "Demand forecast", "Accuracy test over the last", 24, "months",
          "The forecast is replayed as of each past month-end in this period, using only what was known then, and "
          "compared with what actually sold and with two simple methods.", "int", min=6, max=48),
@@ -168,7 +174,19 @@ RULES = [
          "sold more of it (about +3% sales for +10% pieces, Nov 2026 analysis). So a branch holds at least this many "
          "months of its forecast sales, whatever the replacement time. 12 = an implied turn of about 1x, 18 about "
          "0.67x (chosen Nov 2026: leaner without a shock). Set it per "
-         "product or group under Settings → Ideal stock by group (e.g. longer for bridal sets).", min=0, max=60),
+         "product or group under Settings → Ideal stock by group (e.g. longer for bridal sets). At showrooms the rule "
+         "below decides instead; this one still applies to products a branch has not held in the last 12 months, to "
+         "other branches, and as the floor at the branches listed below.", min=0, max=60),
+    Rule("choice_pcs_per_sale", "Ideal stock", "Hold another piece while every", 2.8, "extra pieces add a sale a year",
+         "At showrooms: from the sales response to pieces held (Demand forecast), one more piece of a product is held "
+         "only while it still adds enough sales. Lower = leaner. Nov 2026, with the floor below: 2.8 = about 340 "
+         "pieces more than 18 months of choice and about ₹2 Cr a year more sales expected; 2.6 = about the same pieces "
+         "and sales as 18 months of choice, moved to the products where they sell.", min=0.5, max=20),
+    Rule("choice_floor_branches", "Ideal stock", "Branches never below the months-of-choice ideal", [
+        "KJ1 / Branch Shahid Chowk", "KJ4 / Branch Yavatmal", "KJ5 / Branch Amravati", "KJ7 / Branch Marble House",
+        "KJ8 / Branch Chandrapur"], "",
+         "Smaller showrooms keep at least the ideal the months-of-choice rule gives: the sales response was measured "
+         "mostly at the two big showrooms, and a small one may need a minimum range to look complete.", "list"),
     Rule("ideal_min_change_pcs", "Ideal stock", "Smallest change worth recommending", 2, "pieces",
          "Increase / reduce recommendations are raised only when the ideal differs from what is held by at least this.",
          "int", min=1, max=50),

@@ -82,7 +82,7 @@
 {% endif %}
 
 <details class="sw-fold">
-  <summary>Forecast accuracy <span class="text-secondary">next {{ horizon }} months, tested at the last {{ origins }} month-ends</span></summary>
+  <summary>Forecast accuracy <span class="text-secondary">next {{ horizon }} months, given the stock each branch held, tested at the last {{ origins }} month-ends</span></summary>
   {{ ui.data_table(acc) }}
   {% if band %}{{ ui.data_table(band) }}{% endif %}
 </details>

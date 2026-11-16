@@ -586,16 +586,20 @@ def ideal_group(request: Request, g: str = "", level: str = "group"):
     rows = rows.assign(why=why.map(lambda x: reason.get(x, x)))
     if level == "product":
         # decided per product at each branch: demand, choice and display added up over its groups
-        pb = rows.groupby("scope").agg(current_pcs=("current_pcs", "sum"), annual=("annual", "sum"),
-                                       for_demand=("for_demand", "first"), for_choice=("for_choice", "first"),
-                                       display_min=("display_min", "sum"), product_ideal=("product_ideal", "first"),
+        for c in ("held_12m", "annual_at_ideal"):
+            if c not in rows:
+                rows[c] = np.nan
+        pb = rows.groupby("scope").agg(current_pcs=("current_pcs", "sum"), held_12m=("held_12m", "first"),
+                                       annual=("annual", "sum"), for_demand=("for_demand", "first"),
+                                       for_choice=("for_choice", "first"), display_min=("display_min", "sum"),
+                                       product_ideal=("product_ideal", "first"), annual_at_ideal=("annual_at_ideal", "sum"),
                                        why=("why", "first")).reset_index().sort_values("product_ideal", ascending=False)
         table = charts.table(pb.assign(scope=pb["scope"].map(_short)),
-                             {"current_pcs": "num", "annual": "dec", "for_demand": "num", "for_choice": "num",
-                              "display_min": "num", "product_ideal": "num"},
-                             {"scope": "branch", "current_pcs": "held", "annual": "forecast 12m", "for_demand": "cover",
-                              "for_choice": "choice", "display_min": "display", "product_ideal": "suggested",
-                              "why": "driven by"})
+                             {"current_pcs": "num", "held_12m": "dec", "annual": "dec", "for_demand": "num",
+                              "for_choice": "num", "display_min": "num", "product_ideal": "num", "annual_at_ideal": "dec"},
+                             {"scope": "branch", "current_pcs": "held", "held_12m": "held, 12m avg", "annual": "forecast 12m",
+                              "for_demand": "cover", "for_choice": "choice", "display_min": "display",
+                              "product_ideal": "suggested", "annual_at_ideal": "sales at suggested", "why": "driven by"})
     else:
         table = charts.table(
             rows[["scope", "current_pcs", "annual", "mix_share", "product_ideal", "calc_pcs", "display_months",

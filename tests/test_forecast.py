@@ -139,6 +139,39 @@ def test_the_ideal_is_decided_per_product_and_split_over_its_groups():
     assert big["ideal_pcs"] >= product - 1                                       # the mix follows the forecast
 
 
+def test_held_response_and_choice_follow_the_measured_effect():
+    r = fc.held_response([10, 40, 1000, 5], [20, 20, 20, 0], 0.5)
+    assert r[0] == pytest.approx(((10.25) / 20.25) ** 0.5) and r[1] == pytest.approx((40.25 / 20.25) ** 0.5)
+    assert r[2] == pytest.approx(2 ** 0.5) and r[3] == 1.0              # within 1/2..2x; nothing held: no basis
+    assert list(fc.held_response([10], [20], 0)) == [1.0]
+    F, x0, m = 24.0, 36.0, 1 / 2.8
+    x = ist.held_choice([F], [x0], 0.5, 2.8, [36])[0]
+    sales = lambda h: F * ((h + fc.HELD_C) / (x0 + fc.HELD_C)) ** 0.5
+    assert sales(x) - sales(x - 1) >= m * 0.95 and sales(x + 1) - sales(x) < m * 1.05   # the last piece still pays
+    assert ist.held_choice([F], [0], 0.5, 2.8, [36])[0] == 36                           # never held: months of choice
+    assert ist.held_choice([5000], [10], 0.5, 2.8, [5])[0] == 20                        # at most twice what was held
+
+
+def test_showrooms_hold_what_pays_and_small_branches_keep_their_floor():
+    stock, sales, end = make(2)
+    f, *_ = run(stock, sales, end)
+    g = "18KT · D RING · 0.25–0.5ct"
+    f2 = pd.concat([f, f.rename(index={"KJ2": "KJ5"}, level="branch"), f.rename(index={"KJ2": "HO"}, level="branch")])
+    current = pd.Series(60.0, index=f2.index)
+    held = pd.Series(60.0, index=pd.MultiIndex.from_tuples([("D RING", b) for b in ("KJ2", "KJ5", "HO")]))
+    rules = {**RULES, "choice_months": 18, "fc_held_effect": 0.5, "choice_pcs_per_sale": 2.8,
+             "choice_floor_branches": ["KJ5"]}
+    rows = ist.compute(f2, current, pd.Series({g: 1e6}), set(), rules, pd.DataFrame(columns=["param", "level", "key", "value"]),
+                       pd.DataFrame(), ({}, 1.0), held=held, showrooms={"KJ2", "KJ5"}).set_index("branch")
+    months = round(f["annual"].sum() * 18 / 12)                                          # 36
+    expect = ist.held_choice([f["annual"].sum()], [60], 0.5, 2.8, [months])[0]
+    assert rows.at["KJ2", "ideal_pcs"] == max(expect, rows.at["KJ2", "for_demand"]) < months   # extra pieces add too little
+    assert rows.at["KJ5", "ideal_pcs"] == months                                         # floor branch: never below
+    assert rows.at["HO", "ideal_pcs"] == months                                          # not a showroom: unchanged
+    assert rows.at["KJ2", "annual_at_ideal"] < rows.at["KJ2", "annual"] == rows.at["HO", "annual_at_ideal"]
+    assert rows.at["KJ2", "held_12m"] == 60
+
+
 def test_stop_stocking_needs_time_on_display_without_a_sale():
     f, current = _two_groups()
     dead = ("18KT · D RING · 0.5–1ct", "KJ2")
