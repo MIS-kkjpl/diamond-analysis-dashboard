@@ -1,7 +1,7 @@
 @echo off
 rem One-off morning catch-up (see scripts\morning_catchup.py). For Task Scheduler.
 setlocal
-set "PROJECT=C:\Users\kartik.riyal\Software\diamond-anaylysis-dashboard"
+set "PROJECT=%~dp0.."
 set "PYTHONIOENCODING=utf-8"
 cd /d "%PROJECT%" || exit /b 1
 if not exist "logs" mkdir "logs"

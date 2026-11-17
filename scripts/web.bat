@@ -4,7 +4,7 @@ rem Double-click it, or run "scripts\web.bat" from the project folder. Leave the
 rem "scripts\web.bat reload" also restarts the app by itself whenever a code file changes (for development).
 rem "scripts\web.bat phone" also opens the phone link (scripts\phone.bat) in a second window.
 setlocal
-set "PROJECT=C:\Users\kartik.riyal\Software\diamond-anaylysis-dashboard"
+set "PROJECT=%~dp0.."
 cd /d "%PROJECT%" || exit /b 1
 
 rem stop whatever is already serving port 8600 (an earlier copy of the app)

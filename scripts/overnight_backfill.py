@@ -1,7 +1,7 @@
 """
 One-off overnight ERP backfill (run after the 2 am server backups, e.g. at 4 am):
 
-  1. pg_dump kkj_erp_stock to C:\\Users\\kartik.riyal\\Software\\db_backups (safety copy)
+  1. pg_dump kkj_erp_stock to BACKUP_DIR (safety copy; .env PG_DUMP / BACKUP_DIR, default db_backups next to the project)
   2. today's stock -> erp.stock_snapshot (the production pipeline), first so nothing can crowd it out
   3. stock as on every Wednesday from 01/04/2026 to the last one before today
      -> stock_hist (source erp_asof), each through the snapshot checks. No new pull starts
@@ -29,8 +29,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from kkj import settings  # noqa: E402
 
 PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
-PG_DUMP = Path(r"C:\Program Files\PostgreSQL\18\bin\pg_dump.exe")
-BACKUP_DIR = Path(r"C:\Users\kartik.riyal\Software\db_backups")
+PG_DUMP = Path(settings.optional("PG_DUMP", r"C:\Program Files\PostgreSQL\18\bin\pg_dump.exe"))
+BACKUP_DIR = Path(settings.optional("BACKUP_DIR", str(ROOT.parent / "db_backups")))   # default: next to the project
 
 
 def weekly_dates(start, today):
@@ -43,6 +43,7 @@ def weekly_dates(start, today):
 
 
 def backup(log):
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     path = BACKUP_DIR / f"kkj_erp_stock_{datetime.now():%Y%m%d_%H%M}.dump"
     env = dict(os.environ, PGPASSWORD=settings.require("DIIS_DB_PASSWORD"))
     r = subprocess.run([str(PG_DUMP), "-h", settings.optional("DIIS_DB_HOST", "localhost"),
