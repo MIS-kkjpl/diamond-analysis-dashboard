@@ -43,6 +43,12 @@
       {% elif a.status == "approved" %}
         <button class="btn btn-sm btn-primary" {% if not who %}disabled{% endif %}
                 hx-post="/recommendations/{{ a.action_id }}/complete" {{ post | safe }}><i class="ti ti-circle-check"></i> Mark complete</button>
+        <button class="btn btn-sm btn-outline-secondary" {% if not who %}disabled{% endif %}
+                hx-post="/recommendations/{{ a.action_id }}/revoke" hx-confirm="Revoke the approval? It goes back to To review."
+                {{ post | safe }}><i class="ti ti-arrow-back-up"></i> Revoke</button>
+      {% elif a.status == "rejected" %}
+        <button class="btn btn-sm btn-outline-secondary" {% if not who %}disabled{% endif %}
+                hx-post="/recommendations/{{ a.action_id }}/revoke" {{ post | safe }}><i class="ti ti-arrow-back-up"></i> Revoke</button>
       {% else %}
         <button class="btn btn-sm btn-outline-secondary" {% if not who %}disabled{% endif %}
                 hx-post="/recommendations/{{ a.action_id }}/reopen" {{ post | safe }}><i class="ti ti-arrow-back-up"></i> Reopen</button>
@@ -54,6 +60,14 @@
           {% if a.status == "open" and act %}
           <button class="dropdown-item" hx-post="/recommendations/{{ a.action_id }}/snooze" {{ post | safe }}>
             <i class="ti ti-zzz me-2"></i>Snooze for 7 days</button>
+          {% endif %}
+          {% if a.status == "snoozed" and act %}
+          <button class="dropdown-item" hx-post="/recommendations/{{ a.action_id }}/revoke" {{ post | safe }}>
+            <i class="ti ti-arrow-back-up me-2"></i>Revoke snooze</button>
+          {% endif %}
+          {% if a.status == "approved" and act %}
+          <button class="dropdown-item" hx-post="/recommendations/{{ a.action_id }}/dismiss" {{ post | safe }}>
+            <i class="ti ti-x me-2"></i>Dismiss</button>
           {% endif %}
           {% if act %}<a class="dropdown-item" href="/recommendations/{{ a.action_id }}#note"><i class="ti ti-message me-2"></i>Add a note</a>{% endif %}
           {% if a.pieces and feature("exports") %}<a class="dropdown-item" href="/exports/recommendation/{{ a.action_id }}.xlsx">

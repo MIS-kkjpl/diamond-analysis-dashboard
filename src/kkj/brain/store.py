@@ -117,7 +117,8 @@ def _event(conn, action_id, event, by="system", note=None, data=None):
                  {"a": action_id, "by": by, "e": event, "n": note, "d": json.dumps(data, default=str) if data else None})
 
 
-DECISIONS = {"approve": "approved", "reject": "rejected", "snooze": "snoozed", "done": "done", "reopen": "open"}
+DECISIONS = {"approve": "approved", "reject": "rejected", "snooze": "snoozed", "done": "done", "reopen": "open",
+             "revoke": "open"}
 
 
 def decide(conn, action_id, decision, by, note=None, snooze_days=7):
@@ -127,8 +128,11 @@ def decide(conn, action_id, decision, by, note=None, snooze_days=7):
         return
     status = DECISIONS[decision]
     conn.execute(text("""
-        UPDATE brain.action SET status = :s, decided_at = now(), decided_by = :by, decision_note = :note,
+        UPDATE brain.action SET status = :s,          -- back to review: the earlier decision is cleared (kept in the history)
+               decided_at = CASE WHEN :s = 'open' THEN NULL ELSE now() END,
+               decided_by = CASE WHEN :s = 'open' THEN NULL ELSE :by END,
+               decision_note = CASE WHEN :s = 'open' THEN NULL ELSE :note END,
                snoozed_until = CASE WHEN :s = 'snoozed' THEN current_date + CAST(:days AS int) ELSE NULL END
         WHERE action_id = :a"""), {"s": status, "by": by, "note": note, "days": snooze_days, "a": action_id})
-    _event(conn, action_id, {"open": "reopened"}.get(status, status), by=by, note=note,
+    _event(conn, action_id, "revoked" if decision == "revoke" else {"open": "reopened"}.get(status, status), by=by, note=note,
            data={"snooze_days": snooze_days} if status == "snoozed" else None)

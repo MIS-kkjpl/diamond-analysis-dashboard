@@ -43,8 +43,9 @@ STATUS = {"open": "To review", "approved": "Approved", "rejected": "Dismissed", 
 EVENTS = {"created": "Raised", "approved": "Approved", "rejected": "Dismissed", "snoozed": "Snoozed",
           "done": "Completed", "reopened": "Reopened", "auto_resolved": "Resolved automatically (issue cleared)",
           "condition_cleared": "Completed (issue cleared after approval)", "snooze_ended": "Snooze ended",
-          "comment": "Note"}
+          "comment": "Note", "revoked": "Revoked, back to review"}
 ACTIONS = {"approve": "approve", "dismiss": "reject", "snooze": "snooze", "complete": "done", "reopen": "reopen",
+           "revoke": "revoke",
            "comment": "comment"}             # URL verb -> kkj.brain.store decision
 PAGE = 25
 SORTS = {"priority": ("Most important first", "priority DESC, impact_value DESC"),
