@@ -27,3 +27,6 @@ desktop.ini
 
 # Downloaded tools (cloudflared.exe for phone access)
 tools/
+
+# Database dumps
+*.dump
