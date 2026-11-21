@@ -1,0 +1,18 @@
+{
+ "_about": "ERP pulls behind Business Studio's 7 stock categories. Filters captured from the ERP screen 21/11/2026; rules checked piece by piece against Business Studio's 11 Nov 2026 upload (99% same pieces).",
+ "pulls": [
+  {"name": "main", "products": [5, 100, 126, 14, 121, 127, 69], "category": "diamond"},
+  {"name": "platinum", "products": [6], "category": "platinum"},
+  {"name": "stone", "products": [73, 130], "category": "stone"},
+  {"name": "stonemala", "products": [71, 72], "category": "stone_mala"}
+ ],
+ "main_rules": {
+  "_about": "Rows of the 'main' pull are judged per set (set code, or the barcode of a piece not in a set); the whole set takes the first rule that matches any of its pieces, else stays diamond.",
+  "set_rules": [
+   {"category": "loose", "any_group": ["LOOSE DIAMOND"], "set_prefix": ["SD"]},
+   {"category": "kundan", "any_group": ["D Kundan Jewellery"], "name_contains": ["KUNDAN", "KUDNAN", "POLKI"], "set_prefix": ["DPK"]},
+   {"category": "watch", "name_contains": ["WATCH"]}
+  ],
+  "not_loaded_groups": ["Customer Diamond"]
+ }
+}

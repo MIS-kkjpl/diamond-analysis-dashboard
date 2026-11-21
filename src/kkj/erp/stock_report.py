@@ -23,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 
 from kkj import settings
-from kkj.erp.client import (JSON_HEADERS, ErpError, Unauthorized, login, new_session, post,
+from kkj.erp.client import (JSON_HEADERS, ErpError, Unauthorized, item_codes_for_groups, login, new_session, post,
                             server_messages)
 
 # openpyxl warns on every ERP export; the file reads fine without a default style
@@ -128,6 +128,10 @@ def build_filters(cfg, log_code=None):
     p["productCodeList"] = cfg["products"]
     p["itemCodeList"] = cfg["items"]
     p["labelDate"] = cfg["date"]
+    if "all_item_codes" in cfg:
+        # pulls for other product groups (kkj.pipelines.stock_bs): the groups' live item codes, own filters
+        p.update(allItemCodes=cfg["all_item_codes"], itemAttributes=cfg.get("item_attributes", []),
+                 filterStr=[" ", " "])
     if cfg.get("order_labels"):
         # only customer-order labels (Show Order Labels: Only); the normal pull leaves them out (showOrderItem "2")
         p.update(showOrder=2, showOrderItem="3")
@@ -299,6 +303,8 @@ def fetch_report(cfg, erp_settings, raw_path, meta_path, run):
         try:
             run.at("login")
             log_code = login(session, erp_settings)
+            if cfg.get("refresh_item_codes"):
+                cfg["all_item_codes"] = item_codes_for_groups(session, cfg["products"])
             filters = build_filters(cfg, None if cfg["keep_logcode"] else log_code)
             run.at("step A")
             report_id, record_count = run_step_a(session, cfg, filters, meta_path)

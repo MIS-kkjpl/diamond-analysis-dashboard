@@ -12,6 +12,7 @@ import pytest
 from kkj import settings
 from kkj.erp.stock_report import clean_export, data_quality
 from kkj.pipelines.stock import files_for_raw
+from kkj.pipelines.stock_bs import CHECKS_FIXED_LATER
 
 RAW_FILES = sorted(settings.STOCK_RAW_DIR.glob("*.xlsx")) if settings.STOCK_RAW_DIR.exists() else []
 
@@ -22,7 +23,9 @@ def test_clean_export_matches_original(raw_path, tmp_path):
     name, stamp, meta_path = files_for_raw(raw_path)
     df, checks, totals = clean_export(raw_path, meta_path)
 
-    failed = [f"{c['check']} ({c['detail']})" for c in checks if not c["passed"]]
+    # Business Studio pulls (kkj.pipelines.stock_bs): batch stones repeat a barcode; that pipeline makes it unique
+    excused = CHECKS_FIXED_LATER if "_bs_" in name else set()
+    failed = [f"{c['check']} ({c['detail']})" for c in checks if not c["passed"] and c["check"] not in excused]
     assert not failed, failed
     assert len(df) == totals["count"]
 
