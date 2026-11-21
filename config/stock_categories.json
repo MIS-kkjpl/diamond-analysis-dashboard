@@ -14,5 +14,9 @@
    {"category": "watch", "name_contains": ["WATCH"]}
   ],
   "not_loaded_groups": ["Customer Diamond"]
+ },
+ "location_names": {
+  "_about": "ERP locations Business Studio shows under another name",
+  "OH Counter": "PERNIAS"
  }
 }

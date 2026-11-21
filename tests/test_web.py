@@ -95,6 +95,7 @@ def test_response_needs_sign_in_then_records_and_is_undone():
 
 
 @pytest.mark.parametrize("path", ["/inventory", "/inventory?branch=KJ2+%2F+Branch+Dharampeth&old_days=180",
+                                  "/stock-categories", "/stock-categories?category=Stone&category=", "/stock-categories?category=Loose&branch=KJ2",
                                   "/sales", "/sales?start=2026-10-01&end=2026-10-31&group=Diamond+Jewellery",
                                   "/insights", "/insights?group=&group=D+Kundan+Jewellery", "/settings",
                                   "/stock-turn", "/stock-turn?scope=KJ2+%2F+Branch+Dharampeth&status=reduce&status=&search=ring",

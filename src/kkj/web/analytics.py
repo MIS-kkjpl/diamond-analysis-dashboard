@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from kkj import rules as rules_mod
 from kkj.db import queries as q
 from kkj.metrics import brick_turn as bt
+from kkj.metrics import bs_stock as bs
 from kkj.metrics import core as m
 from kkj.metrics import insights as ins
 from kkj.metrics import sets
@@ -779,3 +780,67 @@ def seasonality(request: Request, group: str = "Diamond Jewellery"):
                   fig_groups=fig_groups, t_groups=t_groups, groups=groups, f={"group": group}, t_products=t_products,
                   t_lift=t_lift, upcoming=upcoming.astype(object).where(upcoming.notna(), None).to_dict("records"), t_outlook=t_outlook, t_ahead=t_ahead,
                   as_of=as_of)
+
+# ── Stock by category (Business Studio's numbers) ─────────────────────────────
+CATEGORY_LABELS = {"diamond": "Diamond", "kundan": "Kundan", "loose": "Loose", "stone": "Stone",
+                   "platinum": "Platinum", "watch": "Watch", "stone_mala": "Stone Mala"}
+
+
+def _band_table(u, col, order=None, top=None):
+    """Units, value and weight per band; bands in their own order (or by value), totals row last."""
+    g = u.groupby(col, as_index=False).agg(units=("unit", "size"), value=("value", "sum"),
+                                           dia_wt=("dia_wt", "sum"), net_wt=("net_wt", "sum"))
+    if order:
+        g[col] = pd.Categorical(g[col], [*order, bs.NOT_TAGGED], ordered=True)
+        g = g.sort_values(col)
+    else:
+        g = g.sort_values("value", ascending=False)
+    if top:
+        g = g.head(top)
+    g["share"] = g["value"] / u["value"].sum()
+    g[col] = g[col].astype(str)
+    return charts.table(g, {"units": "num", "value": "money", "dia_wt": "dec", "net_wt": "dec", "share": "pct"},
+                        {col: col.replace("_band", "").replace("_", " "), "dia_wt": "dia wt (ct)",
+                         "net_wt": "net wt"})
+
+
+@router.get("/stock-categories", response_class=HTMLResponse)
+def stock_categories(request: Request, category: list[str] = Query(default=[]), branch: list[str] = Query(default=[])):
+    category, branch = [c for c in category if c], [b for b in branch if b]
+    stock = cached(q.stock_bs_latest)
+    if stock.empty:
+        return render(request, "stock_categories.html", "stock_categories", empty=True,
+                      f={"category": category, "branch": branch}, categories=[], branches=[])
+    u = bs.units(stock)
+    labels = {v: k for k, v in CATEGORY_LABELS.items()}
+    all_branches = sorted(u["branch"].unique(), key=lambda b: (not bs.is_showroom(b), b))
+    if branch:
+        u = u[u["branch"].isin(branch)]
+    cards = []
+    for key, label in CATEGORY_LABELS.items():
+        c = u[u["stock_category"] == key]
+        weight = (f"{c['net_wt'].sum():,.2f} net wt" if key in ("stone", "stone_mala", "platinum")
+                  else f"{c['dia_wt'].sum():,.2f} ct")
+        cards.append((label, money(c["value"].sum()), f"{len(c):,} pcs · {weight}"))
+    total = (money(u["value"].sum()), f"{len(u):,} pcs")
+
+    # category × branch, showrooms first
+    pv = u.pivot_table(index="branch", columns="stock_category", values="value", aggfunc="sum", fill_value=0)
+    pv = pv.reindex(columns=[k for k in CATEGORY_LABELS if k in pv.columns]).rename(columns=CATEGORY_LABELS)
+    pv["Total"] = pv.sum(axis=1)
+    pv = pv.reindex(sorted(pv.index, key=lambda b: (not bs.is_showroom(b), -pv.loc[b, "Total"]))).reset_index()
+    t_branch = charts.table(pv, {c: "money" for c in pv.columns if c != "branch"})
+
+    picked = [labels[c] for c in category if c in labels]
+    v = u[u["stock_category"].isin(picked)] if picked else u
+    stoney = bool(picked) and set(picked) <= {"stone", "stone_mala"}
+    wt_order = bs.STONE_WT_BANDS if stoney else bs.WT_BANDS
+    return render(
+        request, "stock_categories.html", "stock_categories", empty=False, as_of=stock["snapshot_date"].iloc[0],
+        f={"category": category, "branch": branch}, categories=list(CATEGORY_LABELS.values()), branches=all_branches,
+        cards=cards, total=total, t_branch=t_branch, scope=", ".join(category) or "All categories",
+        wt_title="Stone weight (net wt)" if stoney else "Diamond weight (stone and stone mala left out)" if not picked or set(picked) & {"stone", "stone_mala"} else "Diamond weight",
+        t_wt=_band_table(v if stoney else v[~v["stock_category"].isin(["stone", "stone_mala"])], "wt_band", wt_order), t_amt=_band_table(v, "amt_band", bs.AMT_BANDS),
+        t_age=_band_table(v, "age_band", bs.AGE_BANDS), t_pattern=_band_table(v, "pattern"),
+        t_gender=_band_table(v, "gender"), t_supplier=_band_table(v.assign(supplier=v["supplier"].fillna("–")), "supplier", top=25),
+        t_item=_band_table(v, "name", top=25), t_location=_band_table(v.assign(location=v["location"].fillna("–")), "location", top=40))

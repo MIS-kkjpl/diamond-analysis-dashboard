@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% import "_filters.html" as flt %}
+{% block title %}Stock by category · Stockwise{% endblock %}
+{% block pretitle %}Stock{% endblock %}
+{% block page_title %}Stock by category{% endblock %}
+{% block content %}
+<div id="page">
+{% call flt.form("/stock-categories") %}
+  {{ flt.toggles("category", categories, f.category, placeholder="All categories") }}
+  {{ flt.toggles("branch", branches, f.branch, placeholder="All locations") }}
+{% endcall %}
+
+{% if empty %}
+<div class="empty"><p class="empty-title">No stock loaded yet</p></div>
+{% else %}
+<div class="row row-cards mb-2">
+  {% for k in cards %}{{ ui.kpi(*k) }}{% endfor %}
+  {{ ui.kpi("Total", total[0], total[1]) }}
+</div>
+<div class="small text-secondary mb-3">As of {{ as_of | date }} · Item Amt + other charges, before GST · a set counts as one piece</div>
+
+{{ ui.section("By branch") }}
+<div class="mb-3">{{ ui.table_card("Value by branch and category", t_branch, icon="ti-building-store") }}</div>
+
+{{ ui.section(scope) }}
+<div class="row row-cards mb-3">
+  <div class="col-lg-6">{{ ui.table_card(wt_title, t_wt) }}</div>
+  <div class="col-lg-6">{{ ui.table_card("Value", t_amt) }}</div>
+  <div class="col-lg-6">{{ ui.table_card("Age since labelling", t_age) }}</div>
+  <div class="col-lg-6">{{ ui.table_card("Gender", t_gender) }}</div>
+  <div class="col-lg-6">{{ ui.table_card("Pattern", t_pattern) }}</div>
+  <div class="col-lg-6">{{ ui.table_card("Item", t_item, sub="Top 25") }}</div>
+  <div class="col-lg-6">{{ ui.table_card("Supplier", t_supplier, sub="Top 25") }}</div>
+  <div class="col-lg-6">{{ ui.table_card("Location", t_location, sub="Top 40") }}</div>
+</div>
+{% endif %}
+</div>
+{% endblock %}

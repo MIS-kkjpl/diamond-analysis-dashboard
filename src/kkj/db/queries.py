@@ -26,6 +26,13 @@ def stock_latest(conn):
                            AND {in_stock()}""")
 
 
+def stock_bs_latest(conn):
+    """The latest day of erp.stock_snapshot_bs: every label in Business Studio's 7 categories (no exclusions,
+    as in Business Studio)."""
+    return read(conn, """SELECT * FROM erp.stock_snapshot_bs
+                         WHERE snapshot_date = (SELECT max(snapshot_date) FROM erp.stock_snapshot_bs)""")
+
+
 def stock_on(conn, snapshot_date):
     return read(conn, f"SELECT {STOCK_COLUMNS} FROM erp.stock_snapshot WHERE snapshot_date = :d AND {own_goods()} AND {in_stock()}",
                 d=snapshot_date)
