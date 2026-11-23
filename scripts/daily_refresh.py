@@ -8,6 +8,8 @@ The daily refresh (to be scheduled once the permanent setup is decided):
       forecast leaves customer orders out (kkj.pipelines.order_booked)
   3. today's stock -> erp.stock_snapshot, and today's customer-order labels (which that pull leaves out) ->
      erp.order_snapshot
+  3a. today's stock in Business Studio's 7 categories -> erp.stock_snapshot_bs (kkj.pipelines.stock_bs; runs side by
+      side with erp.stock_snapshot until signed off)
   3b. the ERP voucher history of every label that left or arrived since the last snapshot, and of any label
       still unexplained (kkj.pipelines.label_vouchers -> erp.label_voucher), so the audit knows what happened
   4. refresh the recommendations, then the accuracy audit (python -m kkj.brain.run)
@@ -63,6 +65,7 @@ def main():
           step("mark order-booked sales", ["kkj.pipelines.order_booked", "--pulled-on", f"{today:%Y%m%d}"], log),
           step("stock today", ["kkj.pipelines.stock"], log),
           step("customer-order labels today", ["kkj.pipelines.stock", "--order-labels"], log),
+          step("stock today in Business Studio's categories", ["kkj.pipelines.stock_bs"], log),
           step("ERP voucher histories of the day's movements", ["kkj.pipelines.label_vouchers", "--recent", "1",
                                                                 "--unexplained"], log),
           step("recommendations + audit", ["kkj.brain.run", "--trigger", "pipeline"], log)]
