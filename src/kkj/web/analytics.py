@@ -823,6 +823,13 @@ def stock_categories(request: Request, category: list[str] = Query(default=[]), 
                   else f"{c['dia_wt'].sum():,.2f} ct")
         cards.append((label, money(c["value"].sum()), f"{len(c):,} pcs · {weight}"))
     total = (money(u["value"].sum()), f"{len(u):,} pcs")
+    gst = (u.groupby("stock_category")["value"].sum().reindex(list(CATEGORY_LABELS)).dropna()
+           .rename(index=CATEGORY_LABELS).rename_axis("category").reset_index())
+    gst = pd.concat([gst, pd.DataFrame({"category": ["Total"], "value": [gst["value"].sum()]})], ignore_index=True)
+    gst["gst"] = gst["value"] * bs.GST_RATE
+    gst["with_gst"] = gst["value"] + gst["gst"]
+    t_gst = charts.table(gst, {"value": "money", "gst": "money", "with_gst": "money"},
+                         {"value": "before GST", "gst": f"GST {bs.GST_RATE:.0%}", "with_gst": "with GST"})
 
     # category × branch, showrooms first
     pv = u.pivot_table(index="branch", columns="stock_category", values="value", aggfunc="sum", fill_value=0)
@@ -838,7 +845,7 @@ def stock_categories(request: Request, category: list[str] = Query(default=[]), 
     return render(
         request, "stock_categories.html", "stock_categories", empty=False, as_of=stock["snapshot_date"].iloc[0],
         f={"category": category, "branch": branch}, categories=list(CATEGORY_LABELS.values()), branches=all_branches,
-        cards=cards, total=total, t_branch=t_branch, scope=", ".join(category) or "All categories",
+        cards=cards, total=total, t_branch=t_branch, t_gst=t_gst, gst_rate=bs.GST_RATE, scope=", ".join(category) or "All categories",
         wt_title="Stone weight (net wt)" if stoney else "Diamond weight (stone and stone mala left out)" if not picked or set(picked) & {"stone", "stone_mala"} else "Diamond weight",
         t_wt=_band_table(v if stoney else v[~v["stock_category"].isin(["stone", "stone_mala"])], "wt_band", wt_order), t_amt=_band_table(v, "amt_band", bs.AMT_BANDS),
         t_age=_band_table(v, "age_band", bs.AGE_BANDS), t_pattern=_band_table(v, "pattern"),

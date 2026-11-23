@@ -28,6 +28,7 @@ AMT_EDGES = [50_000, 100_000, 250_000, 500_000, 1_000_000, 2_500_000]
 AGE_BANDS = ["0-90d", "91-180d", "181-365d", "1-2yr", "2+yr"]
 AGE_UPPER = [90, 180, 365, 730]          # inclusive upper bounds
 NOT_TAGGED = "Not tagged"                # Business Studio's visible bucket for rows without a band value
+GST_RATE = 0.03                          # gold jewellery GST: values × 1.03 (Business Studio's "Apply GST")
 
 PATTERN_MAP = {
     "MICRO": "Micro", "SUPER MICRO": "Super Micro", "GENERIC": "Generic", "SUPER GENERIC": "Super Generic",

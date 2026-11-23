@@ -20,6 +20,9 @@
 </div>
 <div class="small text-secondary mb-3">As of {{ as_of | date }} · Item Amt + other charges, before GST · a set counts as one piece</div>
 
+{{ ui.section("With " ~ "%.0f" | format(gst_rate * 100) ~ "% GST") }}
+<div class="row row-cards mb-3"><div class="col-lg-6">{{ ui.table_card("Value with GST", t_gst, sub="Values × " ~ (1 + gst_rate)) }}</div></div>
+
 {{ ui.section("By branch") }}
 <div class="mb-3">{{ ui.table_card("Value by branch and category", t_branch, icon="ti-building-store") }}</div>
 
