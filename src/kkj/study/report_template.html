@@ -1,0 +1,519 @@
+<title>Brick Demand Study</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column of tables and small-multiple charts, answers first, detail after. Stockwise look: ink + deep teal. */
+:root{
+  --bg:#f5f6f7; --surface:#ffffff; --ink:#161b24; --ink-2:#3a4250; --muted:#6b7380; --line:#e3e6ea; --line-2:#cdd2d8;
+  --accent:#1d5c55; --accent-soft:#e3efed;
+  --l1:#7cc2b6; --l2:#4aa596; --l3:#2a8676; --l4:#1d5c55; --l5:#103a35;
+  --c1:#008c7a; --c2:#d27a12; --c3:#4a6fc4; --c-muted:#c5cad1;
+  --good:#1e7a46; --warn:#a8670b;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-head:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1318; --surface:#161b24; --ink:#e8eaee; --ink-2:#c3c8d0; --muted:#939ba7; --line:#272e39; --line-2:#36404d;
+  --accent:#5fb3a6; --accent-soft:#1b2d2b;
+  --l1:#2b6158; --l2:#35857a; --l3:#45a595; --l4:#72c6b7; --l5:#b3e4da;
+  --c1:#1aa28d; --c2:#c97d1f; --c3:#6a8ad6; --c-muted:#3d4653;
+  --good:#4cbf7f; --warn:#e0a24a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1318; --surface:#161b24; --ink:#e8eaee; --ink-2:#c3c8d0; --muted:#939ba7; --line:#272e39; --line-2:#36404d;
+  --accent:#5fb3a6; --accent-soft:#1b2d2b;
+  --l1:#2b6158; --l2:#35857a; --l3:#45a595; --l4:#72c6b7; --l5:#b3e4da;
+  --c1:#1aa28d; --c2:#c97d1f; --c3:#6a8ad6; --c-muted:#3d4653;
+  --good:#4cbf7f; --warn:#e0a24a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 var(--f-body);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:36px}
+h1,h2,h3{font-family:var(--f-head);font-weight:600;text-wrap:balance;margin:0;letter-spacing:.005em}
+h1{font-size:30px;line-height:1.15}
+h2{font-size:21px}
+h3{font-size:15px}
+p{margin:0;max-width:72ch}
+.sub{color:var(--muted)}
+.label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.num,td.n,th.n{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+section{display:flex;flex-direction:column;gap:14px;min-width:0}
+.head{display:flex;flex-direction:column;gap:6px}
+.facts{display:flex;flex-wrap:wrap;gap:8px 22px;color:var(--ink-2);font-size:13px}
+.facts b{font-variant-numeric:tabular-nums;color:var(--ink);font-weight:600}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:18px;min-width:0}
+.scroll{overflow-x:auto;min-width:0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font-weight:500;color:var(--muted);text-align:left;font-size:12px;padding:7px 10px;border-bottom:1px solid var(--line-2);white-space:nowrap;vertical-align:bottom}
+td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.k{color:var(--ink-2);white-space:nowrap}
+tr.group td{background:var(--bg);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500;padding-top:10px}
+.lv{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.sw{width:10px;height:10px;border-radius:2px;display:inline-block;flex:none}
+.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+.answer{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.answer .q{font-weight:600;font-size:13.5px}
+.answer p{color:var(--ink-2);font-size:13.5px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 14px 8px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.chart.wide{grid-column:1/-1}
+.chart.half{grid-column:span 2}
+@media (max-width:700px){.chart.half{grid-column:auto}}
+.chart h3{font-size:13.5px}
+.chart .note{font-size:12px;color:var(--muted)}
+svg text{fill:var(--ink-2);font-family:var(--f-body)}
+svg .ax{stroke:var(--line-2);stroke-width:1}
+svg .gr{stroke:var(--line);stroke-width:1}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12px;padding:6px 9px;border-radius:4px;max-width:280px;z-index:20;line-height:1.4}
+.tip[hidden]{display:none!important}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:6px;overflow:hidden}
+.seg button{font:inherit;font-size:12.5px;background:var(--surface);color:var(--ink-2);border:0;padding:6px 11px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line-2)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+.seg button:focus-visible,input:focus-visible,select:focus-visible,th button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=search],select{font:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line-2);border-radius:6px;background:var(--surface);color:var(--ink)}
+input[type=search]{min-width:0;width:240px;max-width:100%}
+.best{font-weight:600;color:var(--ink)}
+.best::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-left:5px;vertical-align:middle}
+tr.base td:first-child{color:var(--muted)}
+tr.base td{color:var(--muted)}
+td.na{color:var(--muted);text-align:center}
+.pill{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:10px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+.pill.ex{border-color:var(--accent);color:var(--accent)}
+.st{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.st::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.st.Excellent::before{background:var(--good)}.st.Good::before{background:var(--c1)}.st.Moderate::before{background:var(--warn)}
+.st.Low::before{background:var(--c2)}.st.Insufficient::before{background:var(--c-muted)}
+details{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 16px}
+details summary{cursor:pointer;font-weight:500}
+details[open] summary{margin-bottom:10px}
+details p,details li{color:var(--ink-2);font-size:13.5px}
+details ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.bricks td{font-size:12.5px}
+.bricks td.reason{min-width:300px;color:var(--ink-2)}
+th button{all:unset;cursor:pointer}
+th button[aria-sort]::after{content:" ↕";color:var(--line-2)}
+th button[aria-sort="ascending"]::after{content:" ↑";color:var(--accent)}
+th button[aria-sort="descending"]::after{content:" ↓";color:var(--accent)}
+.count{color:var(--muted);font-size:12.5px}
+.recs td{font-size:13px}
+.recs td:nth-child(5),.recs td:nth-child(6){min-width:260px;color:var(--ink-2)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px}
+@media (max-width:520px){h1{font-size:25px}.panel{padding:12px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <span class="label">Stockwise · demand study</span>
+    <h1>Brick Demand Study</h1>
+    <div class="facts" id="facts"></div>
+  </header>
+
+  <section id="answers-sec">
+    <h2>Answers</h2>
+    <div class="answers" id="answers"><!--__ANSWERS__--></div>
+  </section>
+
+  <section>
+    <h2>Summary by level</h2>
+    <div class="panel scroll"><table id="summary"></table></div>
+  </section>
+
+  <section>
+    <h2>Charts</h2>
+    <div class="legend" id="lv-legend"></div>
+    <div class="charts" id="charts"></div>
+  </section>
+
+  <section>
+    <h2>Level statistics</h2>
+    <div class="panel scroll"><table id="stats"></table></div>
+  </section>
+
+  <section>
+    <h2>Demand patterns</h2>
+    <p class="sub">A brick can carry several patterns. Rules are listed under How it was worked out.</p>
+    <div class="panel scroll"><table id="patterns"></table></div>
+  </section>
+
+  <section>
+    <h2>Method by level</h2>
+    <div class="panel scroll"><table class="recs" id="recs"><!--__RECS__--></table></div>
+  </section>
+
+  <section>
+    <h2>Backtest</h2>
+    <p class="sub" id="bt-sub"></p>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Horizon" id="bt-h">
+        <button type="button" data-v="month" aria-pressed="false">Each month</button>
+        <button type="button" data-v="4m" aria-pressed="true">4-month total</button>
+        <button type="button" data-v="12m" aria-pressed="false">12-month total</button>
+      </div>
+      <div class="seg" role="group" aria-label="Measure" id="bt-m">
+        <button type="button" data-v="wmape" aria-pressed="true">WMAPE</button>
+        <button type="button" data-v="mae" aria-pressed="false">MAE</button>
+        <button type="button" data-v="rmse" aria-pressed="false">RMSE</button>
+        <button type="button" data-v="bias" aria-pressed="false">Bias</button>
+      </div>
+    </div>
+    <div class="panel scroll"><table id="bt"></table></div>
+    <h3>By demand pattern, 4-month totals, bricks over 6 a year</h3>
+    <div class="two" id="pat-bt"></div>
+  </section>
+
+  <section>
+    <h2>Prediction intervals</h2>
+    <p class="sub">Sized from the errors on Jul 2024 – Mar 2025 forecasts, checked on Jul 2025 – Jun 2026 forecasts. A good 80% interval holds about 80% of outcomes.</p>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Interval horizon" id="iv-h">
+        <button type="button" data-v="iv_month" aria-pressed="true">Each month</button>
+        <button type="button" data-v="iv_4m" aria-pressed="false">4-month total</button>
+      </div>
+    </div>
+    <div class="panel scroll"><table id="iv"></table></div>
+    <div id="iv-note"><!--__IVNOTE__--></div>
+  </section>
+
+  <section>
+    <h2>Forecast suitability score</h2>
+    <p class="sub">Measures how much usable history a brick has, not how accurate its forecast is. The table on the right shows tested error per band for comparison.</p>
+    <div class="two">
+      <div class="panel scroll"><table id="score-parts"></table></div>
+      <div class="panel scroll"><table id="score-check"></table></div>
+    </div>
+    <div class="panel scroll"><table id="suit-level"></table></div>
+  </section>
+
+  <section>
+    <h2>Every brick</h2>
+    <div class="controls">
+      <input type="search" id="q" placeholder="Search brick, product, item group" aria-label="Search bricks">
+      <select id="f-level" aria-label="Level"><option value="">All levels</option></select>
+      <select id="f-strategy" aria-label="Strategy"><option value="">All strategies</option></select>
+      <select id="f-suit" aria-label="Suitability"><option value="">All suitability</option></select>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="panel scroll"><table class="bricks" id="bricks"></table></div>
+  </section>
+
+  <details>
+    <summary>How it was worked out</summary>
+    <ul id="method-notes"><!--__NOTES__--></ul>
+  </details>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const D = /*__DATA__*/null;
+const LV = ["L1","L2","L3","L4","L5"];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const lvColor = l => `var(--l${l.slice(1)})`;
+const f0 = x => x==null ? "—" : Math.round(x).toLocaleString("en-IN");
+const f1 = x => x==null ? "—" : x.toLocaleString("en-IN",{minimumFractionDigits:1,maximumFractionDigits:1});
+const f2 = x => x==null ? "—" : x.toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct = (x,d=0) => x==null ? "—" : (x*100).toFixed(d)+"%";
+const spct = (x,d=0) => x==null ? "—" : (x>0?"+":x<0?"−":"")+Math.abs(x*100).toFixed(d)+"%";
+const lakh = x => x==null ? "—" : "₹"+(x/1e5).toFixed(2)+" L";
+const crore = x => x==null ? "—" : "₹"+(x/1e7).toFixed(1)+" Cr";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const lvTag = l => `<span class="lv"><span class="sw" style="background:${lvColor(l)}"></span>${l} <span class="sub">${D.meta.range[l]}</span></span>`;
+
+// ── tooltip ──
+const tip = document.getElementById("tip");
+function showTip(e, html){ tip.innerHTML = html; tip.hidden = false; moveTip(e); }
+function moveTip(e){ const x = Math.min(e.clientX+14, innerWidth - tip.offsetWidth - 8); tip.style.left = x+"px"; tip.style.top = (e.clientY+14)+"px"; }
+function hideTip(){ tip.hidden = true; }
+function hover(el, html){ el.addEventListener("mouseenter", e=>showTip(e, html)); el.addEventListener("mousemove", moveTip); el.addEventListener("mouseleave", hideTip); }
+
+// ── header facts ──
+document.getElementById("facts").innerHTML = [
+  [`${D.meta.bricks}`, "bricks with a sale"],
+  [`${D.meta.window[0]} – ${D.meta.window[1]}`, "36 months"],
+  [f0(D.meta.pcs), "pieces"],
+  [crore(D.meta.value), "taxable sales"],
+  ["24", "forecast months tested"],
+].map(([b,t])=>`<span><b>${b}</b> ${t}</span>`).join("");
+
+// ── summary table (section 8) ──
+(function(){
+  const dom = l => {
+    const s = D.stab[l], parts = [["smooth",s.sbc_smooth],["intermittent",s.sbc_intermittent],["erratic",s.sbc_erratic],["lumpy",s.sbc_lumpy],["one sale",s["sbc_too few sales"]]];
+    parts.sort((a,b)=>b[1]-a[1]); return parts.filter(p=>p[1]>0).slice(0,2).map(p=>`${p[0]} ${p[1]}`).join(", ");
+  };
+  const suit = l => { const s = D.suit_level[l]; return Object.entries(s).filter(([k,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}`).join(", "); };
+  let h = `<thead><tr><th>Level</th><th class="n">Bricks</th><th class="n">Pcs a year</th><th class="n">Avg price</th><th class="n">Months with a sale</th><th>Demand type (bricks)</th><th>Recommended</th><th>Data suitability (bricks)</th></tr></thead><tbody>`;
+  for (const l of LV){ const d = D.dist[l], b = D.beh[l];
+    h += `<tr><td>${lvTag(l)}</td><td class="n">${d.bricks}</td><td class="n">${f0(d.pcs_36m/3)}</td><td class="n">${lakh(d.asp)}</td><td class="n">${pct(b.freq)}</td><td>${dom(l)}</td><td>${esc(D.strategy[l][0])}<div class="sub">${esc(D.strategy[l][1])}</div></td><td>${suit(l)}</td></tr>`; }
+  document.getElementById("summary").innerHTML = h + "</tbody>";
+})();
+
+// ── stats table (A-D) ──
+(function(){
+  const rows = [
+    ["A. Product distribution"],
+    ["Bricks", l=>D.dist[l].bricks, f0], ["Share of bricks", l=>D.dist[l].bricks_pct, pct],
+    ["Pieces sold, 36 months", l=>D.dist[l].pcs_36m, f0], ["Pieces a year per brick", l=>D.dist[l].avg_annual_per_brick, f1],
+    ["Share of pieces", l=>D.dist[l].pcs_pct, x=>pct(x,1)], ["Sales, 36 months", l=>D.dist[l].value_36m, crore],
+    ["Share of sales", l=>D.dist[l].value_pct, x=>pct(x,1)], ["Average price a piece", l=>D.dist[l].asp, lakh],
+    ["B. Demand behaviour"],
+    ["Pieces a month per brick, mean", l=>D.beh[l].avg_month_mean, f2], ["Pieces a month per brick, median", l=>D.beh[l].avg_month_median, f2],
+    ["Months with a sale, mean", l=>D.beh[l].active_mean, f1], ["Months with a sale, median", l=>D.beh[l].active_median, f0],
+    ["Sales frequency (months with a sale)", l=>D.beh[l].freq, pct],
+    ["Months with no sale", l=>D.beh[l].zero_pct, pct],
+    ["  of which: in stock, nothing sold", l=>D.beh[l].zero_in_stock, pct],
+    ["  of which: not in stock anywhere", l=>D.beh[l].zero_no_stock, pct],
+    ["Months before the brick existed (not counted)", l=>D.beh[l].not_observed, pct],
+    ["Pieces per month with a sale", l=>D.beh[l].pcs_per_active, f2],
+    ["Std deviation of monthly pieces, mean", l=>D.beh[l].sd_month, f2],
+    ["Coefficient of variation, median", l=>D.beh[l].cv_median, f2],
+    ["Bricks with no sale in last 12 months", l=>D.beh[l].zero_12m_pct, pct],
+    ["Bricks with no sale in last 24 months", l=>D.beh[l].zero_24m_pct, pct],
+    ["C. Stability and trend"],
+    ["Pieces, Nov 2023 – Oct 2024", l=>D.stab[l].y1, f0], ["Pieces, Nov 2024 – Oct 2025", l=>D.stab[l].y2, f0], ["Pieces, Nov 2025 – Oct 2026", l=>D.stab[l].y3, f0],
+    ["Growth, year 2", l=>D.stab[l].growth_y2, spct], ["Growth, year 3", l=>D.stab[l].growth_y3, spct],
+    ["Bricks rising / steady / falling", l=>`${D.stab[l].trend_increasing} / ${D.stab[l].trend_stable} / ${D.stab[l].trend_decreasing}`, x=>x],
+    ["Bricks too small to judge a trend", l=>D.stab[l]["trend_too few to tell"], f0],
+    ["Smooth / intermittent / erratic / lumpy", l=>`${D.stab[l].sbc_smooth} / ${D.stab[l].sbc_intermittent} / ${D.stab[l].sbc_erratic} / ${D.stab[l].sbc_lumpy}`, x=>x],
+    ["Seasonal bricks", l=>D.stab[l].seasonal_bricks, f0],
+    ["Share of pieces in Oct + Nov (even spread 17%)", l=>D.stab[l].oct_nov_share, pct],
+    ["Share of a brick's pieces in its best 3 months, median", l=>D.stab[l].top3_month_share, pct],
+    ["Share of pieces from the top 10% of bricks", l=>D.stab[l].top10pct_pcs_share, pct],
+    ["Share of pieces from the top 5 bricks", l=>D.stab[l].top5_pcs_share, pct],
+    ["D. Financial"],
+    ["Average price (sales ÷ pieces)", l=>D.fin[l].asp_weighted, lakh], ["Median brick price", l=>D.fin[l].asp_median, lakh],
+    ["Brick price, middle half", l=>`${lakh(D.fin[l].asp_p25)} – ${lakh(D.fin[l].asp_p75)}`, x=>x],
+    ["Sales, 36 months", l=>D.fin[l].value_36m, crore], ["Share of sales", l=>D.fin[l].value_pct, x=>pct(x,1)],
+    ["Share of sales from the top 10% of bricks", l=>D.fin[l].top10pct_value_share, pct],
+    [`High value, low volume (≤ 6 a year, price ≥ ${lakh(D.meta.hv_price)})`, l=>D.fin[l].high_value_low_volume, f0],
+    [`Low value, high volume (> 40 a year, price ≤ ${lakh(D.meta.low_price)})`, l=>D.fin[l].low_value_high_volume, f0],
+  ];
+  let h = `<thead><tr><th></th>${LV.map(l=>`<th class="n">${lvTag(l)}</th>`).join("")}</tr></thead><tbody>`;
+  for (const r of rows){
+    if (r.length===1){ h += `<tr class="group"><td colspan="6">${r[0]}</td></tr>`; continue; }
+    h += `<tr><td class="k">${esc(r[0]).replace(/^  /,"&emsp;")}</td>${LV.map(l=>`<td class="n">${r[2](r[1](l))}</td>`).join("")}</tr>`;
+  }
+  document.getElementById("stats").innerHTML = h + "</tbody>";
+})();
+
+// ── patterns ──
+(function(){
+  const pats = Object.keys(D.patterns.total);
+  let h = `<thead><tr><th>Pattern</th><th class="n">Bricks</th>${LV.map(l=>`<th class="n">${l}</th>`).join("")}</tr></thead><tbody>`;
+  for (const p of pats) h += `<tr><td>${esc(p)}</td><td class="n"><b>${D.patterns.total[p]}</b></td>${LV.map(l=>`<td class="n">${D.patterns.by_level[l][p]||""}</td>`).join("")}</tr>`;
+  document.getElementById("patterns").innerHTML = h + "</tbody>";
+})();
+
+// ── charts ──
+const NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs, parent){ const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function niceMax(v){ const p = Math.pow(10, Math.floor(Math.log10(v||1))); for (const m of [1,2,2.5,5,10]) if (m*p >= v) return m*p; return 10*p; }
+function card(title, note, wide){ const c = document.createElement("div"); c.className = "chart"+(wide===true?" wide":wide?" "+wide:""); c.innerHTML = `<h3>${title}</h3>`+(note?`<div class="note">${note}</div>`:""); document.getElementById("charts").appendChild(c); return c; }
+function rounded(x,y,w,h,r){ r = Math.min(r, h, w/2); return `M${x},${y+h}V${y+r}Q${x},${y} ${x+r},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h}Z`; }
+
+function levelColumns(title, note, val, fmt, tipFmt){
+  const c = card(title, note);
+  const W=300, H=170, m={l:8,r:8,t:18,b:34};
+  const s = svgEl("svg",{viewBox:`0 0 ${W} ${H}`, width:"100%", role:"img", "aria-label":title}, c);
+  const vals = LV.map(val), max = niceMax(Math.max(...vals));
+  const iw = W-m.l-m.r, ih = H-m.t-m.b, band = iw/LV.length, bw = Math.min(24, band*0.55);
+  svgEl("line",{x1:m.l,x2:W-m.r,y1:m.t+ih,y2:m.t+ih,class:"ax"},s);
+  LV.forEach((l,i)=>{
+    const v = vals[i], h = Math.max(1, v/max*ih), x = m.l+band*i+(band-bw)/2, y = m.t+ih-h;
+    const g = svgEl("g",{},s);
+    svgEl("rect",{x:m.l+band*i, y:m.t, width:band, height:ih, fill:"transparent"},g);
+    svgEl("path",{d:rounded(x,y,bw,h,4), fill:lvColor(l)},g);
+    const t = svgEl("text",{x:x+bw/2, y:y-5, "text-anchor":"middle","font-size":11,"font-weight":500},g); t.textContent = fmt(v);
+    const lt = svgEl("text",{x:x+bw/2, y:H-m.b+15, "text-anchor":"middle","font-size":11},s); lt.textContent = l;
+    const st = svgEl("text",{x:x+bw/2, y:H-m.b+28, "text-anchor":"middle","font-size":9.5, fill:"var(--muted)"},s); st.textContent = D.meta.range[l].replace(" / yr","");
+    hover(g, `<b>${l}</b> · ${D.meta.range[l]}<br>${(tipFmt||fmt)(v)}`);
+  });
+}
+
+function stackedLevels(title, note, series){
+  const c = card(title, note);
+  const leg = document.createElement("div"); leg.className = "legend";
+  leg.innerHTML = series.map(s=>`<span><span class="sw" style="background:${s.color}"></span>${s.name}</span>`).join("");
+  c.appendChild(leg);
+  const W=300, H=180, m={l:28,r:8,t:8,b:8};
+  const s = svgEl("svg",{viewBox:`0 0 ${W} ${H}`, width:"100%", role:"img", "aria-label":title}, c);
+  const iw = W-m.l-m.r, rowH = (H-m.t-m.b)/LV.length, bh = Math.min(20, rowH*0.6);
+  LV.forEach((l,i)=>{
+    const y = m.t+rowH*i+(rowH-bh)/2; let x = m.l;
+    const lt = svgEl("text",{x:0, y:y+bh/2+4, "font-size":11},s); lt.textContent = l;
+    series.forEach((se,j)=>{
+      const v = se.val(l), w = v*iw; if (w<=0) return;
+      const g = svgEl("g",{},s);
+      svgEl("rect",{x:x, y:y, width:Math.max(0,w-(j<series.length-1?2:0)), height:bh, fill:se.color, rx: 2},g);
+      if (w > 34){ const t = svgEl("text",{x:x+w/2-1, y:y+bh/2+4, "text-anchor":"middle","font-size":10.5, fill: se.ink||"#ffffff"},g); t.textContent = pct(v); }
+      hover(g, `<b>${l}</b> · ${se.name}<br>${pct(v,1)} of months`);
+      x += w;
+    });
+  });
+}
+
+function hbars(title, note, entries, fmt, wide){
+  const c = card(title, note, "half");
+  const labW = 230, W = 560, rowH = 24, H = entries.length*rowH+8;
+  const s = svgEl("svg",{viewBox:`0 0 ${W} ${H}`, width:"100%", role:"img", "aria-label":title}, c);
+  const max = niceMax(Math.max(...entries.map(e=>e[1]))), iw = W-labW-44;
+  entries.forEach(([k,v],i)=>{
+    const y = 4+i*rowH, bh = 14, w = Math.max(1, v/max*iw);
+    const g = svgEl("g",{},s);
+    svgEl("rect",{x:0,y:y,width:W,height:rowH,fill:"transparent"},g);
+    const t = svgEl("text",{x:labW-8, y:y+bh-2, "text-anchor":"end","font-size":11.5},g); t.textContent = k.length>34?k.slice(0,33)+"…":k;
+    svgEl("path",{d:`M${labW},${y}H${labW+w-4}Q${labW+w},${y} ${labW+w},${y+4}V${y+bh-4}Q${labW+w},${y+bh} ${labW+w-4},${y+bh}H${labW}Z`, fill:"var(--accent)"},g);
+    const vt = svgEl("text",{x:labW+w+6, y:y+bh-2, "font-size":11.5,"font-weight":500},g); vt.textContent = fmt(v);
+    hover(g, `<b>${esc(k)}</b><br>${fmt(v)} bricks`);
+  });
+}
+
+function scatter(){
+  const c = card("Sales vs volume", "Each dot is a brick. Both axes on a log scale.", true);
+  const W=1120, H=340, m={l:64,r:16,t:12,b:40};
+  const s = svgEl("svg",{viewBox:`0 0 ${W} ${H}`, width:"100%", role:"img", "aria-label":"Sales against pieces a year, per brick"}, c);
+  const pts = D.bricks.filter(b=>b.annual>0 && b.value_36m>0);
+  const lx = Math.log10, x0 = lx(0.3), x1 = lx(400), y0 = lx(2e4), y1 = lx(5e8);
+  const X = v => m.l + (lx(Math.max(v,0.3))-x0)/(x1-x0)*(W-m.l-m.r), Y = v => m.t + (1-(lx(Math.max(v,2e4))-y0)/(y1-y0))*(H-m.t-m.b);
+  [0.3,1,3,10,30,100,300].forEach(v=>{ svgEl("line",{x1:X(v),x2:X(v),y1:m.t,y2:H-m.b,class:"gr"},s); const t=svgEl("text",{x:X(v),y:H-m.b+16,"text-anchor":"middle","font-size":11},s); t.textContent=v; });
+  [[1e5,"₹1 L"],[1e6,"₹10 L"],[1e7,"₹1 Cr"],[1e8,"₹10 Cr"]].forEach(([v,lab])=>{ svgEl("line",{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v),class:"gr"},s); const t=svgEl("text",{x:m.l-8,y:Y(v)+4,"text-anchor":"end","font-size":11},s); t.textContent=lab; });
+  const xl = svgEl("text",{x:(W+m.l)/2,y:H-6,"text-anchor":"middle","font-size":11.5, fill:"var(--muted)"},s); xl.textContent = "Pieces a year";
+  const yl = svgEl("text",{x:14,y:(H-m.b)/2,"text-anchor":"middle","font-size":11.5, fill:"var(--muted)", transform:`rotate(-90 14 ${(H-m.b)/2})`},s); yl.textContent = "Sales, 36 months";
+  pts.forEach(b=>{
+    const g = svgEl("g",{},s);
+    svgEl("circle",{cx:X(b.annual), cy:Y(b.value_36m), r:9, fill:"transparent"},g);
+    svgEl("circle",{cx:X(b.annual), cy:Y(b.value_36m), r:4.5, fill:lvColor(b.level), stroke:"var(--surface)", "stroke-width":1.5},g);
+    hover(g, `<b>${esc(b.brick)}</b><br>${b.annual} pcs a year · ${lakh(b.asp)} a piece<br>${crore(b.value_36m)} in 36 months`);
+  });
+}
+
+(function(){
+  document.getElementById("lv-legend").innerHTML = LV.map(l=>`<span><span class="sw" style="background:${lvColor(l)}"></span>${l} · ${D.meta.range[l]}</span>`).join("");
+  levelColumns("Bricks by level", null, l=>D.dist[l].bricks, f0, v=>`${v} bricks`);
+  levelColumns("Share of pieces", null, l=>D.dist[l].pcs_pct, pct, v=>`${pct(v,1)} of pieces`);
+  levelColumns("Share of sales", null, l=>D.dist[l].value_pct, pct, v=>`${pct(v,1)} of taxable sales`);
+  levelColumns("Average price a piece", null, l=>D.dist[l].asp, v=>"₹"+(v/1e5).toFixed(1)+"L", lakh);
+  levelColumns("Sales frequency", "Share of months with at least one sale", l=>D.beh[l].freq, pct, v=>`sold in ${pct(v,1)} of months`);
+  levelColumns("Variability", "Coefficient of variation of monthly pieces, median brick", l=>D.beh[l].cv_median, f2);
+  stackedLevels("Months by outcome", "Share of the months each brick existed", [
+    {name:"Sold", color:"var(--c1)", val:l=>D.beh[l].freq},
+    {name:"In stock, no sale", color:"var(--c2)", val:l=>D.beh[l].zero_in_stock, ink:"#161b24"},
+    {name:"Not in stock anywhere", color:"var(--c3)", val:l=>D.beh[l].zero_no_stock},
+  ]);
+  scatter();
+  hbars("Demand patterns", "Bricks carrying each pattern (overlapping)", Object.entries(D.patterns.total), f0, false);
+  hbars("Recommended method", "Bricks per recommended method", Object.entries(D.method_counts).sort((a,b)=>b[1]-a[1]), f0, false);
+})();
+
+// ── backtest matrix ──
+const BT_ORDER = ["Zero","Naive (last month)","Seasonal naive","SMA 3","SMA 12","WMA 6","EMA (α 0.2)","SES","Holt","Holt-Winters","Weighted annual average","Croston","SBA","Random Forest","XGBoost","Prophet","Stockwise (current)"];
+const BASE = new Set(["Zero","Naive (last month)","Seasonal naive"]);
+const GROUP = {"Zero":"Baselines","SMA 3":"Averages and smoothing","Croston":"Intermittent demand","Random Forest":"Machine learning","Stockwise (current)":"Current Stockwise forecast"};
+let btH = "4m", btM = "wmape";
+function renderBT(){
+  const recs = D.backtest[btH], by = {};
+  recs.forEach(r=>{ (by[r.method] ||= {})[r.level] = r; });
+  const best = {};
+  LV.forEach(l=>{ let bv=null, bm=null; for (const m of BT_ORDER){ const r = by[m]?.[l]; if (!r || BASE.has(m) && m!=="Zero") continue;
+      const v = btM==="bias" ? Math.abs(r.bias) : r[btM]; if (v==null) continue; if (bv===null || v<bv){bv=v; bm=m;} } best[l]=bm; });
+  const fmt = btM==="wmape" ? (x=>pct(x)) : btM==="bias" ? (x=>spct(x)) : (x=>f2(x));
+  let h = `<thead><tr><th>Method</th>${LV.map(l=>`<th class="n">${lvTag(l)}</th>`).join("")}</tr></thead><tbody>`;
+  for (const m of BT_ORDER){
+    if (GROUP[m]) h += `<tr class="group"><td colspan="6">${GROUP[m]}</td></tr>`;
+    if (!by[m]) { h += `<tr><td>${esc(m)}</td>${LV.map(()=>`<td class="na" title="not tested">—</td>`).join("")}</tr>`; continue; }
+    h += `<tr class="${BASE.has(m)?"base":""}"><td>${esc(m)}</td>`;
+    for (const l of LV){
+      const r = by[m][l];
+      if (!r){ h += `<td class="na" title="not tested at this level">not tested</td>`; continue; }
+      const part = r.n < (by["SES"]?.[l]?.n || 0) ? ` <span class="sub" title="tested on ${r.n} of ${by["SES"][l].n} points">*</span>` : "";
+      h += `<td class="n ${best[l]===m?"best":""}" title="MAE ${f2(r.mae)} · RMSE ${f2(r.rmse)} · WMAPE ${pct(r.wmape)} · bias ${spct(r.bias)} · ${r.n} points">${fmt(btM==="bias"?r.bias:r[btM])}${part}</td>`;
+    }
+    h += `</tr>`;
+  }
+  document.getElementById("bt").innerHTML = h + "</tbody>";
+  const hz = {month:"one month at a time, 1–4 months ahead, from 24 starting months (Jul 2024 – Jun 2026)", "4m":"total of the next 4 months, from 24 starting months (Jul 2024 – Jun 2026)", "12m":"total of the next 12 months, from 13 starting months (Oct 2024 – Oct 2025)"}[btH];
+  document.getElementById("bt-sub").innerHTML = `Each method forecast ${hz}, using only sales known at the time. Lower is better; the dot marks the best non-baseline method per level (lowest absolute bias for Bias). * = tested on part of the level: Holt-Winters and Prophet need two years of history; Prophet was run on levels 4–5 only. Random Forest, XGBoost and Prophet were not run on the 12-month test.`;
+}
+function seg(id, cb){ const g = document.getElementById(id); g.addEventListener("click", e=>{ const b = e.target.closest("button"); if (!b) return; g.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed", x===b)); cb(b.dataset.v); }); }
+seg("bt-h", v=>{btH=v; renderBT();}); seg("bt-m", v=>{btM=v; renderBT();}); renderBT();
+
+(function(){
+  let h = "";
+  for (const [pat, r] of Object.entries(D.pattern_scores)){
+    if (pat.startsWith("_")) continue;
+    h += `<div class="panel scroll"><table><thead><tr><th>${esc(pat)} <span class="sub">${r.bricks} bricks</span></th><th class="n">WMAPE</th><th class="n">Bias</th></tr></thead><tbody>`;
+    r.rows.slice(0,5).forEach((x,i)=>{ h += `<tr><td class="${i===0?"best":""}">${esc(x.method)}</td><td class="n">${pct(x.wmape)}</td><td class="n">${spct(x.bias)}</td></tr>`; });
+    const hw = r.rows.find(x=>x.method==="Holt-Winters"), sk = r.rows.find(x=>x.method==="Stockwise (current)");
+    [hw, sk].forEach(x=>{ if (x && r.rows.indexOf(x)>=5) h += `<tr class="base"><td>${esc(x.method)} (#${r.rows.indexOf(x)+1})</td><td class="n">${pct(x.wmape)}</td><td class="n">${spct(x.bias)}</td></tr>`; });
+    h += `</tbody></table></div>`;
+  }
+  document.getElementById("pat-bt").innerHTML = h;
+})();
+
+// ── intervals ──
+let ivH = "iv_month";
+function renderIV(){
+  const rows = D.intervals[ivH];
+  let h = `<thead><tr><th>Level</th><th>Method</th><th class="n">Mean forecast</th><th class="n">Mean actual</th><th class="n">NB 80% held</th><th class="n">NB 80% width</th><th class="n">NB 95% held</th><th class="n">NB 95% width</th><th class="n">80% interval is [0, 0]</th><th class="n">Empirical 80% held</th><th class="n">Empirical 95% held</th></tr></thead><tbody>`;
+  const order = ["SES","SBA","Croston","SMA 12","Weighted annual average","Holt-Winters","Stockwise (current)"];
+  for (const l of LV){
+    const rs = rows.filter(r=>r.level===l).sort((a,b)=>order.indexOf(a.method)-order.indexOf(b.method));
+    rs.forEach((r,i)=>{
+      const flag = (v,nom)=> Math.abs(v-nom) <= 0.05 ? "" : ` style="color:var(--warn)"`;
+      h += `<tr><td>${i===0?lvTag(l):""}</td><td>${esc(r.method)}</td><td class="n">${f2(r.mean_forecast)}</td><td class="n">${f2(r.mean_actual)}</td><td class="n"${flag(r.nb_cov_80,.8)}>${pct(r.nb_cov_80)}</td><td class="n">${f1(r.nb_width_80)}</td><td class="n"${flag(r.nb_cov_95,.95)}>${pct(r.nb_cov_95)}</td><td class="n">${f1(r.nb_width_95)}</td><td class="n">${pct(r.nb_zero_width_80)}</td><td class="n">${pct(r.emp_cov_80)}</td><td class="n">${pct(r.emp_cov_95)}</td></tr>`;
+    });
+    const pr = (D.intervals.prophet||[]).find(r=>r.level===l && r.scope===(ivH==="iv_month"?"month":"4m"));
+    if (pr) h += `<tr><td></td><td>Prophet (own intervals)</td><td class="n">—</td><td class="n">—</td><td class="n"${Math.abs(pr.cov_80-.8)<=.05?"":` style="color:var(--warn)"`}>${pct(pr.cov_80)}</td><td class="n">${f1(pr.width_80)}</td><td class="n"${Math.abs(pr.cov_95-.95)<=.05?"":` style="color:var(--warn)"`}>${pct(pr.cov_95)}</td><td class="n">${f1(pr.width_95)}</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>`;
+  }
+  document.getElementById("iv").innerHTML = h + "</tbody>";
+}
+seg("iv-h", v=>{ivH=v; renderIV();}); renderIV();
+
+// ── suitability ──
+(function(){
+  let h = `<thead><tr><th>Part</th><th class="n">Points</th><th>Measured as</th></tr></thead><tbody>`;
+  for (const [k,v] of Object.entries(D.meta.score_parts)) h += `<tr><td>${k[0].toUpperCase()+k.slice(1)}</td><td class="n">${v.weight}</td><td class="sub">${esc(v.how)}</td></tr>`;
+  h += `<tr><td colspan="3" class="sub">Excellent ≥ 80 · Good 65–80 · Moderate 45–65 · Low &lt; 45. Insufficient data overrides the score when history &lt; 24 months, fewer than 4 months with a sale, or fewer than 6 pieces in 36 months.</td></tr>`;
+  document.getElementById("score-parts").innerHTML = h + "</tbody>";
+  let c = `<thead><tr><th>Band</th><th class="n">Bricks</th><th class="n">Tested error, middle half</th><th class="n">Median</th></tr></thead><tbody>`;
+  D.suit_check.forEach(r=>{ c += `<tr><td><span class="st ${r.band.split(" ")[0]}">${r.band}</span></td><td class="n">${r.bricks}</td><td class="n">${pct(r.p25)} – ${pct(r.p75)}</td><td class="n">${pct(r.median)}</td></tr>`; });
+  c += `<tr><td colspan="4" class="sub">Tested error = WMAPE of EMA (α 0.2) on 4-month totals, per brick, 24 starting months. Bricks with no sale in the test months are left out.</td></tr>`;
+  document.getElementById("score-check").innerHTML = c + "</tbody>";
+  const bands = ["Excellent","Good","Moderate","Low","Insufficient data"];
+  let s = `<thead><tr><th>Level</th>${bands.map(b=>`<th class="n"><span class="st ${b.split(" ")[0]}">${b}</span></th>`).join("")}</tr></thead><tbody>`;
+  LV.forEach(l=>{ s += `<tr><td>${lvTag(l)}</td>${bands.map(b=>`<td class="n">${D.suit_level[l][b]||""}</td>`).join("")}</tr>`; });
+  document.getElementById("suit-level").innerHTML = s + "</tbody>";
+})();
+
+// ── bricks table ──
+(function(){
+  const cols = [
+    ["brick","Brick",x=>esc(x)], ["level","Level",x=>x], ["pcs_36m","Pcs 36m",f0,1], ["annual","Pcs a year",f1,1], ["asp","Avg price",lakh,1],
+    ["active","Months sold",(x,r)=>`${x} / ${r.observed}`,1], ["zero_pct","No-sale months",pct,1], ["cv","CV",f2,1],
+    ["last_12m","Last 12m",f0,1], ["last_24m","Last 24m",f0,1], ["trend","Trend",x=>x], ["patterns","Patterns",x=>`<span class="sub">${esc(x)}</span>`],
+    ["method","Recommended",(x,r)=>`${esc(x)}<div class="sub">${esc(r.strategy)}</div>`], ["suitability","Suitability",(x,r)=>`<span class="st ${x.split(" ")[0]}">${x}</span> <span class="sub">${r.score}</span>`],
+    ["tested_err","Tested error",x=>x==null?"—":pct(x),1], ["reason","Reason",x=>esc(x)],
+  ];
+  const sel = (id, vals) => { const s = document.getElementById(id); [...new Set(vals)].sort().forEach(v=>{ const o = document.createElement("option"); o.value = v; o.textContent = v; s.appendChild(o); }); };
+  sel("f-level", D.bricks.map(b=>b.level)); sel("f-strategy", D.bricks.map(b=>b.strategy)); sel("f-suit", D.bricks.map(b=>b.suitability));
+  let sortKey = "pcs_36m", sortDir = -1;
+  const t = document.getElementById("bricks");
+  function render(){
+    const q = document.getElementById("q").value.trim().toLowerCase(), fl = document.getElementById("f-level").value, fs = document.getElementById("f-strategy").value, fu = document.getElementById("f-suit").value;
+    let rows = D.bricks.filter(b => (!fl || b.level===fl) && (!fs || b.strategy===fs) && (!fu || b.suitability===fu) && (!q || (b.brick+" "+b.product+" "+b.item_group).toLowerCase().includes(q)));
+    rows.sort((a,b)=>{ const x=a[sortKey], y=b[sortKey]; if (x==null) return 1; if (y==null) return -1; return (x>y?1:x<y?-1:0)*sortDir; });
+    let h = `<thead><tr>${cols.map(([k,lab,,n])=>`<th class="${n?"n":""}"><button type="button" data-k="${k}" aria-sort="${k===sortKey?(sortDir>0?"ascending":"descending"):"none"}">${lab}</button></th>`).join("")}</tr></thead><tbody>`;
+    for (const r of rows) h += `<tr>${cols.map(([k,,fmt,n])=>`<td class="${n?"n":""}${k==="reason"?" reason":""}">${fmt(r[k],r)}</td>`).join("")}</tr>`;
+    t.innerHTML = h + "</tbody>";
+    document.getElementById("count").textContent = `${rows.length} of ${D.bricks.length} bricks`;
+  }
+  t.addEventListener("click", e=>{ const b = e.target.closest("button[data-k]"); if (!b) return; const k = b.dataset.k; sortDir = k===sortKey ? -sortDir : -1; sortKey = k; render(); });
+  ["q","f-level","f-strategy","f-suit"].forEach(id=>document.getElementById(id).addEventListener("input", render));
+  render();
+})();
+</script>
